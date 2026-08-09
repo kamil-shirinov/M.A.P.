@@ -10,10 +10,22 @@
 [inference]
 # LM Studio: http://localhost:1234/v1   ·   Ollama: http://localhost:11434/v1
 base_url = "http://localhost:1234/v1"
-timeout_s = 300.0            # a 12B on M1 at 8-15 tok/s; a long generation is normal,
-                             #   and a model swap can add 10-30 s before the first token
+# Connect and read are separate on purpose (ADR 0008). A connect failure means the
+# server is down; a read timeout on this hardware usually means a cold model load.
+# Collapsing them into one number makes those indistinguishable.
+connect_timeout_s = 10.0     # the server is local; if it will not accept a socket in
+                             #   ten seconds it is not running
+read_timeout_s = 600.0       # generous by design: a 12B on M1 runs at 8-15 tok/s and a
+                             #   model swap can add 30 s or more before the first token
 max_repair_attempts = 3      # Agent 3 only. On exhaustion: typed exception, never a
                              #   partial or coerced Forecast
+
+# Set true ONLY to run Agents 1 or 3 with sampling. Permitted, but warned about at
+# startup and recorded in every run manifest, because it makes runs unreproducible.
+# Phase 3 self-consistency ensembling targets Agent 2, which is already free to
+# sample — so this should rarely be needed. See ADR 0007.
+[models]
+allow_nondeterministic = false
 
 # ---------------------------------------------------------------------------
 # Model registry (CLAUDE.md §5)

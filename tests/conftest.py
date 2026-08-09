@@ -7,9 +7,27 @@ function with keyword defaults.
 
 from __future__ import annotations
 
+import os
+
+import pytest
+
 from mapf.core.models import Scenario, ScenarioSet
 
 JUSTIFICATION = "A sufficiently long justification for this scenario branch."
+
+
+@pytest.fixture(autouse=True)
+def _isolate_map_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Strip `MAP_*` from the environment for every test.
+
+    Settings deliberately let the environment override the file, so a developer
+    who has exported `MAP_DATA__SEC__USER_AGENT` in their shell would otherwise
+    see different test results from CI — and the placeholder-rejection tests in
+    particular would pass for the wrong reason.
+    """
+    for key in list(os.environ):
+        if key.startswith("MAP_"):
+            monkeypatch.delenv(key, raising=False)
 
 
 def make_scenario(

@@ -47,10 +47,36 @@ class PlaceholderConfigError(ConfigurationError):
     403 and a ten-minute IP block halfway through a symbol download.
     """
 
-    def __init__(self, key: str, value: str) -> None:
+    def __init__(self, key: str, value: str, hint: str | None = None) -> None:
         self.key = key
         self.value = value
-        super().__init__(f"config key {key!r} still holds its placeholder value {value!r}")
+        self.hint = hint
+        message = f"config key {key!r} still holds its placeholder value {value!r}"
+        # The hint is where the *actionable* half lives — which env var to set and
+        # what a correct value looks like. A config error without it just tells the
+        # operator they are wrong.
+        super().__init__(f"{message}. {hint}" if hint else message)
+
+
+class DeterminismPolicyError(ConfigurationError):
+    """An agent required to be deterministic was configured with sampling.
+
+    `CLAUDE.md` §6 lists `temperature=0` for Agents 1 and 3 as a non-negotiable.
+    Enforced rather than documented, because the damage is invisible: a run with
+    a sampling structuralist still produces a valid forecast, and only the
+    inability to reproduce it later reveals the problem.
+    """
+
+    def __init__(self, agent: str, temperature: float) -> None:
+        self.agent = agent
+        self.temperature = temperature
+        super().__init__(
+            f"agent {agent!r} must run at temperature 0.0 for reproducibility, "
+            f"but is configured with {temperature!r}. Either set "
+            f"models.{agent}.temperature = 0.0, or — if the non-determinism is "
+            "deliberate — set models.allow_nondeterministic = true, which permits it, "
+            "warns at startup, and marks every affected run in its manifest."
+        )
 
 
 # ---------------------------------------------------------------------------

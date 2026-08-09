@@ -50,31 +50,37 @@ exists. The other seven: **not started** — they need modules 2–7.
 - Repo skeleton on disk: `pyproject.toml`, `.gitignore`, `README.md`,
   `config/default.toml`, package tree under `src/mapf/`
 - Toolchain live: `uv` (Homebrew), Python 3.12.13, all dependencies synced
+- **Under version control.** `git init` + initial commit, 44 files. Local only.
 - **Module 1 — `mapf.core` built and green.** `models.py`, `ports.py`, `errors.py`,
-  `hashing.py`; 112 unit tests; 100% line coverage of `core`; `ruff check`,
-  `ruff format --check`, `mypy --strict` and `lint-imports` (4/4 contracts) all clean
+  `hashing.py`, `schema.py`
+- **Module 2 — `mapf.settings` built and green.** `loader.py` (TOML + env overlay),
+  `registry.py` (agent -> alias -> `ModelSpec`), `__init__.py` re-exporting the
+  public names
+- 160 unit tests; 100% line coverage of `core` and `settings`; `ruff check`,
+  `ruff format --check`, `mypy --strict` and `lint-imports` (4/4) all clean, with
+  no inference server and no network
 
 **In progress**
 
-- Nothing. Awaiting approval of module 1 before module 2.
+- Nothing. Awaiting approval of module 2 before module 3.
 
 **Next action**
 
 - Build **one module at a time**, stopping for approval after each, per `CLAUDE.md` §2.2:
   1. ~~`mapf.core` — models, ports, errors, hashing~~ **done**
-  2. `mapf.settings` — TOML + env loading, model registry, placeholder rejection
-     *(open: `mapf.settings.settings` stutters; `loader.py` is the alternative)*
+  2. ~~`mapf.settings` — TOML + env loading, model registry, placeholder rejection~~
+     **done** — resolved as `loader.py` + `registry.py` with `__init__.py` re-exports
   3. `mapf.providers` — `openai_compat`, `caching`, `fake`
   4. `mapf.prompts` — loader plus the three v1 templates
   5. `mapf.agents` — intake, analyst, structuralist with the repair loop
   6. `mapf.data` — symbols, providers + chain, parquet cache, news
   7. `mapf.pipeline`, `mapf.render`, `mapf.bootstrap`, `mapf.cli`
 
-- `README.md` is still owed. Per `CLAUDE.md` §9–10 it must carry: the training-cutoff
-  leakage warning; "all inference is local, no data is sent to a third-party model
-  provider" (never "100% offline"); name-search coverage is **US-listed only**; the
-  no-financial-advice disclaimer; and "deterministic where the backend honours it",
-  not "reproducible".
+- `README.md` is written and carries the four required honest-claims sections per
+  `CLAUDE.md` §9–10: training-cutoff leakage; "all inference is local, no data is sent
+  to a third-party model provider" (never "100% offline"); name search is **US-listed
+  only**; "deterministic where the backend honours it", not "reproducible". Plus the
+  no-financial-advice disclaimer and the ten-row dependency table.
 
 ---
 
@@ -112,36 +118,40 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
 5. Does the backend honour `seed`? Recorded as *requested* either way.
 6. Which reference ticker and corporate-action-free window to pin for the ADR 0003
    cross-provider agreement test.
-7. **Docstrings leak into the decode grammar.** `ScenarioSet.model_json_schema()` emits
-   every class docstring as a `description`, so ~600 characters of internal prose —
-   "the repair loop", "ADR 0002" — would be handed to Agent 3 as part of its schema.
-   Options: strip `description`/`title` when emitting the decode schema, or rewrite the
-   docstrings as model-facing guidance and keep them. Decide before module 5.
+7. ~~Docstrings leak into the decode grammar.~~ **Resolved 2026-08-09.** `description`
+   and `title` are stripped by `mapf.core.schema.decode_schema`; docstrings serve
+   developers, the grammar serves the model, and conflating them would mean a docstring
+   edit silently changes model behaviour. Field-level hints, if ever wanted, go in
+   `json_schema_extra` — curated, versioned with the prompt, governed as prompt content
+   under `CLAUDE.md` §4. `tests/unit/test_decode_schema.py` is the enforcement.
 8. **Does the backend's grammar engine resolve `$ref`?** `Scenario` appears three times,
    so pydantic emits `$defs` + `$ref` rather than inlining. Most engines handle it; some
    do not. If it chokes, flatten the schema. Resolve at first contact with the backend.
-9. Whether to cut `pandas-datareader` and call Stooq's CSV endpoint directly on `httpx`
-   + `pandas`, and whether `rapidfuzz` is needed in Phase 1 at all. See the dependency
-   review in the 2026-08-09 (3) session entry.
+9. ~~Whether to cut `pandas-datareader` and `rapidfuzz`.~~ **Resolved 2026-08-09 — both
+   cut.** Stooq is ~15 lines of `httpx.get` + `pd.read_csv`; SQLite FTS5 covers search.
+   Runtime dependencies: 12 -> 10.
+10. **Is enforcing `temperature == 0` for intake and structuralist too strict?** Added in
+   module 2 as `DeterminismPolicyError`, on the strength of `CLAUDE.md` §6 calling it a
+   non-negotiable — but it was not requested, and Phase 3 self-consistency ensembling may
+   want sampling on Agent 3. Easy to remove: one validator in
+   `mapf/settings/loader.py`. Confirm or veto.
 
 ---
 
 ## Known issues
 
-1. **Environment hazard: a loose `CLAUDE.md` on the Desktop.** `~/Desktop/CLAUDE.md`
-   belongs to another project. Because this repo lives at `~/Desktop/M.A.P.`,
-   that file is a *parent-directory* `CLAUDE.md` and Claude Code loads it as project
-   instructions for every session here — a second, unrelated rulebook silently in
-   context. Fix: move it into its own folder. A `CLAUDE.md` loose on
-   the Desktop claims the entire Desktop as one project.
+1. **A parent-directory `CLAUDE.md` is intentional, not a problem.**
+   `~/Desktop/CLAUDE.md` loads into every session in this repo because `~/Desktop` is a
+   parent of it. That is deliberate: it is Kamil's global context for GitHub builds, and
+   it is meant to load here. Do not "fix" it, and do not propose
+   moving this repo to escape it.
 2. **Moving the repo drops dotfiles.** `.gitignore` was lost in the
    `Desktop → Projects → Desktop` round trip on 2026-08-09 and had to be rewritten.
-   Nothing else was lost. Check for it after any future move — the repo is not under
-   version control yet, so there is no safety net.
-3. **The vendor-string ban is unenforced.** `import-linter` does not cover `CLAUDE.md` §3.
-   A test asserting "LM Studio" and "Ollama" appear nowhere under `src/` is still owed.
-4. **Not under version control.** No `git init` yet. Every recovery so far has been by
-   hand; the next mishap may not be recoverable.
+   Now mitigated by version control, but check after any future move.
+3. ~~The vendor-string ban is unenforced.~~ **Closed 2026-08-09** —
+   `test_no_vendor_names_appear_in_application_code` scans every `.py` under `src/`.
+4. ~~Not under version control.~~ **Closed 2026-08-09** — `git init` + initial commit.
+   Local only, not on GitHub.
 
 ---
 
@@ -156,6 +166,7 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 | [0003](decisions/0003-price-adjustment-semantics.md) | Price adjustment semantics across providers | Accepted |
 | [0004](decisions/0004-import-boundary-enforcement.md) | Enforce import boundaries in CI | Accepted |
 | [0005](decisions/0005-untrusted-text-and-document-identity.md) | Untrusted text as a type, document identity over raw bytes | Accepted |
+| [0006](decisions/0006-justification-before-figures.md) | `justification` is emitted before the figures | Accepted |
 
 ### Pinned in review, ADR owed
 
@@ -178,6 +189,16 @@ Binding decisions with no ADR yet. Write them as 0006–0007 when the module lan
 Newest first. One or two lines each — what changed, what broke, what's next. If an entry
 needs a paragraph, it needed an ADR instead.
 
+- **2026-08-09 (4)** — `git init` + initial commit (44 files); a `.gitignore` bug found
+  while staging — bare `news/` is unanchored and was swallowing `tests/fixtures/news/`,
+  now `/news/`. Module 2 `mapf.settings` built: `loader.py`, `registry.py`,
+  `__init__.py` re-exports. ADR 0006 (justification before figures) written; ADR 0001's
+  `PlaceholderConfigError` gained a `hint`. `decode_schema()` added to `core` with a
+  test asserting no `description`/`title` at any depth. Adversarial float tests found
+  the tolerance boundary is **asymmetric** — a nominal 1e-6 is accepted above 1.0 and
+  rejected below — now pinned. `pandas-datareader` and `rapidfuzz` dropped (12 -> 10
+  deps). Vendor-string ban now enforced by test. 160 tests, 100% coverage of `core` and
+  `settings`. Known issue 1 (loose Desktop `CLAUDE.md`) verified still open.
 - **2026-08-09 (3)** — Module 1 `mapf.core` built: `models.py`, `ports.py`, `errors.py`,
   `hashing.py`. 112 tests, 100% coverage of `core`, ruff + `mypy --strict` +
   `lint-imports` clean. ADR 0005 written; ADR 0001 amended with the defensive
