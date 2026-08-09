@@ -36,13 +36,15 @@ dependencies = [
                             #   Phase 2 will want for columnar reads over many tickers
   "yfinance>=0.2.40",       # primary provider. An unofficial Yahoo scraper, not a
                             #   supported API — see ADR 0003 for why the fallback exists
-  "pandas-datareader>=0.10",# Stooq fallback: free, no key, global end-of-day
 
-  # --- symbol search ---
-  "rapidfuzz>=3.9",         # two-stage search: SQLite FTS5 (stdlib) does token recall,
-                            #   rapidfuzz re-ranks. FTS5 alone cannot handle typos or
-                            #   transpositions ("appel" -> AAPL); rapidfuzz is C++, MIT,
-                            #   and has no transitive dependencies
+  # Stooq is the fallback and has NO dependency of its own: it is one CSV endpoint,
+  # fetched with httpx and parsed with pandas. pandas-datareader was dropped because it
+  # is a thin wrapper over that same URL, intermittently maintained, and sits in the
+  # fallback path — which exists precisely because the primary is unreliable. Inheriting
+  # a second package's failure modes there defeats the purpose.
+  #
+  # Symbol search has no dependency either: SQLite FTS5 is in the stdlib and satisfies
+  # DoD criterion 2. rapidfuzz was dropped; typo tolerance is deferred to Phase 4.
 
   # --- news intake ---
   "feedparser>=6.0",        # RSS/Atom dialects are inconsistent in practice. Hand-rolling
@@ -124,7 +126,7 @@ warn_required_dynamic_aliases = true
 # These libraries ship no type information. The ignore is confined to the adapter
 # modules that wrap them; it must never be widened to first-party code.
 [[tool.mypy.overrides]]
-module = ["yfinance.*", "pandas_datareader.*", "plotly.*", "feedparser.*"]
+module = ["yfinance.*", "plotly.*", "feedparser.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
