@@ -55,6 +55,89 @@ def test_negative_weight_is_rejected() -> None:
         make_scenario(weight=-0.1)
 
 
+# --- adversarial float triples ------------------------------------------------
+# Hand-picked cases cluster where intuition is good and float arithmetic is not.
+# These are the cases that decide whether the tolerance is the right shape.
+
+
+@pytest.mark.parametrize(
+    "weights",
+    [
+        (0.333, 0.333, 0.334),  # three decimals that happen to sum exactly
+        (0.1, 0.2, 0.7),  # the canonical 0.1+0.2 case
+        (1 / 3, 1 / 3, 1 / 3),  # non-terminating in binary
+        (0.05, 0.15, 0.80),
+        (0.07, 0.13, 0.80),
+        (0.01, 0.29, 0.70),
+    ],
+)
+def test_exact_decimal_triples_are_accepted(weights: tuple[float, float, float]) -> None:
+    """None of these is exactly representable, and every one must still pass.
+
+    A validator demanding `total == 1.0` would reject several of them outright,
+    which is the failure this tolerance exists to prevent.
+    """
+    assert make_scenario_set(weights=weights) is not None
+
+
+def test_summation_order_can_change_the_total() -> None:
+    """(0.1, 0.2, 0.7) sums to exactly 1.0 in one association order and to
+    0.9999999999999999 in another.
+
+    The error is ~1.1e-16, far inside tolerance, so behaviour does not change —
+    but it is direct evidence that the tolerance is load-bearing rather than
+    decorative, and that an equality check would make acceptance depend on which
+    branch happened to be added first.
+    """
+    assert 0.1 + 0.2 + 0.7 != 0.2 + 0.7 + 0.1
+    assert make_scenario_set(weights=(0.1, 0.2, 0.7)) is not None
+    assert make_scenario_set(weights=(0.2, 0.7, 0.1)) is not None
+
+
+@pytest.mark.parametrize("third", [0.1500001, 0.1499999])
+def test_one_tenth_of_tolerance_off_is_accepted(third: float) -> None:
+    """+/-1e-7 on either side. Both give |total - 1| ~= 1.0000000006e-07."""
+    assert make_scenario_set(weights=(0.25, 0.60, third)) is not None
+
+
+@pytest.mark.parametrize("third", [0.1500011, 0.1499989, 0.15001, 0.14999])
+def test_just_over_tolerance_is_rejected_on_both_sides(third: float) -> None:
+    """+/-1.1e-6 and +/-1e-5. The first pair is the one that matters: it is only
+    10% outside the limit, and it must still fail."""
+    with pytest.raises(ValidationError, match="sum to 1.0"):
+        make_scenario_set(weights=(0.25, 0.60, third))
+
+
+def test_the_tolerance_boundary_itself_is_asymmetric() -> None:
+    """A nominal deviation of exactly 1e-6 is accepted above 1.0 and rejected below.
+
+    `0.25 + 0.60 + 0.150001` -> |diff| = 9.99999999917733e-07  (inside, accepted)
+    `0.25 + 0.60 + 0.149999` -> |diff| = 1.00000000002876e-06  (outside, rejected)
+
+    Neither number is 1e-6; both are the nearest representable double to it, and
+    they land on opposite sides. This is a property of binary floating point, not
+    of the validator, and it cannot be tuned away — any threshold has an edge with
+    this behaviour.
+
+    It is pinned here so that changing the comparison (`>` to `>=`, or moving to
+    `math.isclose`) shows up as a failing test rather than as a silent shift in
+    which forecasts are accepted. No other test may depend on the exact boundary.
+    """
+    assert make_scenario_set(weights=(0.25, 0.60, 0.150001)) is not None
+    with pytest.raises(ValidationError, match="sum to 1.0"):
+        make_scenario_set(weights=(0.25, 0.60, 0.149999))
+
+
+def test_weights_that_are_individually_valid_but_jointly_wrong_are_rejected() -> None:
+    """Each weight is inside [0, 1], so a per-field grammar constraint passes.
+
+    This is precisely the gap JSON Schema cannot express and the repair loop must
+    answer (ADR 0002).
+    """
+    with pytest.raises(ValidationError, match="sum to 1.0"):
+        make_scenario_set(weights=(0.5, 0.5, 0.5))
+
+
 # ---------------------------------------------------------------------------
 # bearish < base_case < bullish
 # ---------------------------------------------------------------------------

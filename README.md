@@ -93,6 +93,72 @@ model, CI is broken.
 
 ---
 
+## A documented property: the probability-weight tolerance
+
+Scenario weights must sum to `1.0`. They are checked with a tolerance of `1e-6`
+rather than for equality, and the tolerance is load-bearing — not a convenience.
+
+Three decimal weights are not exactly representable in binary, so the sum depends
+on the order the branches are added:
+
+```
+0.1 + 0.2 + 0.7  ==  1.0
+0.2 + 0.7 + 0.1  ==  0.9999999999999999
+```
+
+An equality check would accept or reject the same forecast depending on which
+branch happened to be added first. The error here is ~1.1e-16, far inside the
+tolerance, so behaviour does not actually change — but it shows why the tolerance
+has to exist.
+
+The tolerance also has an **asymmetric boundary**, and this is worth stating
+plainly because it looks like a bug and is not:
+
+```
+0.25 + 0.60 + 0.150001  →  |sum - 1| = 9.99999999917733e-07   accepted
+0.25 + 0.60 + 0.149999  →  |sum - 1| = 1.00000000002876e-06   rejected
+```
+
+The same nominal deviation of `1e-6` is accepted above `1.0` and rejected below
+it. Neither computed value *is* `1e-6`; both are the nearest representable double,
+and they land on opposite sides of the comparison. This is a property of binary
+floating point, not of the validator, and it cannot be tuned away — **any**
+threshold has an edge that behaves this way. Moving to `math.isclose` would
+relocate the asymmetry, not remove it.
+
+Both properties are pinned in `tests/unit/test_scenario_validators.py`, so a change
+to the comparison shows up as a failing test rather than as a silent shift in which
+forecasts are accepted. No other test depends on the exact boundary.
+
+## Dependencies
+
+Ten at runtime. Every one is named and justified here and in `pyproject.toml`,
+per `CLAUDE.md` §2.4 — a dependency that cannot be defended in one line does not
+belong in the file.
+
+| Package | Why |
+|---|---|
+| `pydantic` | All schemas and validators, and the single source of the JSON Schema handed to constrained decoding |
+| `pydantic-settings` | `MAP_`-prefixed, `__`-nested environment overlay on the TOML baseline |
+| `typer` | CLI |
+| `httpx` | The only HTTP client. Its built-in `MockTransport` also removed the need for a mocking library |
+| `structlog` | Structured logging; `trace.jsonl` is JSON lines |
+| `pandas` | `PriceWindow` converts to a DataFrame at the `mapf.data` boundary; both price sources speak it |
+| `pyarrow` | Parquet engine for the price cache — pandas' default, and what Phase 2's columnar reads will want |
+| `yfinance` | Primary price source. An unofficial Yahoo scraper, not a supported API — hence the fallback |
+| `feedparser` | RSS/Atom dialects vary enough in practice that stdlib `xml.etree` is brittle on real feeds |
+| `plotly` | A single self-contained `chart.html`, no server and no build step |
+
+**Deliberately absent**, where a dependency would have been the obvious choice:
+
+- **Stooq** — the fallback price source is one CSV endpoint, fetched with `httpx`
+  and parsed with `pandas`. `pandas-datareader` was dropped because it is a thin
+  wrapper over that same URL, intermittently maintained, and sits in the *fallback*
+  path — which exists precisely because the primary source is unreliable.
+  Inheriting a second package's failure modes there defeats the purpose.
+- **Symbol search** — SQLite FTS5 is in the standard library and satisfies the
+  search requirement. `rapidfuzz` was dropped; typo tolerance is deferred to Phase 4.
+
 ## Documentation
 
 | Document | What it holds |
