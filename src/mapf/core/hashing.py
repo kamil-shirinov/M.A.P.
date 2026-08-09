@@ -22,7 +22,7 @@ from uuid import UUID, uuid4
 _ENCODING = "utf-8"
 
 
-def _canonical_json(value: Any) -> str:
+def canonical_json(value: Any) -> str:
     """Serialise so that equal inputs always produce equal bytes.
 
     `sort_keys` removes dict-ordering as a source of key churn: two calls with the
@@ -91,7 +91,7 @@ def cache_key(
         "sampling": dict(sampling),
         "attempt": attempt,
     }
-    return sha256_hex(_canonical_json(payload).encode(_ENCODING))
+    return sha256_hex(canonical_json(payload).encode(_ENCODING))
 
 
 def new_run_id() -> UUID:

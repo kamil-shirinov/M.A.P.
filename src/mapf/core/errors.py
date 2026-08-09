@@ -90,15 +90,73 @@ class InferenceError(ProviderError):
     """The inference server failed to produce a usable response."""
 
 
-class InferenceTimeoutError(InferenceError):
-    """Distinguished from a protocol error because a 12B model swap is slow.
+class InferenceUnreachableError(InferenceError):
+    """No connection was accepted. The server is not running, or not there.
 
-    A timeout here is often a cold model load, not a broken server.
+    Kept strictly separate from a timeout (ADR 0008). "The server is down" and
+    "the model is still loading" have completely different remedies, and on this
+    hardware the second is routine.
     """
+
+    def __init__(self, base_url: str, reason: str) -> None:
+        self.base_url = base_url
+        self.reason = reason
+        super().__init__(
+            f"no inference server accepted a connection at {base_url} ({reason}). "
+            "Start the backend, or check inference.base_url."
+        )
+
+
+class InferenceTimeoutError(InferenceError):
+    """Connected, but no complete response arrived within the read timeout.
+
+    On 16 GB the backend loads weights on demand, so the most likely cause is a
+    cold model load rather than a hung server — a 12B can take 30 s or more before
+    the first token. Raising the same error as an unreachable server would make
+    every slow first call look like a bug.
+    """
+
+    def __init__(self, model_id: str, read_timeout_s: float) -> None:
+        self.model_id = model_id
+        self.read_timeout_s = read_timeout_s
+        super().__init__(
+            f"no response for model {model_id!r} within {read_timeout_s}s. The server is "
+            "reachable, so this is most likely a cold model load. Raise "
+            "inference.read_timeout_s, or pre-load the model."
+        )
+
+
+class InferenceStatusError(InferenceError):
+    """The server answered with a non-2xx status that is not a missing model."""
+
+    def __init__(self, status_code: int, body: str) -> None:
+        self.status_code = status_code
+        self.body = body
+        super().__init__(f"inference server returned HTTP {status_code}: {body[:300]}")
 
 
 class InferenceProtocolError(InferenceError):
     """The server answered, but not in the shape the OpenAI-compatible API defines."""
+
+
+class FixtureNotFoundError(ProviderError):
+    """The fake provider has no recording for this request.
+
+    Names the key and what is available, because the usual cause is a prompt or
+    sampling change that silently moved the key — and a bare KeyError would send
+    someone hunting through the fixture directory by hand.
+    """
+
+    def __init__(self, key: str, fixture_dir: str, available: Sequence[str]) -> None:
+        self.key = key
+        self.fixture_dir = fixture_dir
+        self.available = tuple(available)
+        shown = ", ".join(self.available[:5]) if self.available else "(none)"
+        super().__init__(
+            f"no fixture {key} in {fixture_dir} ({len(self.available)} present: {shown}"
+            f"{', ...' if len(self.available) > 5 else ''}). The request changed, or the "
+            "fixture was never recorded."
+        )
 
 
 # ---------------------------------------------------------------------------

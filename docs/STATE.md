@@ -56,13 +56,17 @@ exists. The other seven: **not started** — they need modules 2–7.
 - **Module 2 — `mapf.settings` built and green.** `loader.py` (TOML + env overlay),
   `registry.py` (agent -> alias -> `ModelSpec`), `__init__.py` re-exporting the
   public names
-- 160 unit tests; 100% line coverage of `core` and `settings`; `ruff check`,
-  `ruff format --check`, `mypy --strict` and `lint-imports` (4/4) all clean, with
-  no inference server and no network
+- **Module 3 — `mapf.providers` built and green.** `openai_compat.py` (the only
+  module that speaks HTTP to a model), `caching.py` (disk cache as an `LLMProvider`
+  decorator), `fake.py` (fixture replay, ships in `src/`), `keys.py` (one shared
+  request-key derivation)
+- 224 unit tests; 100% line coverage of `core`, `settings` and `providers`;
+  `ruff check`, `ruff format --check`, `mypy --strict` and `lint-imports` (4/4)
+  all clean, with no inference server and no network
 
 **In progress**
 
-- Nothing. Awaiting approval of module 2 before module 3.
+- Nothing. Awaiting approval of module 3 before module 4.
 
 **Next action**
 
@@ -70,7 +74,7 @@ exists. The other seven: **not started** — they need modules 2–7.
   1. ~~`mapf.core` — models, ports, errors, hashing~~ **done**
   2. ~~`mapf.settings` — TOML + env loading, model registry, placeholder rejection~~
      **done** — resolved as `loader.py` + `registry.py` with `__init__.py` re-exports
-  3. `mapf.providers` — `openai_compat`, `caching`, `fake`
+  3. ~~`mapf.providers` — `openai_compat`, `caching`, `fake`~~ **done**
   4. `mapf.prompts` — loader plus the three v1 templates
   5. `mapf.agents` — intake, analyst, structuralist with the repair loop
   6. `mapf.data` — symbols, providers + chain, parquet cache, news
@@ -130,11 +134,12 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
 9. ~~Whether to cut `pandas-datareader` and `rapidfuzz`.~~ **Resolved 2026-08-09 — both
    cut.** Stooq is ~15 lines of `httpx.get` + `pd.read_csv`; SQLite FTS5 covers search.
    Runtime dependencies: 12 -> 10.
-10. **Is enforcing `temperature == 0` for intake and structuralist too strict?** Added in
-   module 2 as `DeterminismPolicyError`, on the strength of `CLAUDE.md` §6 calling it a
-   non-negotiable — but it was not requested, and Phase 3 self-consistency ensembling may
-   want sampling on Agent 3. Easy to remove: one validator in
-   `mapf/settings/loader.py`. Confirm or veto.
+10. ~~Is enforcing `temperature == 0` too strict?~~ **Resolved 2026-08-09 — confirmed with
+   an auditable override.** See ADR 0007. Phase 2's evaluation harness must read
+   `models.allow_nondeterministic` from the manifest and exclude or separate those runs.
+11. **Recording real fixtures.** `FakeProvider.record` exists but nothing captures a live
+   session yet. Needed before the pipeline can be exercised end to end offline; decide
+   whether capture is a CLI flag on `map run` or a separate script.
 
 ---
 
@@ -167,6 +172,8 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 | [0004](decisions/0004-import-boundary-enforcement.md) | Enforce import boundaries in CI | Accepted |
 | [0005](decisions/0005-untrusted-text-and-document-identity.md) | Untrusted text as a type, document identity over raw bytes | Accepted |
 | [0006](decisions/0006-justification-before-figures.md) | `justification` is emitted before the figures | Accepted |
+| [0007](decisions/0007-determinism-guard-with-auditable-override.md) | Determinism guard with an auditable override | Accepted |
+| [0008](decisions/0008-inference-timeouts-and-failure-taxonomy.md) | Inference timeouts and the failure taxonomy | Accepted |
 
 ### Pinned in review, ADR owed
 
@@ -189,6 +196,14 @@ Binding decisions with no ADR yet. Write them as 0006–0007 when the module lan
 Newest first. One or two lines each — what changed, what broke, what's next. If an entry
 needs a paragraph, it needed an ADR instead.
 
+- **2026-08-09 (5)** — Module 3 `mapf.providers` built: `openai_compat`, `caching`,
+  `fake`, `keys`. ADR 0008 written (timeouts and failure taxonomy). Its own tests found
+  a recursion bug: a 404 on `/models` re-entered discovery through the error-enrichment
+  path and never terminated — 404 is now translated to a missing model in `complete()`
+  only. Determinism guard gained the `allow_nondeterministic` override and ADR 0007.
+  Connect and read timeouts split (10 s / 600 s). Float-tolerance finding documented in
+  the README. Known issue 1 closed: a parent `CLAUDE.md` is intentional. 224 tests, 100%
+  coverage of `core`, `settings` and `providers`.
 - **2026-08-09 (4)** — `git init` + initial commit (44 files); a `.gitignore` bug found
   while staging — bare `news/` is unanchored and was swallowing `tests/fixtures/news/`,
   now `/news/`. Module 2 `mapf.settings` built: `loader.py`, `registry.py`,
