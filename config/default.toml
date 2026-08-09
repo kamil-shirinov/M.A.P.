@@ -1,0 +1,78 @@
+# M.A.P. — default configuration
+#
+# This file is the ONLY place a backend vendor may be named (CLAUDE.md §3).
+# Switching from one OpenAI-compatible server to another is a change to
+# `inference.base_url` and the three model aliases. It is never a code change.
+#
+# Every value here can be overridden by an environment variable prefixed MAP_,
+# nested with __ — e.g. MAP_INFERENCE__BASE_URL, MAP_DATA__SEC__USER_AGENT.
+
+[inference]
+# LM Studio: http://localhost:1234/v1   ·   Ollama: http://localhost:11434/v1
+base_url = "http://localhost:1234/v1"
+timeout_s = 300.0            # a 12B on M1 at 8-15 tok/s; a long generation is normal,
+                             #   and a model swap can add 10-30 s before the first token
+max_repair_attempts = 3      # Agent 3 only. On exhaustion: typed exception, never a
+                             #   partial or coerced Forecast
+
+# ---------------------------------------------------------------------------
+# Model registry (CLAUDE.md §5)
+#
+# `alias` is what this config asks for. The id actually sent on the wire is
+# resolved at startup from GET /v1/models — never hardcoded, because LM Studio and
+# Ollama name identical weights differently. `map health` reports any alias that
+# does not resolve, and fails fast with an actionable message.
+# ---------------------------------------------------------------------------
+[models.intake]
+alias = "llama-3.2-3b-instruct"
+temperature = 0.0            # CLAUDE.md §6 — deterministic where the backend honours it
+
+[models.analyst]
+alias = "gemma4:12b"
+temperature = 0.7            # the one agent where sampling diversity is wanted
+seed = 20260809              # recorded as *requested*; many local backends ignore it
+
+[models.structuralist]
+alias = "qwen3:4b"
+temperature = 0.0
+# Constrained decoding is applied here only, against the JSON Schema generated
+# from the ScenarioSet model (ADR 0002).
+
+# ---------------------------------------------------------------------------
+# Caches — load-bearing infrastructure, not optimisation (CLAUDE.md §6)
+# ---------------------------------------------------------------------------
+[cache]
+llm_dir = "var/llm"          # namespaced by model fingerprint (ADR 0001)
+price_dir = "var/prices"     # parquet, keyed ticker + range + adjustment (ADR 0003)
+
+# ---------------------------------------------------------------------------
+# Market data
+# ---------------------------------------------------------------------------
+[data]
+provider_order = ["yfinance", "stooq"]
+adjustment = "split_dividend_adjusted"   # the single canonical semantic. Adapters
+                                         #   normalise into it or fail loudly (ADR 0003)
+history_days = 730                       # trailing window fetched for context and charting
+
+[data.sec]
+# EDGAR rejects requests without a descriptive User-Agent: 403, plus an IP block of
+# roughly ten minutes. It must carry a real name and a real contact address.
+# Startup validation REJECTS the placeholder below — replace it before first run.
+user_agent = "REPLACE_ME <your.name> <your.email@example.com> M.A.P. research tool"
+requests_per_second = 8      # EDGAR's published ceiling is 10/s; leave headroom
+tickers_url = "https://www.sec.gov/files/company_tickers_exchange.json"
+symbols_db = "var/symbols.sqlite"
+refresh_days = 30            # re-download the ticker file when older than this
+
+# ---------------------------------------------------------------------------
+# News intake — untrusted input (CLAUDE.md §9)
+# ---------------------------------------------------------------------------
+[news]
+dir = "news"                 # local .txt / .md files
+rss_urls = []                # optional; each entry is fetched and treated as untrusted
+
+# ---------------------------------------------------------------------------
+# Artifacts
+# ---------------------------------------------------------------------------
+[paths]
+runs_dir = "runs"            # runs/<run_id>/{forecast.json,manifest.json,trace.jsonl,chart.html}

@@ -1,0 +1,198 @@
+"""Boundary contracts.
+
+Every Protocol here is what an *agent* or the *pipeline* is allowed to depend on.
+The concrete implementations live in `mapf.providers` and `mapf.data`, and
+`import-linter` forbids either being imported from above (ADR 0004). That is what
+makes the test suite runnable with the inference server switched off: an agent
+constructed with a fake cannot reach `httpx`, even transitively, so there is
+nothing to patch.
+
+None of these Protocols is `runtime_checkable`. The decorator only verifies that
+attribute *names* exist — it cannot check signatures — so an `isinstance` pass
+against it is close to worthless as a guarantee while reading like a real one.
+Add it to a Protocol at the point where something actually needs to branch on
+capability at runtime, and not before.
+
+The small data types below exist to give these Protocols signatures. They are the
+vocabulary of the boundary, which is why they live here and not in `models` —
+`models` is the domain, `ports` is the contract.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from datetime import date
+from typing import Any, Literal, Protocol
+
+from pydantic import Field
+
+from mapf.core.models import (
+    DomainModel,
+    PriceWindow,
+    Symbol,
+    SymbolMatch,
+    TrustedText,
+    UntrustedText,
+    UtcDatetime,
+)
+
+# ---------------------------------------------------------------------------
+# Inference vocabulary
+# ---------------------------------------------------------------------------
+FingerprintSource = Literal["digest", "composite", "tag"]
+
+
+class ModelInfo(DomainModel):
+    """A model as the server reports it, plus how confidently we can pin it.
+
+    `fingerprint_fields` is not decoration: a composite fingerprint computed from
+    a different field set is a different fingerprint for identical weights, so the
+    field list is what makes a composite reproducible rather than merely plausible
+    (ADR 0001).
+    """
+
+    id: str = Field(min_length=1)
+    fingerprint: str = Field(min_length=1)
+    fingerprint_source: FingerprintSource
+    fingerprint_fields: tuple[str, ...] = ()
+
+
+class Message(DomainModel):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+class SamplingParams(DomainModel):
+    """Recorded in every manifest as *requested*.
+
+    Local backends frequently ignore `seed`, and some do not implement
+    `temperature=0` deterministically. Recording the request is honest;
+    claiming reproducibility from it would not be.
+    """
+
+    temperature: float = Field(ge=0.0, le=2.0)
+    seed: int | None = None
+    top_p: float | None = Field(default=None, gt=0.0, le=1.0)
+    max_tokens: int | None = Field(default=None, ge=1)
+
+
+class LLMResponse(DomainModel):
+    text: str
+    model_id: str = Field(min_length=1)
+    finish_reason: str | None = None
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
+    # Must be recorded even on a hit, or the second run's trace is empty and
+    # DoD criterion 5 becomes unauditable.
+    cache_hit: bool = False
+
+
+class RenderedPrompt(DomainModel):
+    """A prompt with its template provenance attached.
+
+    The template hash goes in the manifest, not in the cache key — the rendered
+    text is already in the key, so a template edit invalidates on its own.
+    Provenance and invalidation are different jobs (ADR 0001).
+    """
+
+    template_name: str = Field(min_length=1)
+    template_version: str = Field(min_length=1)
+    template_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    messages: tuple[Message, ...] = Field(min_length=1)
+
+
+class TraceEvent(DomainModel):
+    """One line of `runs/<run_id>/trace.jsonl`."""
+
+    at: UtcDatetime
+    stage: str = Field(min_length=1)
+    attempt: int = Field(default=0, ge=0)
+    cache_hit: bool = False
+    data: Mapping[str, Any] = Field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Ports
+# ---------------------------------------------------------------------------
+class LLMProvider(Protocol):
+    """The only way to reach a model. `mapf.providers` implements it."""
+
+    def list_models(self) -> Sequence[ModelInfo]:
+        """Resolve what the server actually has loaded.
+
+        Model ids are never hardcoded: identical weights are named differently by
+        different backends, so the id on the wire is whatever this returns.
+        """
+        ...
+
+    def complete(
+        self,
+        *,
+        model: ModelInfo,
+        prompt: RenderedPrompt,
+        sampling: SamplingParams,
+        json_schema: Mapping[str, Any] | None = None,
+        attempt: int = 0,
+    ) -> LLMResponse:
+        """Run one completion.
+
+        `attempt` exists only to namespace the cache. A repair retry appends the
+        validation errors to the prompt, so attempt 2 differs from attempt 1 —
+        but when the same errors recur, attempt 3 would render byte-identical to
+        attempt 2, hit the cache, and replay a known failure without calling the
+        model (ADR 0001).
+        """
+        ...
+
+
+class MarketDataProvider(Protocol):
+    """One source of prices. Composed into a failover chain by `mapf.data`."""
+
+    @property
+    def name(self) -> str:
+        """Recorded in the manifest. A run must say which source served it."""
+        ...
+
+    def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+        """Return a window normalised to the canonical adjustment basis.
+
+        Never returns an empty window: an empty result is
+        `EmptyPriceWindowError`, because a silently empty frame propagates as a
+        plausible-looking zero-length series (ADR 0003).
+        """
+        ...
+
+
+class SymbolIndex(Protocol):
+    """The local, searchable symbol universe. US-listed only, by construction."""
+
+    def search(self, query: str, *, limit: int = 10) -> Sequence[SymbolMatch]:
+        """Ranked candidates. Ambiguity is returned, never resolved silently."""
+        ...
+
+    def get(self, ticker: str) -> Symbol | None: ...
+
+
+class PromptStore(Protocol):
+    """Loads versioned templates and renders them with quarantine applied."""
+
+    def render(
+        self,
+        name: str,
+        version: str,
+        *,
+        trusted: Mapping[str, TrustedText] | None = None,
+        untrusted: Mapping[str, UntrustedText] | None = None,
+    ) -> RenderedPrompt:
+        """Interpolate slots, delimiting and escaping only the untrusted map.
+
+        The two maps are separately typed so that mypy, not reviewer attention,
+        is what stops feed text reaching an instruction slot (ADR 0005).
+        """
+        ...
+
+
+class Trace(Protocol):
+    """The audit trail, and the input to the Phase 2 evaluation harness."""
+
+    def record(self, event: TraceEvent) -> None: ...
