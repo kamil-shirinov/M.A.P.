@@ -63,15 +63,18 @@ exists. The other seven: **not started** — they need modules 2–7.
 - **Module 4 — `mapf.prompts` built and green.** `sanitise.py` (delimiter
   neutralisation), `loader.py` (`FilePromptStore`), and the three v1 templates as
   package data
-- 291 unit tests; 100% line coverage of `core`, `settings`, `providers` and
-  `prompts`; `ruff check`, `ruff format --check`, `mypy --strict` and
+- **Module 5 — `mapf.agents` built and green.** `base.py` (contract + shared
+  plumbing), `intake.py`, `analyst.py`, `structuralist.py` with the repair loop,
+  plus `structuralist_repair.v1.md`
+- 330 unit tests; 100% line coverage of `core`, `settings`, `providers`, `prompts`
+  and `agents`; `ruff check`, `ruff format --check`, `mypy --strict` and
   `lint-imports` (4/4) all clean, with no inference server and no network
-- Deprecation warnings are now errors in pytest — it immediately caught a
-  deprecated `importlib.abc.Traversable`
+- Deprecation warnings are errors **scoped to `mapf.*`** (ADR 0010) — it caught a
+  deprecated `importlib.abc.Traversable` on its first run
 
 **In progress**
 
-- Nothing. Awaiting approval of module 4 before module 5.
+- Nothing. Awaiting approval of module 5 before module 6.
 
 **Next action**
 
@@ -81,7 +84,7 @@ exists. The other seven: **not started** — they need modules 2–7.
      **done** — resolved as `loader.py` + `registry.py` with `__init__.py` re-exports
   3. ~~`mapf.providers` — `openai_compat`, `caching`, `fake`~~ **done**
   4. ~~`mapf.prompts` — loader plus the three v1 templates~~ **done**
-  5. `mapf.agents` — intake, analyst, structuralist with the repair loop
+  5. ~~`mapf.agents` — intake, analyst, structuralist with the repair loop~~ **done**
   6. `mapf.data` — symbols, providers + chain, parquet cache, news
   7. `mapf.pipeline`, `mapf.render`, `mapf.bootstrap`, `mapf.cli`
 
@@ -188,11 +191,13 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 | [0002](decisions/0002-constrained-decode-surface.md) | Narrow the constrained-decode surface | Accepted |
 | [0003](decisions/0003-price-adjustment-semantics.md) | Price adjustment semantics across providers | Accepted |
 | [0004](decisions/0004-import-boundary-enforcement.md) | Enforce import boundaries in CI | Accepted |
-| [0005](decisions/0005-untrusted-text-and-document-identity.md) | Untrusted text as a type, document identity over raw bytes | Accepted |
+| [0005](decisions/0005-untrusted-text-and-document-identity.md) | Untrusted text as a type, document identity over raw bytes | Accepted (amended 2026-08-10: `QuarantinedText`) |
 | [0006](decisions/0006-justification-before-figures.md) | `justification` is emitted before the figures | Accepted |
 | [0007](decisions/0007-determinism-guard-with-auditable-override.md) | Determinism guard with an auditable override | Accepted |
 | [0008](decisions/0008-inference-timeouts-and-failure-taxonomy.md) | Inference timeouts and the failure taxonomy | Accepted (amended 2026-08-10) |
 | [0009](decisions/0009-deterministic-quarantine-delimiters.md) | Deterministic quarantine delimiters | Accepted |
+| [0010](decisions/0010-scoped-deprecation-errors.md) | Deprecation warnings are errors, scoped to our own code | Accepted |
+| [0011](decisions/0011-agent-contracts-and-the-repair-loop.md) | Agent contracts, the repair loop, and what none of it guarantees | Accepted |
 
 ### Pinned in review, ADR owed
 
@@ -215,6 +220,15 @@ Binding decisions with no ADR yet. Write them as 0006–0007 when the module lan
 Newest first. One or two lines each — what changed, what broke, what's next. If an entry
 needs a paragraph, it needed an ADR instead.
 
+- **2026-08-10 (2)** — Module 5 `mapf.agents` built. ADRs 0010 and 0011 written.
+  **ADR 0005 was not actually enforced**: `UntrustedText` is a `NewType` and could be
+  constructed anywhere, so the type marked provenance but not sanitisation. Closed by
+  splitting it — `UntrustedText` still marks provenance; a new `QuarantinedText` in
+  `core.quarantine` carries the guarantee and has a module-private constructor token.
+  `PromptStore.render` accepts only the latter, so the renderer cannot receive
+  unsanitised text. Enforced by mypy, a runtime token check, and an AST test asserting
+  one construction site. `Trace.record` now takes fields rather than a built event, so
+  agents need no clock. 330 tests.
 - **2026-08-10** — Module 4 `mapf.prompts` built: `sanitise.py`, `loader.py`, and the
   three v1 templates. ADR 0009 written. The central tension is resolved: a nonce
   delimiter would defeat DoD criterion 5, so delimiters are fixed and the payload is

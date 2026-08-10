@@ -289,6 +289,38 @@ class AgentError(MapError):
     """An agent could not meet its contract."""
 
 
+class NoMaterialFactsError(AgentError):
+    """Agent 1 found nothing material in the documents.
+
+    A legitimate outcome — the template explicitly permits an empty answer rather
+    than inviting fabrication — but not one a forecast can be built on. Raising is
+    the honest response: the alternative is a forecast derived from nothing, which
+    would be indistinguishable from a real one downstream.
+    """
+
+    def __init__(self, ticker: str, documents: int) -> None:
+        self.ticker = ticker
+        self.documents = documents
+        super().__init__(
+            f"no material facts extracted for {ticker} from {documents} document(s). "
+            "The source material may genuinely contain nothing material; a forecast "
+            "cannot be built from it either way."
+        )
+
+
+class AnalystOutputError(AgentError):
+    """Agent 2 returned something that is not a narrative.
+
+    The only check available. Prose cannot be schema-validated, so this catches
+    refusals, truncation, and empty responses — nothing more.
+    """
+
+    def __init__(self, reason: str, length: int) -> None:
+        self.reason = reason
+        self.length = length
+        super().__init__(f"analyst output rejected ({reason}); length was {length} characters")
+
+
 # N818 wants an `Error` suffix. The name is fixed by the design review and reads
 # better at the call site (`except ForecastRepairExhausted`), so the rule is waived
 # here rather than the name bent to satisfy it.
