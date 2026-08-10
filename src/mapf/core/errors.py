@@ -216,6 +216,44 @@ class PriceAdjustmentUnsupportedError(MarketDataError):
 
 
 # ---------------------------------------------------------------------------
+# Prompts
+# ---------------------------------------------------------------------------
+class PromptError(MapError):
+    """A prompt could not be loaded or rendered."""
+
+
+class TemplateNotFoundError(PromptError):
+    def __init__(self, name: str, version: str, available: Sequence[str]) -> None:
+        self.name = name
+        self.version = version
+        self.available = tuple(available)
+        listed = ", ".join(self.available) if self.available else "(none)"
+        super().__init__(f"no prompt template {name}.{version}.md; available: {listed}")
+
+
+class TemplateFormatError(PromptError):
+    """A template file is not a sequence of role-marked sections."""
+
+
+class PromptSlotError(PromptError):
+    """A slot was missing, unknown, or supplied as both trusted and untrusted.
+
+    Unknown slots are an error rather than a no-op: the usual cause is a typo, and
+    silently rendering a prompt with a placeholder left in it would send that
+    placeholder to the model as if it were content.
+    """
+
+
+class PromptSanitisationError(PromptError):
+    """Untrusted text could not be made safe to interpolate.
+
+    Should be unreachable — the neutralisation loop shrinks its input on every
+    pass, so it terminates. It raises rather than returning partly-cleaned text,
+    because the alternative is emitting a prompt whose quarantine may not hold.
+    """
+
+
+# ---------------------------------------------------------------------------
 # Symbols
 # ---------------------------------------------------------------------------
 class SymbolError(MapError):

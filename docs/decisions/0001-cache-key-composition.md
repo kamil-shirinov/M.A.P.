@@ -1,6 +1,6 @@
 # 0001 — Cache key composition
 
-Status: Accepted · Date: 2026-08-09 · Phase 1
+Status: Accepted · Date: 2026-08-09 · Amended 2026-08-10 · Phase 1
 
 ## Context
 
@@ -66,6 +66,26 @@ limitation is stated, never hidden.
 **No wall-clock value enters any prompt.** Where a date is genuinely needed, the
 last trading date of the price window is passed instead. It is stable within a
 day and is a more truthful statement of what the model can actually know.
+
+**The decode schema is part of the key** *(amendment, 2026-08-10)*. For a call
+made under constrained decoding the grammar is part of the request, not context
+around it: change the schema and the set of reachable tokens changes, so the same
+messages and the same sampling parameters can legitimately produce different
+output. A key that omits it would serve, after a schema edit, output shaped by the
+*previous* grammar — a false hit, which is the expensive direction. False misses
+cost recomputation; false hits corrupt a result while leaving it looking entirely
+normal.
+
+It is folded into the prompt component rather than added as a fourth field, so the
+key composition stays fingerprint + prompt + sampling + attempt, with "prompt"
+meaning the whole request the model was asked to satisfy. `providers/keys.py` is
+the single derivation, shared by the cache and the fixture replayer.
+
+The complete key is therefore:
+
+```
+sha256(model_fingerprint, canonical(messages + decode schema), sampling, attempt)
+```
 
 **Repair attempts include the attempt index in the cache key.** The retry prompt
 already differs from the first, because the validation errors are appended to it.

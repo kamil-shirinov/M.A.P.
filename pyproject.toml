@@ -141,6 +141,10 @@ addopts = "-m 'not network' --cov=mapf --cov-report=term-missing"
 markers = [
   "network: requires live network or a running inference server; excluded by default",
 ]
+# Deprecations are errors. A research project that must still run in three years
+# cannot afford to discover a removed API at the moment it is removed; this makes
+# the warning arrive while there is still time to act on it.
+filterwarnings = ["error::DeprecationWarning"]
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]

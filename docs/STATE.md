@@ -60,13 +60,18 @@ exists. The other seven: **not started** — they need modules 2–7.
   module that speaks HTTP to a model), `caching.py` (disk cache as an `LLMProvider`
   decorator), `fake.py` (fixture replay, ships in `src/`), `keys.py` (one shared
   request-key derivation)
-- 224 unit tests; 100% line coverage of `core`, `settings` and `providers`;
-  `ruff check`, `ruff format --check`, `mypy --strict` and `lint-imports` (4/4)
-  all clean, with no inference server and no network
+- **Module 4 — `mapf.prompts` built and green.** `sanitise.py` (delimiter
+  neutralisation), `loader.py` (`FilePromptStore`), and the three v1 templates as
+  package data
+- 291 unit tests; 100% line coverage of `core`, `settings`, `providers` and
+  `prompts`; `ruff check`, `ruff format --check`, `mypy --strict` and
+  `lint-imports` (4/4) all clean, with no inference server and no network
+- Deprecation warnings are now errors in pytest — it immediately caught a
+  deprecated `importlib.abc.Traversable`
 
 **In progress**
 
-- Nothing. Awaiting approval of module 3 before module 4.
+- Nothing. Awaiting approval of module 4 before module 5.
 
 **Next action**
 
@@ -75,7 +80,7 @@ exists. The other seven: **not started** — they need modules 2–7.
   2. ~~`mapf.settings` — TOML + env loading, model registry, placeholder rejection~~
      **done** — resolved as `loader.py` + `registry.py` with `__init__.py` re-exports
   3. ~~`mapf.providers` — `openai_compat`, `caching`, `fake`~~ **done**
-  4. `mapf.prompts` — loader plus the three v1 templates
+  4. ~~`mapf.prompts` — loader plus the three v1 templates~~ **done**
   5. `mapf.agents` — intake, analyst, structuralist with the repair loop
   6. `mapf.data` — symbols, providers + chain, parquet cache, news
   7. `mapf.pipeline`, `mapf.render`, `mapf.bootstrap`, `mapf.cli`
@@ -137,9 +142,22 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
 10. ~~Is enforcing `temperature == 0` too strict?~~ **Resolved 2026-08-09 — confirmed with
    an auditable override.** See ADR 0007. Phase 2's evaluation harness must read
    `models.allow_nondeterministic` from the manifest and exclude or separate those runs.
-11. **Recording real fixtures.** `FakeProvider.record` exists but nothing captures a live
-   session yet. Needed before the pipeline can be exercised end to end offline; decide
-   whether capture is a CLI flag on `map run` or a separate script.
+11. ~~Recording real fixtures.~~ **Resolved 2026-08-10 — a flag with a mandatory explicit
+   destination: `map run --record-to <dir>`.** A flag rather than a separate script,
+   because fixtures must come from the exact code path used in production or they are not
+   fixtures. The destination is mandatory and has no default, because a production command
+   must never silently overwrite `tests/fixtures/`; copying recordings into the test corpus
+   stays a deliberate human act. **Recordings contain news text and must be reviewed before
+   being committed** — third-party text is not automatically ours to redistribute, and a
+   recording made from a private feed may not be shareable at all. Implement with the CLI
+   (module 7).
+12. **Inter-token stall timeout (streaming) — Phase 4, do not build now.** `read_timeout_s`
+   is a 600 s ceiling on the *whole* response, so a genuinely hung server blocks for ten
+   minutes before failing. Streaming the response would allow a much shorter stall timeout
+   measured between tokens: fail in seconds when nothing is arriving, while still permitting
+   a long total generation. It also gives progress feedback, which the Phase 4 UI will want
+   regardless. Deferred because streaming changes the provider contract and the cache
+   would need to buffer a full response before storing it.
 
 ---
 
@@ -166,14 +184,15 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 
 | # | Title | Status |
 |---|---|---|
-| [0001](decisions/0001-cache-key-composition.md) | Cache key composition | Accepted |
+| [0001](decisions/0001-cache-key-composition.md) | Cache key composition | Accepted (amended 2026-08-10: decode schema is in the key) |
 | [0002](decisions/0002-constrained-decode-surface.md) | Narrow the constrained-decode surface | Accepted |
 | [0003](decisions/0003-price-adjustment-semantics.md) | Price adjustment semantics across providers | Accepted |
 | [0004](decisions/0004-import-boundary-enforcement.md) | Enforce import boundaries in CI | Accepted |
 | [0005](decisions/0005-untrusted-text-and-document-identity.md) | Untrusted text as a type, document identity over raw bytes | Accepted |
 | [0006](decisions/0006-justification-before-figures.md) | `justification` is emitted before the figures | Accepted |
 | [0007](decisions/0007-determinism-guard-with-auditable-override.md) | Determinism guard with an auditable override | Accepted |
-| [0008](decisions/0008-inference-timeouts-and-failure-taxonomy.md) | Inference timeouts and the failure taxonomy | Accepted |
+| [0008](decisions/0008-inference-timeouts-and-failure-taxonomy.md) | Inference timeouts and the failure taxonomy | Accepted (amended 2026-08-10) |
+| [0009](decisions/0009-deterministic-quarantine-delimiters.md) | Deterministic quarantine delimiters | Accepted |
 
 ### Pinned in review, ADR owed
 
@@ -196,6 +215,15 @@ Binding decisions with no ADR yet. Write them as 0006–0007 when the module lan
 Newest first. One or two lines each — what changed, what broke, what's next. If an entry
 needs a paragraph, it needed an ADR instead.
 
+- **2026-08-10** — Module 4 `mapf.prompts` built: `sanitise.py`, `loader.py`, and the
+  three v1 templates. ADR 0009 written. The central tension is resolved: a nonce
+  delimiter would defeat DoD criterion 5, so delimiters are fixed and the payload is
+  made unable to contain them — NFKC, then control/format stripping, then fixpoint
+  marker deletion. Byte-identical rendering is asserted directly. ADR 0001 amended to
+  carry the decode schema in the key; ADR 0008 amended with the standing rule that error
+  enrichment must never re-enter the path that raised. Open questions 11 (`--record-to`)
+  and 12 (streaming stall timeout, Phase 4) recorded. Deprecations are now pytest errors.
+  291 tests, 100% coverage of all four built modules.
 - **2026-08-09 (5)** — Module 3 `mapf.providers` built: `openai_compat`, `caching`,
   `fake`, `keys`. ADR 0008 written (timeouts and failure taxonomy). Its own tests found
   a recursion bug: a 404 on `/models` re-entered discovery through the error-enrichment
