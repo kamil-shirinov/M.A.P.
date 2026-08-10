@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from mapf.core.models import PriceWindow, Symbol, SymbolMatch, TrustedText, UntrustedText
+from mapf.core.models import PriceWindow, Symbol, SymbolMatch, TrustedText
 from mapf.core.ports import (
     LLMProvider,
     LLMResponse,
@@ -33,6 +33,7 @@ from mapf.core.ports import (
     Trace,
     TraceEvent,
 )
+from mapf.core.quarantine import QuarantinedText
 
 MODEL = ModelInfo(id="qwen3-4b", fingerprint="abc123", fingerprint_source="tag")
 PROMPT = RenderedPrompt(
@@ -86,17 +87,24 @@ class StubPromptStore:
         version: str,
         *,
         trusted: Mapping[str, TrustedText] | None = None,
-        untrusted: Mapping[str, UntrustedText] | None = None,
+        untrusted: Mapping[str, QuarantinedText] | None = None,
     ) -> RenderedPrompt:
         return PROMPT
 
 
 class StubTrace:
     def __init__(self) -> None:
-        self.events: list[TraceEvent] = []
+        self.records: list[tuple[str, int, bool]] = []
 
-    def record(self, event: TraceEvent) -> None:
-        self.events.append(event)
+    def record(
+        self,
+        *,
+        stage: str,
+        attempt: int = 0,
+        cache_hit: bool = False,
+        data: Mapping[str, Any] | None = None,
+    ) -> None:
+        self.records.append((stage, attempt, cache_hit))
 
 
 def _accepts_llm(provider: LLMProvider) -> Sequence[ModelInfo]:
@@ -115,8 +123,8 @@ def _accepts_prompt_store(store: PromptStore) -> RenderedPrompt:
     return store.render("structuralist", "v1")
 
 
-def _accepts_trace(trace: Trace, event: TraceEvent) -> None:
-    trace.record(event)
+def _accepts_trace(trace: Trace, stage: str) -> None:
+    trace.record(stage=stage, attempt=1, cache_hit=True)
 
 
 def test_stubs_satisfy_their_protocols() -> None:
@@ -128,9 +136,8 @@ def test_stubs_satisfy_their_protocols() -> None:
 
 def test_trace_records_events() -> None:
     trace = StubTrace()
-    event = TraceEvent(at=datetime(2026, 8, 9, tzinfo=UTC), stage="intake", data={"k": "v"})
-    _accepts_trace(trace, event)
-    assert trace.events == [event]
+    _accepts_trace(trace, "intake")
+    assert trace.records == [("intake", 1, True)]
 
 
 # ---------------------------------------------------------------------------

@@ -29,9 +29,9 @@ import structlog
 
 from mapf.core.errors import PromptSlotError, TemplateFormatError, TemplateNotFoundError
 from mapf.core.hashing import sha256_hex
-from mapf.core.models import TrustedText, UntrustedText
+from mapf.core.models import TrustedText
 from mapf.core.ports import Message, RenderedPrompt
-from mapf.prompts.sanitise import neutralise
+from mapf.core.quarantine import QuarantinedText, close_delimiter, open_delimiter
 
 _logger = structlog.get_logger(__name__)
 
@@ -39,14 +39,6 @@ _PACKAGE = "mapf.prompts"
 
 _ROLE_PATTERN = re.compile(r"^\[\[(system|user|assistant)\]\][ \t]*$", re.MULTILINE)
 _SLOT_PATTERN = re.compile(r"\{\{\s*(\w+)\s*\}\}")
-
-
-def open_delimiter(slot: str) -> str:
-    return f"<<<BEGIN UNTRUSTED DATA: {slot}>>>"
-
-
-def close_delimiter(slot: str) -> str:
-    return f"<<<END UNTRUSTED DATA: {slot}>>>"
 
 
 def _parse_sections(text: str, filename: str) -> tuple[tuple[str, str], ...]:
@@ -110,7 +102,7 @@ class FilePromptStore:
         version: str,
         *,
         trusted: Mapping[str, TrustedText] | None = None,
-        untrusted: Mapping[str, UntrustedText] | None = None,
+        untrusted: Mapping[str, QuarantinedText] | None = None,
     ) -> RenderedPrompt:
         trusted_values = dict(trusted or {})
         untrusted_values = dict(untrusted or {})
@@ -150,7 +142,7 @@ class FilePromptStore:
         self,
         body: str,
         trusted: Mapping[str, TrustedText],
-        untrusted: Mapping[str, UntrustedText],
+        untrusted: Mapping[str, QuarantinedText],
         seen: set[str],
     ) -> str:
         def replace(match: re.Match[str]) -> str:
@@ -159,7 +151,7 @@ class FilePromptStore:
             if slot in trusted:
                 return str(trusted[slot])
             if slot in untrusted:
-                return self._quarantine(slot, str(untrusted[slot]))
+                return self._wrap(slot, untrusted[slot])
             raise PromptSlotError(
                 f"template slot {{{{{slot}}}}} was not supplied; rendering it as a "
                 "literal placeholder would send '{{" + slot + "}}' to the model as content"
@@ -168,16 +160,21 @@ class FilePromptStore:
         return _SLOT_PATTERN.sub(replace, body)
 
     @staticmethod
-    def _quarantine(slot: str, value: str) -> str:
-        sanitised = neutralise(value)
-        if sanitised.was_modified:
+    def _wrap(slot: str, value: QuarantinedText) -> str:
+        """Delimit already-sanitised text.
+
+        The renderer no longer sanitises: it cannot receive anything unsanitised,
+        because the type it accepts has no other constructor. This is the
+        parse-don't-validate shape — the type proves the work was already done.
+        """
+        if value.was_modified:
             # Worth seeing. Marker removal in particular is either an injection
             # attempt or a source document doing something odd, and both are things
             # a human should know happened rather than discover in a forecast.
             _logger.warning(
                 "untrusted_text_neutralised",
                 slot=slot,
-                markers_removed=sanitised.markers_removed,
-                controls_removed=sanitised.controls_removed,
+                markers_removed=value.markers_removed,
+                controls_removed=value.controls_removed,
             )
-        return "\n".join((open_delimiter(slot), sanitised.text, close_delimiter(slot)))
+        return "\n".join((open_delimiter(slot), value.text, close_delimiter(slot)))

@@ -14,9 +14,14 @@ from mapf.core.errors import (
     TemplateFormatError,
     TemplateNotFoundError,
 )
-from mapf.core.models import TrustedText, UntrustedText
+from mapf.core.models import TrustedText
 from mapf.core.ports import ModelInfo, RenderedPrompt, SamplingParams
-from mapf.prompts.loader import FilePromptStore, close_delimiter, open_delimiter
+from mapf.core.quarantine import (
+    close_delimiter,
+    open_delimiter,
+    quarantine,
+)
+from mapf.prompts.loader import FilePromptStore
 from mapf.providers.keys import request_key
 
 TICKER = TrustedText("AAPL")
@@ -32,7 +37,7 @@ def _intake(store: FilePromptStore, documents: str) -> RenderedPrompt:
         "intake",
         "v1",
         trusted={"ticker": TICKER, "as_of_date": AS_OF},
-        untrusted={"documents": UntrustedText(documents)},
+        untrusted={"documents": quarantine(documents)},
     )
 
 
@@ -157,7 +162,21 @@ def test_an_unknown_slot_is_an_error() -> None:
             "intake",
             "v1",
             trusted={"ticker": TICKER, "as_of_date": AS_OF, "tickr": TrustedText("x")},
-            untrusted={"documents": UntrustedText("d")},
+            untrusted={"documents": quarantine("d")},
+        )
+
+
+def test_the_renderer_cannot_accept_unsanitised_text() -> None:
+    """The structural half of ADR 0005: there is no way to hand the renderer raw
+    feed text, because the type it accepts has only one constructor."""
+    from mapf.core.quarantine import QuarantinedText
+
+    with pytest.raises(TypeError, match="cannot be constructed directly"):
+        FilePromptStore().render(
+            "intake",
+            "v1",
+            trusted={"ticker": TICKER, "as_of_date": AS_OF},
+            untrusted={"documents": QuarantinedText("raw feed text", 0, 0)},
         )
 
 
@@ -169,7 +188,7 @@ def test_a_slot_supplied_as_both_is_an_error() -> None:
             "intake",
             "v1",
             trusted={"ticker": TICKER, "as_of_date": AS_OF, "documents": TrustedText("d")},
-            untrusted={"documents": UntrustedText("d")},
+            untrusted={"documents": quarantine("d")},
         )
 
 
@@ -208,12 +227,13 @@ def test_malformed_templates_are_rejected(content: str, match: str) -> None:
 # ---------------------------------------------------------------------------
 # The shipped templates
 # ---------------------------------------------------------------------------
-def test_all_three_templates_load() -> None:
+def test_every_shipped_template_loads() -> None:
     store = FilePromptStore()
     assert set(store.available()) == {
         "intake.v1.md",
         "scenario_analyst.v1.md",
         "structuralist.v1.md",
+        "structuralist_repair.v1.md",
     }
 
 
@@ -226,14 +246,14 @@ def _render_all() -> dict[str, str]:
                 "scenario_analyst",
                 "v1",
                 trusted={"ticker": TICKER, "as_of_date": AS_OF, "horizon_days": HORIZON},
-                untrusted={"material_facts": UntrustedText("- Revenue rose 8%.")},
+                untrusted={"material_facts": quarantine("- Revenue rose 8%.")},
             )
         ),
         "structuralist": _text(
             store.render(
                 "structuralist",
                 "v1",
-                untrusted={"narrative": UntrustedText("Bullish: ... Weight: 0.25")},
+                untrusted={"narrative": quarantine("Bullish: ... Weight: 0.25")},
             )
         ),
     }
@@ -301,7 +321,7 @@ def test_the_rendered_prompt_records_name_version_and_hash() -> None:
 def test_the_hash_distinguishes_templates() -> None:
     store = FilePromptStore()
     intake = _intake(store, "clean")
-    structuralist = store.render("structuralist", "v1", untrusted={"narrative": UntrustedText("n")})
+    structuralist = store.render("structuralist", "v1", untrusted={"narrative": quarantine("n")})
     assert intake.template_sha256 != structuralist.template_sha256
 
 

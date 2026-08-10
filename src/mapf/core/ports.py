@@ -32,9 +32,9 @@ from mapf.core.models import (
     Symbol,
     SymbolMatch,
     TrustedText,
-    UntrustedText,
     UtcDatetime,
 )
+from mapf.core.quarantine import QuarantinedText
 
 # ---------------------------------------------------------------------------
 # Inference vocabulary
@@ -182,17 +182,33 @@ class PromptStore(Protocol):
         version: str,
         *,
         trusted: Mapping[str, TrustedText] | None = None,
-        untrusted: Mapping[str, UntrustedText] | None = None,
+        untrusted: Mapping[str, QuarantinedText] | None = None,
     ) -> RenderedPrompt:
-        """Interpolate slots, delimiting and escaping only the untrusted map.
+        """Interpolate slots, delimiting only the untrusted map.
 
-        The two maps are separately typed so that mypy, not reviewer attention,
-        is what stops feed text reaching an instruction slot (ADR 0005).
+        The two maps are separately typed so that mypy, not reviewer attention, is
+        what stops feed text reaching an instruction slot. The untrusted map holds
+        `QuarantinedText`, whose only constructor is the sanitiser — so raw feed
+        text cannot reach a prompt even through a renderer written later
+        (ADR 0005).
         """
         ...
 
 
 class Trace(Protocol):
-    """The audit trail, and the input to the Phase 2 evaluation harness."""
+    """The audit trail, and the input to the Phase 2 evaluation harness.
 
-    def record(self, event: TraceEvent) -> None: ...
+    Takes the fields rather than a built `TraceEvent` so that the implementation
+    owns the timestamp. Callers therefore need no clock, which keeps the layers
+    above free of the one dependency most likely to leak into a prompt and destroy
+    the cache (ADR 0001).
+    """
+
+    def record(
+        self,
+        *,
+        stage: str,
+        attempt: int = 0,
+        cache_hit: bool = False,
+        data: Mapping[str, Any] | None = None,
+    ) -> None: ...
