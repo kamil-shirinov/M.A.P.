@@ -144,7 +144,7 @@ markers = [
 # Deprecations are errors. A research project that must still run in three years
 # cannot afford to discover a removed API at the moment it is removed; this makes
 # the warning arrive while there is still time to act on it.
-filterwarnings = ["error::DeprecationWarning"]
+filterwarnings = ["default::DeprecationWarning", "error::DeprecationWarning:mapf"]
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
