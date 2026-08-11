@@ -39,11 +39,17 @@ from mapf.settings import ModelRegistry, Settings
 _PROVIDERS = {"yfinance": YFinanceProvider, "stooq": StooqProvider}
 
 
-def build_llm_provider(settings: Settings, *, fixtures: Path | None = None) -> LLMProvider:
+def build_llm_provider(
+    settings: Settings, *, fixtures: Path | None = None, cached: bool = True
+) -> LLMProvider:
     """The live HTTP adapter behind a disk cache, or fixture replay.
 
     `fixtures` selects `FakeProvider`, which is why it ships in `src/` rather than
     in tests: the CLI can run offline against recorded fixtures.
+
+    `cached=False` is for diagnostics. `map health` uses it because a cached probe
+    would replay its own earlier answer and report on a server it never contacted —
+    a health check that passes while the server is down is worse than none.
     """
     if fixtures is not None:
         return FakeProvider(fixtures)
@@ -52,7 +58,7 @@ def build_llm_provider(settings: Settings, *, fixtures: Path | None = None) -> L
         connect_timeout_s=settings.inference.connect_timeout_s,
         read_timeout_s=settings.inference.read_timeout_s,
     )
-    return CachingProvider(inner, settings.cache.llm_dir)
+    return CachingProvider(inner, settings.cache.llm_dir) if cached else inner
 
 
 def build_market_data(settings: Settings) -> MarketDataProvider:
@@ -66,6 +72,10 @@ def build_dividends(settings: Settings) -> DividendSource:
     if "yfinance" in settings.data.provider_order:
         return YFinanceDividendSource()
     return NullDividendSource()
+
+
+def build_prompts() -> FilePromptStore:
+    return FilePromptStore()
 
 
 def build_symbol_index(settings: Settings) -> SqliteSymbolIndex:

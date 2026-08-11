@@ -299,8 +299,10 @@ def test_health_reports_every_configured_model(
 ) -> None:
     from mapf.cli.commands import health as health_module
 
-    monkeypatch.setattr(health_module, "build_llm_provider", lambda s: _StubProvider())
-    result = runner.invoke(app, ["health", "--config", str(_config(tmp_path))])
+    monkeypatch.setattr(health_module, "build_llm_provider", lambda s, cached=True: _StubProvider())
+    result = runner.invoke(
+        app, ["health", "--no-grammar-probe", "--config", str(_config(tmp_path))]
+    )
     assert result.exit_code == 0
     assert "all configured models are loaded" in result.output
     # ADR 0001: a backend without a digest must say so rather than imply pinning.
@@ -315,8 +317,10 @@ def test_health_names_a_missing_model(tmp_path: Path, monkeypatch: pytest.Monkey
             models = _StubProvider.list_models(self)  # type: ignore[no-untyped-call]
             return tuple(m for m in models if m.id != "qwen3-4b")
 
-    monkeypatch.setattr(health_module, "build_llm_provider", lambda s: _Partial())
-    result = runner.invoke(app, ["health", "--config", str(_config(tmp_path))])
+    monkeypatch.setattr(health_module, "build_llm_provider", lambda s, cached=True: _Partial())
+    result = runner.invoke(
+        app, ["health", "--no-grammar-probe", "--config", str(_config(tmp_path))]
+    )
     assert result.exit_code == EXIT_INFERENCE
     assert "qwen3-4b" in result.output
 
@@ -469,3 +473,72 @@ def test_main_invokes_the_typer_app(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(app_module, "app", lambda: called.append(True))
     app_module.main()
     assert called == [True]
+
+
+def test_health_probes_the_grammar_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Open question 8 is the most likely first-run failure; finding it here beats
+    finding it after two model swaps at the end of a pipeline."""
+
+    from mapf.cli.commands import health as health_module
+
+    class _Constrained(_StubProvider):
+        def complete(self, *, model, prompt, sampling, json_schema=None, attempt=0):  # type: ignore[no-untyped-def]
+            from mapf.core.ports import LLMResponse
+
+            assert json_schema is not None and "$defs" in json_schema
+            return LLMResponse(text=self._scenarios, model_id=model.id)
+
+    monkeypatch.setattr(health_module, "build_llm_provider", lambda s, cached=True: _Constrained())
+    result = runner.invoke(app, ["health", "--config", str(_config(tmp_path))])
+    assert result.exit_code == 0
+    assert "enforced" in result.output
+
+
+def test_a_rejected_schema_fails_health_and_names_the_fix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mapf.cli.commands import health as health_module
+    from mapf.core.errors import InferenceStatusError
+
+    class _Rejects(_StubProvider):
+        def complete(self, **kwargs):  # type: ignore[no-untyped-def]
+            raise InferenceStatusError(400, "cannot compile grammar with $ref")
+
+    monkeypatch.setattr(health_module, "build_llm_provider", lambda s, cached=True: _Rejects())
+    result = runner.invoke(app, ["health", "--config", str(_config(tmp_path))])
+    assert result.exit_code == EXIT_INFERENCE
+    assert "Flatten the schema" in result.output
+
+
+def test_the_probe_is_skippable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """It costs a model load; `map health` stays fast when you only want the list."""
+    from mapf.cli.commands import health as health_module
+
+    provider = _StubProvider()
+    monkeypatch.setattr(health_module, "build_llm_provider", lambda s, cached=True: provider)
+    result = runner.invoke(
+        app, ["health", "--no-grammar-probe", "--config", str(_config(tmp_path))]
+    )
+    assert result.exit_code == 0
+    assert "grammar:" not in result.output
+    assert provider.calls == 0
+
+
+def test_health_never_reads_through_the_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A health check that passes from a cached reply, while the server is down,
+    is worse than none."""
+    from mapf.cli.commands import health as health_module
+
+    seen: list[bool] = []
+
+    def _capture(settings, *, fixtures=None, cached=True):  # type: ignore[no-untyped-def]
+        seen.append(cached)
+        return _StubProvider()
+
+    monkeypatch.setattr(health_module, "build_llm_provider", _capture)
+    runner.invoke(app, ["health", "--no-grammar-probe", "--config", str(_config(tmp_path))])
+    assert seen == [False]

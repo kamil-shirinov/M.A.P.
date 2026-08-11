@@ -148,7 +148,11 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
    edit silently changes model behaviour. Field-level hints, if ever wanted, go in
    `json_schema_extra` — curated, versioned with the prompt, governed as prompt content
    under `CLAUDE.md` §4. `tests/unit/test_decode_schema.py` is the enforcement.
-8. **Does the backend's grammar engine resolve `$ref`?** `Scenario` appears three times,
+8. **Does the backend's grammar engine resolve `$ref`?** *(now probed, not guessed —
+   `map health` sends one minimal constrained request against the real
+   `decode_schema(ScenarioSet)` and reports `enforced` / `accepted_not_enforced` /
+   `rejected` / `inconclusive`, naming the flattening fix if rejected. Skip with
+   `--no-grammar-probe`.)* `Scenario` appears three times,
    so pydantic emits `$defs` + `$ref` rather than inlining. Most engines handle it; some
    do not. If it chokes, flatten the schema. Resolve at first contact with the backend.
 9. ~~Whether to cut `pandas-datareader` and `rapidfuzz`.~~ **Resolved 2026-08-09 — both
@@ -202,6 +206,22 @@ module-level import attribution) are shared vocabulary, not god objects — the 
 betweenness is many communities agreeing on one word, which is what the layering
 was for.
 
+### Logged for Phase 2 — do not build now
+
+**Rendering must become opt-in.** `write_chart` inlines the whole plotly bundle, so
+every run directory costs about **4.5 MB of identical JavaScript**. A backtest over a
+few hundred news items would write gigabytes of it. Charts are for humans and a
+backtest has no human reading each one, so Phase 2 should make rendering a flag on
+`execute` rather than something it always does. Measured, not estimated: sharing one
+run across the read-only DoD assertions took that test file from **151 s to 0.7 s**,
+and the difference was almost entirely chart writing.
+
+**A single-agent variant is not yet a config change.** Verified rather than assumed,
+and the answer is no — see Known issues 4 below. Do not build the variant until
+Phase 2 can score it; building a comparison before there is anything to measure it
+with is the wrong order. But the blocker below is worth removing sooner than that,
+because it also blocks per-model prompt variants, which is a Phase 1/2 activity.
+
 ## Known issues
 
 1. **A parent-directory `CLAUDE.md` is intentional, not a problem.**
@@ -216,6 +236,22 @@ was for.
    `test_no_vendor_names_appear_in_application_code` scans every `.py` under `src/`.
 4. ~~Not under version control.~~ **Closed 2026-08-09** — `git init` + initial commit.
    Local only, not on GitHub.
+5. **Prompt selection is hardcoded in `agents/`, and that is an abstraction leak.**
+   Each agent module holds `TEMPLATE` and `VERSION` as module constants
+   (`TEMPLATE = "structuralist"`); no agent takes a template as a constructor
+   parameter. Two consequences, and the second matters sooner than the first:
+   - A single-agent ablation variant would require editing `agents/*.py`, not just
+     config. (`pipeline.run.execute` also hardcodes the three-stage sequence and
+     `Agents` has exactly three slots — that half is fine and expected: a different
+     topology is honestly a different pipeline function.)
+   - **A per-model prompt variant is also a code edit today.** `CLAUDE.md` §4 says
+     prompts are versioned precisely so per-model variants can coexist "without
+     touching logic" — and right now they cannot. Tuning `structuralist.v2` for
+     whichever model actually ships means editing an agent.
+
+   Fix, and it is small: make `template` and `version` constructor parameters on
+   `LLMAgent` with the current values as defaults. Three agent signatures and
+   `bootstrap.build_run`. Worth doing before prompt tuning starts.
 
 ---
 

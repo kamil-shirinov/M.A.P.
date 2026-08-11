@@ -234,6 +234,7 @@ def test_every_shipped_template_loads() -> None:
         "scenario_analyst.v1.md",
         "structuralist.v1.md",
         "structuralist_repair.v1.md",
+        "grammar_probe.v1.md",
     }
 
 
