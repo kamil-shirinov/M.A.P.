@@ -50,7 +50,7 @@ price_dir = "var/prices"
 
 [data]
 provider_order = ["yfinance", "stooq"]
-adjustment = "split_dividend_adjusted"
+adjustment = "split_adjusted"
 history_days = 730
 
 [data.sec]

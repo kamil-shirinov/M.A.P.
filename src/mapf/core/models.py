@@ -67,12 +67,17 @@ Ticker = Annotated[str, Field(min_length=1, max_length=16), AfterValidator(_norm
 UtcDatetime = Annotated[datetime, AfterValidator(_require_utc)]
 DocumentId = Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")]
 
-ADJUSTMENT_BASIS = "split_dividend_adjusted"
-"""The single canonical price semantic (ADR 0003).
+ADJUSTMENT_BASIS = "split_adjusted"
+"""The single canonical price semantic (ADR 0003, amended by ADR 0012).
 
-Adapters normalise into this or fail loudly. It is a `Literal` on `PriceWindow`
-rather than a free string so that adding a second basis is a deliberate, typed
-change and not an accident.
+Split-adjusted only, not dividend-adjusted, for three reasons: it is the basis
+both providers can actually produce, so the fallback works at all; it is what
+`price_modifier_pct` forecasts, since that is a price move rather than a total
+return; and splits are rare where dividends are quarterly, which shrinks the
+retroactive-drift surface by an order of magnitude.
+
+A `Literal` on `PriceWindow` rather than a free string, so adding a second basis
+is a deliberate, typed change that fails loudly everywhere it matters.
 """
 
 
@@ -156,7 +161,7 @@ class PriceWindow(DomainModel):
 
     ticker: Ticker
     provider: str = Field(min_length=1)
-    adjustment: Literal["split_dividend_adjusted"]
+    adjustment: Literal["split_adjusted"]
     bars: tuple[Bar, ...] = Field(min_length=1)
 
     @model_validator(mode="after")

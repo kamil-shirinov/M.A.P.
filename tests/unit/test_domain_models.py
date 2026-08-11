@@ -123,9 +123,7 @@ def test_low_above_high_is_rejected() -> None:
 def test_empty_price_window_is_rejected() -> None:
     """An empty series is an error, never a silently returned frame (ADR 0003)."""
     with pytest.raises(ValidationError):
-        PriceWindow(
-            ticker="AAPL", provider="yfinance", adjustment="split_dividend_adjusted", bars=()
-        )
+        PriceWindow(ticker="AAPL", provider="yfinance", adjustment="split_adjusted", bars=())
 
 
 def test_out_of_order_bars_are_rejected() -> None:
@@ -133,7 +131,7 @@ def test_out_of_order_bars_are_rejected() -> None:
         PriceWindow(
             ticker="AAPL",
             provider="yfinance",
-            adjustment="split_dividend_adjusted",
+            adjustment="split_adjusted",
             bars=(_bar(4), _bar(3)),
         )
 
@@ -144,7 +142,7 @@ def test_duplicate_dates_are_rejected() -> None:
         PriceWindow(
             ticker="AAPL",
             provider="yfinance",
-            adjustment="split_dividend_adjusted",
+            adjustment="split_adjusted",
             bars=(_bar(3), _bar(3)),
         )
 
@@ -153,7 +151,7 @@ def test_price_window_exposes_last_close_and_trading_date() -> None:
     window = PriceWindow(
         ticker="AAPL",
         provider="stooq",
-        adjustment="split_dividend_adjusted",
+        adjustment="split_adjusted",
         bars=(_bar(3, 100.0), _bar(4, 102.5)),
     )
     assert window.last_close == pytest.approx(102.5)

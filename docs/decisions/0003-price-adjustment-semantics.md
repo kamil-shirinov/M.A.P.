@@ -1,6 +1,6 @@
 # 0003 — Price adjustment semantics across heterogeneous providers
 
-Status: Accepted · Date: 2026-08-09 · Phase 1
+Status: Accepted · Date: 2026-08-09 · Amended 2026-08-11 · Phase 1
 
 ## Context
 
@@ -45,6 +45,23 @@ window, and tolerance-tuning against that is wasted effort. The test fixes a
 historical window known to contain no corporate actions for the chosen ticker and
 compares daily returns within a tight tolerance. It is marked
 `@pytest.mark.network` and deselected by default (ADR 0004 / DoD criterion 6).
+
+### Amendment, 2026-08-11 — the basis is split-adjusted, and the chain is broader
+
+Two corrections, both found while implementing the adapters.
+
+**The canonical basis is `split_adjusted`, not `split_dividend_adjusted`.** Stooq
+publishes split-adjusted closes with no dividend adjustment, so under the original
+basis the fallback adapter would have raised `PriceAdjustmentUnsupportedError` on
+every call — a fallback that existed on paper and would have failed the first time
+it was needed. Split-adjusted is also the correct target for a *price* forecast,
+and it drifts far less often. Reasoning in full in ADR 0012.
+
+**The chain falls back on any `MarketDataError`**, not only
+`MarketDataUnavailableError` as stated below. An empty result from a scraper is
+indistinguishable from a scraper failure, and with two providers one extra request
+costs nothing against a spurious hard failure. The original wording is left in
+place above so the change is visible rather than rewritten away.
 
 ## Consequences
 

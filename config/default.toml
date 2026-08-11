@@ -62,7 +62,7 @@ price_dir = "var/prices"     # parquet, keyed ticker + range + adjustment (ADR 0
 # ---------------------------------------------------------------------------
 [data]
 provider_order = ["yfinance", "stooq"]
-adjustment = "split_dividend_adjusted"   # the single canonical semantic. Adapters
+adjustment = "split_adjusted"   # the single canonical semantic. Adapters
                                          #   normalise into it or fail loudly (ADR 0003)
 history_days = 730                       # trailing window fetched for context and charting
 

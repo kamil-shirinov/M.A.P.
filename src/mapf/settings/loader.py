@@ -143,7 +143,7 @@ class SecSettings(_Section):
 
 class DataSettings(_Section):
     provider_order: tuple[str, ...] = Field(min_length=1)
-    adjustment: Literal["split_dividend_adjusted"]
+    adjustment: Literal["split_adjusted"]
     history_days: int = Field(ge=1)
     sec: SecSettings
 
