@@ -4,9 +4,11 @@ Turns unstructured financial news into **calibrated, falsifiable probabilistic p
 forecasts** using local open-weight models. Three specialised agents run in sequence;
 the output is a schema-validated JSON forecast plus a chart.
 
-> **Status: Phase 1, in progress.** The domain layer (`mapf.core`) is built and tested.
-> No agent, provider, or CLI exists yet — `map run` does not work. This README describes
-> the target and the constraints, not a finished tool.
+> **Status: Phase 1 code complete, first live run in progress.** All eight acceptance
+> criteria pass as tests against recorded fixtures, with no inference server and no
+> network. What has *not* yet happened is a full run against a real backend — so no
+> claim is made here about forecast quality, and none should be inferred. The prompts
+> have been tested for structure, never for whether a 3B model produces useful facts.
 
 ---
 
@@ -76,6 +78,45 @@ export MAP_DATA__SEC__USER_AGENT="Your Name your.email@example.com M.A.P. resear
 
 or edit `data.sec.user_agent` in `config/default.toml`. Startup validation rejects the
 shipped placeholder rather than letting you discover the block at runtime.
+
+## Model names differ by backend
+
+The same weights are named differently by every inference server, so the aliases in
+`config/default.toml` are an adaptation point, not a fact about the model. They hold
+the ids **verified on the reference machine** (LM Studio, 2026-08-11):
+
+| Agent | Verified alias | Shape |
+|---|---|---|
+| intake | `llama-3.2-3b-instruct` | LM Studio: `publisher/model-name`, or a bare name |
+| analyst | `google/gemma-4-12b-qat` | LM Studio |
+| structuralist | `qwen/qwen3-4b-2507` | LM Studio |
+
+Ollama names the same weights in `name:tag` form (`qwen3:4b`) rather than
+`publisher/model-name`. **The exact strings are not documented here on purpose** —
+they depend on which build you pulled, and a guessed alias that happens to match a
+different quantisation would silently forecast with the wrong model. Run:
+
+```bash
+map health          # prints every id the running server reports
+```
+
+and copy the ids it lists. Resolution is **exact-match only** (with a
+case-insensitive second pass) — there is no fuzzy fallback, because a near-miss
+produces a complete, valid, wrong forecast rather than an error.
+
+To override without editing a tracked file, put your aliases in
+`config/local.toml` (gitignored) or export
+`MAP_MODELS__STRUCTURALIST__ALIAS=...`.
+
+### Weight pinning is unavailable on some backends
+
+`map health` will tell you when it is. The OpenAI-compatible `/v1/models` endpoint is
+not required to expose a weight digest, and on the reference machine it returns only
+`id`, `object` and `owned_by` — the last two constant across every model. With
+nothing identifying to hash, runs record `fingerprint_source: "tag"`, and a cached
+result cannot be pinned to exact weights. Richer metadata exists behind that server's
+*native* endpoint; reaching for it would make the code backend-aware, which this
+project does not do. See ADR 0001.
 
 ## Development
 

@@ -85,7 +85,10 @@ measures the machine, the counter measures the claim.
 
 **In progress**
 
-- Nothing. **Phase 1 code is complete.** The next step is the first real run against a live server.
+- Nothing. **Phase 1 code is complete.** First live `map health` done 2026-08-11: server
+  reachable, 4 models listed, weight pinning degraded to `tag`, two aliases missing (now
+  fixed in config). The grammar probe has **not yet run** — it needs the structuralist
+  model resolved, so it was skipped. Re-run `map health` to reach it.
 
 **Next action**
 
@@ -113,7 +116,9 @@ measures the machine, the counter measures the claim.
 |---|---|
 | Machine | Apple M1 (2021), 16 GB unified memory |
 | Inference backend | LM Studio, `http://localhost:1234/v1` |
-| Models pulled | *(none yet — record exact IDs from `GET /v1/models` once pulled)* |
+| Models pulled | intake `llama-3.2-3b-instruct` · analyst `google/gemma-4-12b-qat` · structuralist `qwen/qwen3-4b-2507` (verified 2026-08-11) |
+| Weight pinning | **unavailable** — `/v1/models` exposes no digest; `fingerprint_source: "tag"` (ADR 0001) |
+| Structuralist build | **MLX**, quant reported as `4bit`. Suspect this first if the grammar probe returns `accepted_not_enforced` |
 | Python | 3.12.13 via `uv` (uv installed with Homebrew) |
 | Repo | `~/Desktop/M.A.P.` — local only, not yet on GitHub |
 | Import package | `mapf` · CLI script name `map` |
@@ -135,9 +140,13 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
    prompt edit invalidates automatically; adding the version would be redundant for
    invalidation. The prompt file name, version and content hash are still recorded in the
    **manifest**, because provenance and invalidation are different jobs.
-4. Does the target backend expose a weight digest on `GET /v1/models`? If not, ADR 0001
-   degrades to tag-only pinning and `map health` must say so out loud. Resolve at the
-   first `map health` run.
+4. ~~Does the target backend expose a weight digest on `GET /v1/models`?~~ **Answered
+   2026-08-11 — no.** The response carries exactly `id`, `object` and `owned_by`, and the
+   last two are constant across every model, so the composite rung has nothing to build
+   from and pinning degrades to `tag`. Recorded as an observed fact in ADR 0001, together
+   with the trade we declined: the backend's *native* endpoint does expose arch, params
+   and quantisation, and calling it would make the code backend-aware
+   (`CLAUDE.md` §3). Not to be re-litigated.
 5. Does the backend honour `seed`? Recorded as *requested* either way.
 6. ~~Which reference ticker and corporate-action-free window to pin for the ADR 0003
    cross-provider agreement test.~~ **Resolved 2026-08-11 — MSFT, 2024-02-05 to
@@ -155,6 +164,18 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
    `--no-grammar-probe`.)* `Scenario` appears three times,
    so pydantic emits `$defs` + `$ref` rather than inlining. Most engines handle it; some
    do not. If it chokes, flatten the schema. Resolve at first contact with the backend.
+
+   **Still open** — the 2026-08-11 health run never reached the probe, because it needs
+   the structuralist model resolved and the alias did not match. Re-run after the config
+   fix.
+
+   **Suspect the runtime before the schema.** The verified Qwen build is **MLX**, not
+   GGUF (the server reports its quant as `4bit` rather than `Q4_K_M`). MLX runtimes have
+   weaker constrained-decoding support than llama.cpp/GGUF. So if the probe returns
+   `accepted_not_enforced` — request accepted, output not constrained — the first thing
+   to try is **the GGUF build of the same model**, not a change to
+   `mapf.core.schema.decode_schema`. A `rejected` outcome points at the schema; an
+   `accepted_not_enforced` outcome points at the runtime.
 9. ~~Whether to cut `pandas-datareader` and `rapidfuzz`.~~ **Resolved 2026-08-09 — both
    cut.** Stooq is ~15 lines of `httpx.get` + `pd.read_csv`; SQLite FTS5 covers search.
    Runtime dependencies: 12 -> 10.

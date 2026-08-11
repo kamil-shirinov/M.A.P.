@@ -42,3 +42,6 @@ config/local.toml
 .DS_Store
 
 # NOTE: uv.lock is deliberately NOT ignored. It is committed for reproducibility.
+
+config/local.toml
+graphify-out/

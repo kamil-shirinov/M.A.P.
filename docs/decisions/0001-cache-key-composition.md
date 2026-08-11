@@ -1,6 +1,6 @@
 # 0001 — Cache key composition
 
-Status: Accepted · Date: 2026-08-09 · Amended 2026-08-10 · Phase 1
+Status: Accepted · Date: 2026-08-09 · Amended 2026-08-10, 2026-08-11 · Phase 1
 
 ## Context
 
@@ -95,6 +95,48 @@ fails with the same `E`; attempt 3 would therefore render byte-identical to
 attempt 2, hit the cache, and replay attempt 2's failed response without ever
 calling the model. At `temperature=0` the loop would burn its remaining budget in
 microseconds and raise. The index makes each attempt a distinct key.
+
+### Observed, 2026-08-11 — the composite rung has nothing to build from
+
+First contact with a real backend, recorded as fact so this is not re-litigated.
+
+`GET /v1/models` returned exactly **three fields per model**:
+
+| field | value | identifying? |
+| --- | --- | --- |
+| `id` | e.g. `qwen/qwen3-4b-2507` | yes — but it is the tag |
+| `object` | `"model"` | no — constant across every entry |
+| `owned_by` | `"organization_owner"` | no — constant across every entry |
+
+No `digest`, no `created`, no `size`, no `context_length`, no quantisation. **Two of
+the three fields are the same for every model on the server**, so a composite built
+from them would carry exactly the information content of the tag while presenting
+itself as something stronger. The resolver fell through to `tag`, which is correct:
+the ladder degrades rather than manufacturing confidence.
+
+The rung is not dead code — it fires on any backend that exposes more — but on this
+one it cannot, and `fingerprint_source: "tag"` is the honest record.
+
+### The richer data we knowingly declined
+
+This backend **does** expose architecture, parameter count and quantisation — its own
+UI displays them — but only through its **native** endpoint (`/api/v1/models`), not
+the OpenAI-compatible `/v1/models` this project talks to.
+
+Calling it would give a genuine composite fingerprint. We are not going to, because
+`CLAUDE.md` §3 requires that switching backends be a config edit and forbids the
+application from knowing which server it is talking to. A resolver that reaches for a
+vendor-specific path has branched on vendor identity no matter how the call is
+spelled, and the next backend would need a second branch.
+
+This is the more useful record: **not "no data was available", but "richer data was
+available behind a vendor endpoint and we declined it"** — a measured trade, made
+once, with a known cost. The cost is that on this backend, cached results cannot be
+pinned to exact weights, and `map health` says so on every run.
+
+If that cost ever becomes unacceptable, the honest way to pay it is a
+`ModelFingerprintSource` port with per-backend adapters in `mapf.data` — the same
+shape as the price providers — not a conditional inside `openai_compat`.
 
 ## Consequences
 

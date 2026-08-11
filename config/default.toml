@@ -35,20 +35,42 @@ allow_nondeterministic = false
 # Ollama name identical weights differently. `map health` reports any alias that
 # does not resolve, and fails fast with an actionable message.
 # ---------------------------------------------------------------------------
+# The aliases below are the ids VERIFIED on the reference machine (LM Studio,
+# 2026-08-11). They are backend-specific by nature: the same weights are named
+# differently by different servers, which is exactly why the alias exists as an
+# adaptation point rather than being hardcoded in the agents.
+#
+# They live in this committed file, not in local.toml, for the same reason
+# base_url does: a fresh clone should reach a working `map health` rather than a
+# config full of placeholders, and a committed value documents what the project
+# was actually run against. Override without dirtying the tree by putting your own
+# in config/local.toml (gitignored) or MAP_MODELS__<AGENT>__ALIAS.
+#
+# Naming differs by backend. LM Studio uses `publisher/model-name`; Ollama uses
+# `name:tag`. Do not guess the other server's strings — `map health` prints what
+# the running server actually reports, and resolution is exact-match only, because
+# a near-miss that silently loads different weights produces a complete, valid,
+# wrong forecast.
+
 [models.intake]
 alias = "llama-3.2-3b-instruct"
 temperature = 0.0            # CLAUDE.md §6 — deterministic where the backend honours it
 
 [models.analyst]
-alias = "gemma4:12b"
+alias = "google/gemma-4-12b-qat"
 temperature = 0.7            # the one agent where sampling diversity is wanted
 seed = 20260809              # recorded as *requested*; many local backends ignore it
 
 [models.structuralist]
-alias = "qwen3:4b"
+alias = "qwen/qwen3-4b-2507"
 temperature = 0.0
 # Constrained decoding is applied here only, against the JSON Schema generated
 # from the ScenarioSet model (ADR 0002).
+#
+# NOTE: the verified build of this model is MLX (LM Studio reports its quant as
+# "4bit", not "Q4_K_M"). If `map health` reports accepted_not_enforced, suspect
+# that first — MLX runtimes have weaker constrained-decoding support than GGUF —
+# and try the GGUF build of the same model before touching decode_schema.
 
 # ---------------------------------------------------------------------------
 # Caches — load-bearing infrastructure, not optimisation (CLAUDE.md §6)
