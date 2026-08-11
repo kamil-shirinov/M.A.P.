@@ -126,7 +126,7 @@ warn_required_dynamic_aliases = true
 # These libraries ship no type information. The ignore is confined to the adapter
 # modules that wrap them; it must never be widened to first-party code.
 [[tool.mypy.overrides]]
-module = ["yfinance.*", "plotly.*", "feedparser.*"]
+module = ["yfinance.*", "plotly.*", "feedparser.*", "pyarrow.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
@@ -144,7 +144,7 @@ markers = [
 # Deprecations are errors. A research project that must still run in three years
 # cannot afford to discover a removed API at the moment it is removed; this makes
 # the warning arrive while there is still time to act on it.
-filterwarnings = ["default::DeprecationWarning", "error::DeprecationWarning:mapf"]
+filterwarnings = ["default::DeprecationWarning", "error::DeprecationWarning:mapf($|\\.)"]
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
