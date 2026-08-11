@@ -114,8 +114,12 @@ What it cannot do is happen by accident, or reach `main` without failing CI.
   untyped code passes a bare string. This protects the codebase under CI; it is
   not a runtime sandbox, and it must not be described as one.
 - Laundering is explicit and greppable: every `UntrustedText(...)` call site is a
-  place where raw text formally enters the system. There should be very few, and
-  they should all be in `mapf.data`.
+  place where a human decided something was untrusted. There are four, and a test
+  pins the exact set so it cannot drift silently. `mapf.data.news` is where raw
+  feed text *enters*; `mapf.agents.intake` and `mapf.agents.analyst` are where the
+  taint *propagates*, because model output derived from feed text is interpolated
+  into the next agent's prompt. An earlier version of this line said they should
+  all be in `mapf.data`, which was wrong: it forgot propagation.
 - Re-rendering the same document under a new template or delimiter scheme changes
   no ids. Prompt evolution does not invalidate document provenance.
 - Hashing raw bytes means two documents differing only in line endings or encoding

@@ -1,0 +1,8 @@
+{"fields":["cik","name","ticker","exchange"],
+ "data":[[320193,"Apple Inc.","AAPL","Nasdaq"],
+         [789019,"MICROSOFT CORP","MSFT","Nasdaq"],
+         [1618921,"Apple Hospitality REIT, Inc.","APLE","NYSE"],
+         [1090727,"UNITED PARCEL SERVICE INC","UPS","NYSE"],
+         [1045810,"NVIDIA CORP","NVDA","Nasdaq"],
+         [0,"","",""],
+         [1467373,"Accenture plc","ACN",null]]}

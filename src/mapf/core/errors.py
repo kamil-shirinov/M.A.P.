@@ -260,6 +260,23 @@ class SymbolError(MapError):
     """Base for symbol resolution failures."""
 
 
+class SymbolIndexMissingError(SymbolError):
+    """The local symbol index has not been built.
+
+    Search is deliberately offline and pure: it never syncs as a side effect,
+    because a search that silently fetches breaks the offline guarantee and turns
+    an EDGAR 403 into a mysterious hang inside what looked like a local lookup.
+    So the remedy is named instead.
+    """
+
+    def __init__(self, path: str) -> None:
+        self.path = path
+        super().__init__(
+            f"no symbol index at {path}. Build it once with `map symbols sync`; "
+            "search never downloads on its own."
+        )
+
+
 class SymbolNotFoundError(SymbolError):
     def __init__(self, query: str) -> None:
         self.query = query
@@ -280,6 +297,22 @@ class AmbiguousSymbolError(SymbolError):
         self.query = query
         self.candidates = tuple(candidates)
         super().__init__(f"{query!r} is ambiguous between: {', '.join(self.candidates)}")
+
+
+# ---------------------------------------------------------------------------
+# News
+# ---------------------------------------------------------------------------
+class NewsError(MapError):
+    """News could not be loaded."""
+
+
+class NewsSourceUnavailableError(NewsError):
+    """A feed or directory could not be read."""
+
+    def __init__(self, source: str, reason: str) -> None:
+        self.source = source
+        self.reason = reason
+        super().__init__(f"cannot read news source {source!r}: {reason}")
 
 
 # ---------------------------------------------------------------------------

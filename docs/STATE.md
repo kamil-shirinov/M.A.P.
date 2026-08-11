@@ -66,15 +66,18 @@ exists. The other seven: **not started** — they need modules 2–7.
 - **Module 5 — `mapf.agents` built and green.** `base.py` (contract + shared
   plumbing), `intake.py`, `analyst.py`, `structuralist.py` with the repair loop,
   plus `structuralist_repair.v1.md`
-- 330 unit tests; 100% line coverage of `core`, `settings`, `providers`, `prompts`
-  and `agents`; `ruff check`, `ruff format --check`, `mypy --strict` and
+- **Module 6 — `mapf.data` built and green.** `symbols.py` (SEC -> SQLite FTS5,
+  explicit sync), `news.py` (local dir + RSS, raw-byte ids), `cache.py`
+  (vintage-keyed parquet), `providers/{frames,yfinance_provider,stooq,chain}.py`
+- 409 unit tests + 2 network-marked contract tests; 100% line coverage of all six
+  built modules; `ruff check`, `ruff format --check`, `mypy --strict` and
   `lint-imports` (4/4) all clean, with no inference server and no network
 - Deprecation warnings are errors **scoped to `mapf.*`** (ADR 0010) — it caught a
   deprecated `importlib.abc.Traversable` on its first run
 
 **In progress**
 
-- Nothing. Awaiting approval of module 5 before module 6.
+- Nothing. Awaiting approval of module 6 before module 7.
 
 **Next action**
 
@@ -85,7 +88,7 @@ exists. The other seven: **not started** — they need modules 2–7.
   3. ~~`mapf.providers` — `openai_compat`, `caching`, `fake`~~ **done**
   4. ~~`mapf.prompts` — loader plus the three v1 templates~~ **done**
   5. ~~`mapf.agents` — intake, analyst, structuralist with the repair loop~~ **done**
-  6. `mapf.data` — symbols, providers + chain, parquet cache, news
+  6. ~~`mapf.data` — symbols, providers + chain, parquet cache, news~~ **done**
   7. `mapf.pipeline`, `mapf.render`, `mapf.bootstrap`, `mapf.cli`
 
 - `README.md` is written and carries the four required honest-claims sections per
@@ -128,8 +131,9 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
    degrades to tag-only pinning and `map health` must say so out loud. Resolve at the
    first `map health` run.
 5. Does the backend honour `seed`? Recorded as *requested* either way.
-6. Which reference ticker and corporate-action-free window to pin for the ADR 0003
-   cross-provider agreement test.
+6. ~~Which reference ticker and corporate-action-free window to pin for the ADR 0003
+   cross-provider agreement test.~~ **Resolved 2026-08-11 — MSFT, 2024-02-05 to
+   2024-02-09.** `tests/contract/test_provider_agreement.py`, network-marked.
 7. ~~Docstrings leak into the decode grammar.~~ **Resolved 2026-08-09.** `description`
    and `title` are stripped by `mapf.core.schema.decode_schema`; docstrings serve
    developers, the grammar serves the model, and conflating them would mean a docstring
@@ -189,7 +193,7 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 |---|---|---|
 | [0001](decisions/0001-cache-key-composition.md) | Cache key composition | Accepted (amended 2026-08-10: decode schema is in the key) |
 | [0002](decisions/0002-constrained-decode-surface.md) | Narrow the constrained-decode surface | Accepted |
-| [0003](decisions/0003-price-adjustment-semantics.md) | Price adjustment semantics across providers | Accepted |
+| [0003](decisions/0003-price-adjustment-semantics.md) | Price adjustment semantics across providers | Accepted (amended 2026-08-11: basis is `split_adjusted`) |
 | [0004](decisions/0004-import-boundary-enforcement.md) | Enforce import boundaries in CI | Accepted |
 | [0005](decisions/0005-untrusted-text-and-document-identity.md) | Untrusted text as a type, document identity over raw bytes | Accepted (amended 2026-08-10: `QuarantinedText`) |
 | [0006](decisions/0006-justification-before-figures.md) | `justification` is emitted before the figures | Accepted |
@@ -198,6 +202,7 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 | [0009](decisions/0009-deterministic-quarantine-delimiters.md) | Deterministic quarantine delimiters | Accepted |
 | [0010](decisions/0010-scoped-deprecation-errors.md) | Deprecation warnings are errors, scoped to our own code | Accepted |
 | [0011](decisions/0011-agent-contracts-and-the-repair-loop.md) | Agent contracts, the repair loop, and what none of it guarantees | Accepted |
+| [0012](decisions/0012-price-cache-and-retroactive-adjustment.md) | The price cache and retroactive adjustment | Accepted |
 
 ### Pinned in review, ADR owed
 
@@ -220,6 +225,18 @@ Binding decisions with no ADR yet. Write them as 0006–0007 when the module lan
 Newest first. One or two lines each — what changed, what broke, what's next. If an entry
 needs a paragraph, it needed an ADR instead.
 
+- **2026-08-11** — Module 6 `mapf.data` built. ADR 0012 written on the retroactive
+  adjustment trap. **ADR 0003's canonical basis was unimplementable**: Stooq publishes
+  no dividend adjustment, so the fallback would have raised on every call — a fallback
+  that existed on paper only. Basis amended to `split_adjusted`, which both providers
+  can produce, matches what `price_modifier_pct` forecasts, and drifts on splits rather
+  than quarterly dividends. Price cache is keyed by vintage
+  (`ticker/basis/fetched_on/range`) so two adjustment vintages can never be silently
+  mixed. Chain now falls back on any `MarketDataError`. Symbol sync is an explicit
+  command; search is offline and fails naming `map symbols sync`. **Phase 2 obligation
+  recorded in ADR 0012: the evaluation harness must read `adjustment`, `provider` and
+  `fetched_on` from the manifest and refuse to score across mixed values.**
+  409 tests + 2 network-marked.
 - **2026-08-10 (2)** — Module 5 `mapf.agents` built. ADRs 0010 and 0011 written.
   **ADR 0005 was not actually enforced**: `UntrustedText` is a `NewType` and could be
   constructed anywhere, so the type marked provenance but not sanitisation. Closed by

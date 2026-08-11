@@ -60,8 +60,26 @@ def test_the_construction_token_never_leaves_its_module() -> None:
     assert offenders == []
 
 
+UNTRUSTED_TEXT_SITES = {
+    # Where raw feed text formally enters the system.
+    "mapf/data/news.py",
+    # Where taint propagates: model output derived from feed text, which is
+    # interpolated into the next agent's prompt (ADR 0005).
+    "mapf/agents/intake.py",
+    "mapf/agents/analyst.py",
+}
+
+
+def test_untrusted_text_is_constructed_only_where_taint_enters_or_propagates() -> None:
+    """`UntrustedText` is freely constructible by design — it marks provenance, not
+    safety. What must not drift is *where* raw text is labelled, because every one
+    of those sites is a place a human decided something was untrusted."""
+    assert set(_construction_sites("UntrustedText")) == UNTRUSTED_TEXT_SITES
+
+
 def test_the_detector_would_notice_a_second_site() -> None:
     """Guards the test itself. A scan that silently matches nothing would pass
     every assertion above while checking nothing at all."""
     assert _construction_sites("QuarantinedText")  # positive control
+    assert _construction_sites("UntrustedText")  # positive control
     assert _construction_sites("NoSuchSymbolAnywhere") == {}  # negative control
