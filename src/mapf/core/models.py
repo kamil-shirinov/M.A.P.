@@ -186,6 +186,36 @@ class PriceWindow(DomainModel):
         return self.bars[-1].close
 
 
+class DividendWindow(DomainModel):
+    """What was knowable about ex-dividends inside a forecast window (ADR 0013).
+
+    A split-adjusted series keeps the ex-dividend drop, so an ex-date inside the
+    window is a mechanical decline the model had no information about. Phase 2
+    must be able to exclude or correct those windows.
+
+    `known` is the field that matters. The window is in the future at run time, so
+    an ex-date inside it may simply not be announced yet — without this flag,
+    `ex_dates: ()` is ambiguous between "no dividend" and "not knowable", and
+    reading the second as the first silently treats a contaminated window as clean.
+    **An absent flag is never an absence of dividends.**
+    """
+
+    start: date
+    end: date
+    ex_dates: tuple[date, ...] = ()
+    total_amount: float = Field(default=0.0, ge=0.0)
+    known: bool = False
+    source: str = "unknown"
+
+    @model_validator(mode="after")
+    def _check_window(self) -> Self:
+        if self.end < self.start:
+            raise ValueError(f"window ends {self.end} before it starts {self.start}")
+        if not self.known and (self.ex_dates or self.total_amount):
+            raise ValueError("cannot report ex-dividend detail while known is False")
+        return self
+
+
 # ---------------------------------------------------------------------------
 # Agent inputs and outputs
 # ---------------------------------------------------------------------------

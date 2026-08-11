@@ -58,6 +58,19 @@ class LLMAgent:
         self._trace = trace
         self._stage = stage
 
+    @property
+    def model(self) -> ModelInfo:
+        """Read-only. The pipeline assembles provenance it did not choose."""
+        return self._model
+
+    @property
+    def sampling(self) -> SamplingParams:
+        return self._sampling
+
+    @property
+    def stage(self) -> str:
+        return self._stage
+
     def _render(
         self,
         template: str,

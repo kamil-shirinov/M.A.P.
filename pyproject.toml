@@ -104,6 +104,10 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["T20"]
+# typer declares options as call-valued defaults; that is the library's entire
+# interface, and B008 cannot distinguish it from the mutable-default bug it exists
+# to catch. Confined to the CLI, where typer is the only thing doing it.
+"src/mapf/cli/*" = ["B008"]
 
 # ---------------------------------------------------------------------------
 # Types

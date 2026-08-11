@@ -27,6 +27,7 @@ from typing import Any, Literal, Protocol
 from pydantic import Field
 
 from mapf.core.models import (
+    DividendWindow,
     DomainModel,
     PriceWindow,
     Symbol,
@@ -161,6 +162,16 @@ class MarketDataProvider(Protocol):
         plausible-looking zero-length series (ADR 0003).
         """
         ...
+
+
+class DividendSource(Protocol):
+    """Ex-dividend dates inside a forecast window (ADR 0013).
+
+    Allowed to fail. A dividend calendar that cannot answer returns
+    `known=False`; a forecast is never blocked by it.
+    """
+
+    def dividends_in(self, ticker: str, start: date, end: date) -> DividendWindow: ...
 
 
 class SymbolIndex(Protocol):

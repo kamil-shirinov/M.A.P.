@@ -24,6 +24,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from mapf.core.errors import FixtureNotFoundError, InferenceProtocolError
 from mapf.core.ports import (
+    LLMProvider,
     LLMResponse,
     ModelInfo,
     RenderedPrompt,
@@ -140,3 +141,63 @@ class FakeProvider:
         path = self._fixture_dir / f"{key}.json"
         path.write_text(response.model_dump_json(), encoding="utf-8")
         return path
+
+
+class RecordingProvider:
+    """Passes calls through to a real provider and writes each exchange as a fixture.
+
+    A flag on `map run` rather than a separate capture script, because a fixture
+    that came from a different code path is not a fixture — it is a guess about
+    what the real path would have produced. Recording here means the key, the
+    prompt and the response are exactly the ones production used.
+
+    The destination is always explicit (`--record-to <dir>`) and has no default:
+    a production command must never write into `tests/fixtures/` on its own.
+    Copying a recording into the test corpus stays a deliberate human act, and it
+    matters because **recordings contain news text**, which is third-party content
+    that may not be redistributable.
+    """
+
+    def __init__(self, inner: LLMProvider, destination: Path) -> None:
+        self._inner = inner
+        self._writer = FakeProvider(destination)
+        self._destination = destination
+        self._recorded: list[Path] = []
+
+    @property
+    def recorded(self) -> tuple[Path, ...]:
+        return tuple(self._recorded)
+
+    def list_models(self) -> Sequence[ModelInfo]:
+        models = self._inner.list_models()
+        self._destination.mkdir(parents=True, exist_ok=True)
+        (self._destination / MODELS_FIXTURE).write_text(
+            json.dumps([model.model_dump() for model in models], indent=2), encoding="utf-8"
+        )
+        return models
+
+    def complete(
+        self,
+        *,
+        model: ModelInfo,
+        prompt: RenderedPrompt,
+        sampling: SamplingParams,
+        json_schema: Mapping[str, Any] | None = None,
+        attempt: int = 0,
+    ) -> LLMResponse:
+        response = self._inner.complete(
+            model=model,
+            prompt=prompt,
+            sampling=sampling,
+            json_schema=json_schema,
+            attempt=attempt,
+        )
+        key = request_key(
+            model=model,
+            prompt=prompt,
+            sampling=sampling,
+            json_schema=json_schema,
+            attempt=attempt,
+        )
+        self._recorded.append(self._writer.record(key, response))
+        return response

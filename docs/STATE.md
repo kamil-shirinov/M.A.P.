@@ -33,8 +33,10 @@ Nothing from Phase 2+ gets built until every criterion below passes.
 7. `ruff check` and `mypy --strict` are clean.
 8. `runs/<run_id>/chart.html` shows historical price plus three labelled scenario paths.
 
-Criterion 7 (`ruff check` and `mypy --strict` clean) passes today over the code that
-exists. The other seven: **not started** — they need modules 2–7.
+**All eight pass**, as `tests/integration/test_definition_of_done.py` — one test per
+criterion, named for it, against `FakeProvider` with no server and no network.
+Criterion 5 is asserted on transport-call count rather than a stopwatch: a clock
+measures the machine, the counter measures the claim.
 
 ---
 
@@ -72,12 +74,18 @@ exists. The other seven: **not started** — they need modules 2–7.
 - 409 unit tests + 2 network-marked contract tests; 100% line coverage of all six
   built modules; `ruff check`, `ruff format --check`, `mypy --strict` and
   `lint-imports` (4/4) all clean, with no inference server and no network
+- **Module 7 — `mapf.pipeline`, `mapf.render`, `mapf.bootstrap`, `mapf.cli` built and
+  green.** `run.py` (ordering + artifact assembly), `manifest.py` (the Phase 2
+  handshake), `trace.py` (`JsonlTrace` + `CountingTrace`), `chart.py` (three paths,
+  no volatility band), the composition root, and `map health|search|run|symbols sync`
+- **474 tests, 100% line coverage of every module**, `ruff`, `mypy --strict` and
+  `lint-imports` (4/4) clean
 - Deprecation warnings are errors **scoped to `mapf.*`** (ADR 0010) — it caught a
   deprecated `importlib.abc.Traversable` on its first run
 
 **In progress**
 
-- Nothing. Awaiting approval of module 6 before module 7.
+- Nothing. **Phase 1 code is complete.** The next step is the first real run against a live server.
 
 **Next action**
 
@@ -89,7 +97,7 @@ exists. The other seven: **not started** — they need modules 2–7.
   4. ~~`mapf.prompts` — loader plus the three v1 templates~~ **done**
   5. ~~`mapf.agents` — intake, analyst, structuralist with the repair loop~~ **done**
   6. ~~`mapf.data` — symbols, providers + chain, parquet cache, news~~ **done**
-  7. `mapf.pipeline`, `mapf.render`, `mapf.bootstrap`, `mapf.cli`
+  7. ~~`mapf.pipeline`, `mapf.render`, `mapf.bootstrap`, `mapf.cli`~~ **done**
 
 - `README.md` is written and carries the four required honest-claims sections per
   `CLAUDE.md` §9–10: training-cutoff leakage; "all inference is local, no data is sent
@@ -168,6 +176,32 @@ Things not yet decided. Move each to an ADR once resolved, and delete it from he
 
 ---
 
+### What the knowledge graph revealed
+
+Run `/graphify` at phase boundaries only — a full build costs ~130k tokens; use
+`--update` in between.
+
+The 2026-08-11 build independently confirmed all four import contracts from AST
+rather than from the `import-linter` config: `core` has no outgoing first-party
+edge, `agents` reaches none of providers/data/settings, and there is no cycle at
+package or module-file level. The package graph is a clean star into `core`.
+
+**The sharpest finding was about this file.** The only two AMBIGUOUS edges in the
+whole graph both hang off the open-questions register below, linking it to
+`Agent 3 returns ScenarioSet only` (ADR 0002) and to the materiality test in the
+intake prompt. The extractor could not classify them because they are not
+citations — they are *unresolved decisions pointing at live code*. That is worth
+stating plainly: **the open questions in this file are structure, not
+documentation.** Each one is an edge into something already built, and closing one
+is a change to the system rather than a note about it. Treat this section with the
+same care as an ADR, not as a scratchpad.
+
+Two node-level findings, both measured rather than assumed: `PriceWindow` (in 40 /
+out 4) and `ModelInfo` (in 50 / out 5, and 4 of those 5 are AST false edges from
+module-level import attribution) are shared vocabulary, not god objects — the high
+betweenness is many communities agreeing on one word, which is what the layering
+was for.
+
 ## Known issues
 
 1. **A parent-directory `CLAUDE.md` is intentional, not a problem.**
@@ -203,6 +237,7 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 | [0010](decisions/0010-scoped-deprecation-errors.md) | Deprecation warnings are errors, scoped to our own code | Accepted |
 | [0011](decisions/0011-agent-contracts-and-the-repair-loop.md) | Agent contracts, the repair loop, and what none of it guarantees | Accepted |
 | [0012](decisions/0012-price-cache-and-retroactive-adjustment.md) | The price cache and retroactive adjustment | Accepted |
+| [0013](decisions/0013-ex-dividend-windows.md) | Forecast price, score price, flag where they diverge | Accepted |
 
 ### Pinned in review, ADR owed
 
