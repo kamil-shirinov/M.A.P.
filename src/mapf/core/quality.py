@@ -71,7 +71,13 @@ def _numerals(text: str) -> set[float]:
     return values
 
 
-def check(scenarios: ScenarioSet, *, horizon_days: int, facts: Iterable[str]) -> QualityFlags:
+def check(
+    scenarios: ScenarioSet,
+    *,
+    horizon_days: int,
+    facts: Iterable[str],
+    spot_price: float | None = None,
+) -> QualityFlags:
     """Both soft checks in one pass.
 
     **Degenerate spread.** Three scenarios landing within a hair of each other are
@@ -96,6 +102,12 @@ def check(scenarios: ScenarioSet, *, horizon_days: int, facts: Iterable[str]) ->
     grounded = set()
     for fact in facts:
         grounded |= _numerals(fact)
+    # The model is told the horizon and can see the price. A justification saying
+    # "over a 21-day horizon" is not a fabrication, and flagging it buries the
+    # signal — the first v2 run produced exactly that false positive.
+    grounded.add(float(horizon_days))
+    if spot_price is not None:
+        grounded.add(abs(spot_price))
 
     ungrounded: list[str] = []
     for name in ("bullish", "base_case", "bearish"):

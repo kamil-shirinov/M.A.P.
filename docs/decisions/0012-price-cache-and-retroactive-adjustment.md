@@ -1,6 +1,6 @@
 # 0012 — The price cache and retroactive adjustment
 
-Status: Accepted · Date: 2026-08-11 · Amended 2026-08-12 · Phase 1
+Status: Accepted · Date: 2026-08-11 · Amended 2026-08-12 (twice) · Phase 1
 
 ## Context
 
@@ -125,6 +125,23 @@ separately. Any of the four differing is a reason to separate, not to reconcile.
 The version is a `Literal` on `Forecast`, so an artifact carrying the wrong one
 cannot be constructed, and an old artifact fails validation loudly rather than
 being coerced.
+
+**Correction, later the same day.** The obligation above was unmeetable as written.
+Phase 2 reads the *manifest* to decide whether to score, and the manifest carried
+only its own `schema_version` — which read `1.0.0` while the forecast beside it
+read `2.0.0`. A harness following this ADR to the letter would have read the wrong
+number, found it consistent across every run, and scored the whole corpus.
+
+Caught by the first successful v2 run, from printing the manifest rather than
+trusting it. The manifest now carries `manifest_version` for its own format and
+`forecast_schema_version` for the artifact it describes, and a test asserts they
+differ so the two can never be confused again.
+
+The general lesson is sharper than the fix: **an obligation on a downstream
+consumer is only as good as the field it names actually meaning what the ADR
+assumes.** Two fields called `schema_version` in adjacent files, describing
+different things, is precisely the silent-and-plausible failure this ADR was
+written about — reproduced inside the mitigation for it.
 
 If Phase 2 later needs total-return scoring, or a corpus that spans a split, that
 is the point at which option 2 becomes necessary. This decision is designed to be

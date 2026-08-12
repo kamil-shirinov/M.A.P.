@@ -227,6 +227,47 @@ module-level import attribution) are shared vocabulary, not god objects — the 
 betweenness is many communities agreeing on one word, which is what the layering
 was for.
 
+### First successful v2 run — 2026-08-12
+
+`map run AAPL --horizon 21`, run `41bc6867`. Spot 304.91.
+
+| | bullish | base | bearish |
+|---|---|---|---|
+| weight | 0.30 | 0.50 | 0.20 |
+| return | +0.03 | +0.01 | -0.03 |
+| vol | 0.20 | 0.18 | 0.22 |
+
+- **Transcription fidelity 1.0.** All three ESTIMATE lines parsed, zero divergent.
+  v2's premise — analyst states magnitudes, structuralist transcribes — is now
+  measured rather than claimed.
+- **Degenerate spread: no.** 0.06 against a floor of 0.0229.
+- **Justification lengths 234 / 209 / 191, zero at ceiling.** The copying stopped,
+  and the text reads as the model's own compression rather than the analyst's
+  paragraph. See the ceiling note below.
+- One false positive on the numeral check (`21`, from "a 21-day horizon") — fixed
+  by grounding the horizon and spot price, which the model legitimately knows.
+- Vols 0.18–0.22, against AAPL's realised ~0.25. Much closer than v1's 0.05, still
+  a Phase 3 calibration question.
+
+**Getting there required a real fix.** The first v2 attempt failed with "analyst
+output rejected... likely a refusal; length was 0 characters". It was not a
+refusal: this build of the analyst reasons into a separate `reasoning_content`
+field before answering, and it spent the entire default budget thinking. Measured
+at a fixed 1500-token budget with identical facts, v1 reasons 1114 tokens then
+answers; v2 reasons 1497 — all of it — and never answers. `max_tokens` is now
+explicit at 12000, budget exhaustion raises its own typed error naming the token
+counts, and `reasoning_tokens` is recorded. **Note the analyst runs at
+temperature 0.7, so reasoning length varies run to run** — 12000 is headroom, not
+a guarantee.
+
+**Proposed: raise the justification ceiling back to 400.** The 240 cap was set on
+reasoning that ADR 0014 records as unsupported. This run confirms the mechanism was
+the instruction, not the room: with "the justification is yours, not the analyst's"
+in place, the model composes rather than copies. But the longest justification came
+in at 234 of 240 — 98% of the cap — so 240 is now constraining real synthesis
+rather than preventing copying. `justifications_at_ceiling` is the regression
+signal to watch if it is raised.
+
 ### Logged for Phase 3 — do not fix now
 
 **Volatility is badly calibrated.** The first live run gave the base case an

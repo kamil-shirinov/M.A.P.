@@ -166,3 +166,31 @@ def test_a_clean_forecast_carries_no_flags() -> None:
         make_scenario_set(modifiers=(0.045, 0.008, -0.082)), horizon_days=21, facts=_facts()
     )
     assert flags.any_flag is False
+
+
+def test_the_horizon_is_not_a_fabrication() -> None:
+    """The first v2 live run flagged "21" from "a 21-day horizon". The model is
+    told the horizon; treating it as invented buries the signal under noise."""
+    scenarios = make_scenario_set()
+    scenarios = scenarios.model_copy(
+        update={
+            "base_case": make_scenario(
+                modifier=0.008,
+                justification="Over a 21-day horizon a large-cap rarely moves dramatically.",
+            )
+        }
+    )
+    assert check(scenarios, horizon_days=21, facts=_facts()).ungrounded_numerals == ()
+
+
+def test_the_spot_price_is_not_a_fabrication() -> None:
+    scenarios = make_scenario_set()
+    scenarios = scenarios.model_copy(
+        update={
+            "base_case": make_scenario(
+                modifier=0.008, justification="From 304.91 the downside looks contained."
+            )
+        }
+    )
+    flags = check(scenarios, horizon_days=21, facts=_facts(), spot_price=304.91)
+    assert flags.ungrounded_numerals == ()

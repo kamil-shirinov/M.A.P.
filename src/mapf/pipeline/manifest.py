@@ -25,6 +25,7 @@ What it must carry, and why each one is load-bearing:
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from pydantic import Field
@@ -64,7 +65,15 @@ class PriceProvenance(DomainModel):
 
 
 class RunManifest(DomainModel):
-    schema_version: str = "1.0.0"
+    # This manifest's own format version. Distinct from, and easily confused with,
+    # the forecast's.
+    manifest_version: Literal["1.1.0"] = "1.1.0"
+    # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
+    # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
+    # to decide. With only `schema_version` here it read the manifest's own version
+    # and never saw that the forecast had moved to 2.0.0: exactly the silent,
+    # plausible mismatch that ADR the whole obligation exists to prevent.
+    forecast_schema_version: str = Field(min_length=1)
     run_id: UUID
     ticker: Ticker
     as_of: UtcDatetime

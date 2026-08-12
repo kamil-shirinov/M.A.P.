@@ -643,3 +643,13 @@ def test_agent_3_infidelity_is_recorded_separately_from_non_compliance(
     assert result.manifest.fidelity.unparseable == ()
     assert result.manifest.fidelity.fidelity == pytest.approx(2 / 3)
     assert result.manifest.fidelity.max_return_divergence == pytest.approx(0.155)
+
+
+def test_the_manifest_records_the_forecast_schema_version(baseline: Any) -> None:
+    """ADR 0012 makes Phase 2 refuse to score across a schema boundary, and Phase 2
+    reads the manifest to decide. With only the manifest's own version present it
+    read 1.0.0 and never saw the forecast had moved to 2.0.0 — the exact silent,
+    plausible mismatch the obligation exists to prevent."""
+    assert baseline.manifest.forecast_schema_version == baseline.forecast.schema_version
+    assert baseline.manifest.forecast_schema_version == "2.0.0"
+    assert baseline.manifest.manifest_version != baseline.forecast.schema_version

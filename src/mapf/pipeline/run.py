@@ -163,7 +163,12 @@ def execute(
     )
 
     # Soft checks. Neither can reject a forecast; both must stop it passing silently.
-    quality = check_quality(scenarios, horizon_days=request.horizon_days, facts=facts.facts)
+    quality = check_quality(
+        scenarios,
+        horizon_days=request.horizon_days,
+        facts=facts.facts,
+        spot_price=spot,
+    )
     if quality.degenerate_spread:
         _logger.warning(
             "degenerate_spread",
@@ -199,6 +204,7 @@ def execute(
         )
 
     manifest = RunManifest(
+        forecast_schema_version=forecast.schema_version,
         run_id=run_id,
         ticker=request.ticker,
         as_of=as_of,
