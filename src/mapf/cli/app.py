@@ -43,6 +43,21 @@ app = typer.Typer(
 )
 
 
+def as_shown(value: float) -> str:
+    """Format a forecast number so the terminal cannot misrepresent the artifact.
+
+    `:+.1f` printed a stored `0.05` as `+0.1` — a doubling, in the direction that
+    made a degenerate forecast look merely small. That display sent a real
+    diagnosis down the wrong path before anyone read the JSON.
+
+    Four significant figures, not a fixed decimal count: fixed precision always has
+    a magnitude at which it rounds a value into a different one, and forecast
+    numbers here span three orders of magnitude. A test pins the regression case
+    directly.
+    """
+    return f"{value:+.4g}"
+
+
 def fail(message: str, code: int, *, hint: str | None = None) -> typer.Exit:
     """Print a sentence, not a traceback."""
     typer.secho(f"error: {message}", fg=typer.colors.RED, err=True)

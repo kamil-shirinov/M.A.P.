@@ -8,7 +8,7 @@ from pathlib import Path
 import typer
 
 from mapf.bootstrap import build_http_client, build_llm_provider, build_run
-from mapf.cli.app import app, fail, handle
+from mapf.cli.app import app, as_shown, fail, handle
 from mapf.core.errors import MapError
 from mapf.core.hashing import new_run_id
 from mapf.data.news import load_corpus
@@ -95,7 +95,8 @@ def run(
             scenario = getattr(result.forecast.scenarios, label)
             typer.echo(
                 f"  {label:11} p={scenario.probability_weight:.2f}  "
-                f"{scenario.price_modifier_pct:+.1f}%  vol={scenario.annualised_vol:.2f}"
+                f"{as_shown(scenario.price_modifier_pct)}%  "
+                f"vol={scenario.annualised_vol:.4g}"
             )
         if not result.manifest.dividends.known:
             typer.secho(

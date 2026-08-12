@@ -542,3 +542,43 @@ def test_health_never_reads_through_the_cache(
     monkeypatch.setattr(health_module, "build_llm_provider", _capture)
     runner.invoke(app, ["health", "--no-grammar-probe", "--config", str(_config(tmp_path))])
     assert seen == [False]
+
+
+# ---------------------------------------------------------------------------
+# Display fidelity — the terminal must not misrepresent the artifact
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    ("stored", "shown"),
+    [
+        (0.05, "+0.05"),  # the regression: `:+.1f` printed this as "+0.1"
+        (0.0, "+0"),
+        (-0.1, "-0.1"),
+        (4.5, "+4.5"),
+        (-8.2, "-8.2"),
+        (0.049, "+0.049"),
+        (12.345, "+12.35"),
+    ],
+)
+def test_a_forecast_number_is_shown_as_it_is_stored(stored: float, shown: str) -> None:
+    from mapf.cli.app import as_shown
+
+    assert as_shown(stored) == shown
+
+
+def test_the_display_never_changes_a_value_by_more_than_a_rounding_hair() -> None:
+    """The failure that mattered was a doubling, not a lost digit. Re-parsing what
+    the terminal printed must land back on the stored number."""
+    from mapf.cli.app import as_shown
+
+    for stored in (0.05, 0.049, -0.1, 4.5, -8.2, 0.0, 999.9, -99.99):
+        reparsed = float(as_shown(stored))
+        assert reparsed == pytest.approx(stored, rel=1e-3, abs=1e-9)
+
+
+def test_two_distinguishable_forecasts_do_not_display_identically() -> None:
+    """`:+.1f` collapsed 0.05 and 0.14 to the same string. That is how a
+    degenerate spread reads as a merely small one."""
+    from mapf.cli.app import as_shown
+
+    assert as_shown(0.05) != as_shown(0.14)
+    assert as_shown(0.0) != as_shown(0.05)
