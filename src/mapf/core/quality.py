@@ -24,6 +24,8 @@ from mapf.core.models import DomainModel, ScenarioSet
 # that window.
 SPREAD_FLOOR_COEFFICIENT = 0.005
 
+JUSTIFICATION_CEILING = 240
+
 _NUMERAL = re.compile(r"-?\d+(?:\.\d+)?")
 
 # Numbers this small are almost always ordinals, counts or years rather than
@@ -35,13 +37,22 @@ class QualityFlags(DomainModel):
     """What was odd about this forecast. Empty is the normal case."""
 
     degenerate_spread: bool = False
+    # Recorded because the first live run pasted the analyst's paragraph into every
+    # justification and truncated mid-word. Whether that stops is only answerable
+    # if the lengths are in the artifact.
+    justification_lengths: tuple[int, ...] = ()
+    justifications_at_ceiling: int = 0
     spread: float = 0.0
     spread_floor: float = 0.0
     ungrounded_numerals: tuple[str, ...] = ()
 
     @property
     def any_flag(self) -> bool:
-        return self.degenerate_spread or bool(self.ungrounded_numerals)
+        return (
+            self.degenerate_spread
+            or bool(self.ungrounded_numerals)
+            or self.justifications_at_ceiling > 0
+        )
 
 
 def spread_floor(horizon_days: int) -> float:
@@ -96,8 +107,17 @@ def check(scenarios: ScenarioSet, *, horizon_days: int, facts: Iterable[str]) ->
             if not any(abs(value - known) <= max(0.05, 0.01 * known) for known in grounded):
                 ungrounded.append(f"{name}: {value:g}")
 
+    lengths = tuple(
+        len(getattr(scenarios, name).justification) for name in ("bullish", "base_case", "bearish")
+    )
+    # Within a couple of characters of the cap means the model was still writing
+    # when the grammar stopped it — i.e. copying, not composing.
+    at_ceiling = sum(1 for n in lengths if n >= JUSTIFICATION_CEILING - 2)
+
     return QualityFlags(
         degenerate_spread=spread < floor,
+        justification_lengths=lengths,
+        justifications_at_ceiling=at_ceiling,
         spread=spread,
         spread_floor=floor,
         ungrounded_numerals=tuple(ungrounded),

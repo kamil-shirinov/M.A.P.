@@ -70,6 +70,34 @@ def test_a_genuinely_flat_outlook_is_still_a_valid_forecast() -> None:
 # ---------------------------------------------------------------------------
 # Ungrounded numerals
 # ---------------------------------------------------------------------------
+def test_the_fabricated_gross_margin_is_caught_in_the_real_output() -> None:
+    """Not a synthetic string written to be caught — the actual raw response from
+    the first live run, pinned as a fixture because it reproduces on demand.
+
+    A test written against invented input proves the regex works. This proves the
+    check catches the failure that actually happened.
+    """
+    import json
+    from pathlib import Path
+
+    from mapf.core.quality import _numerals
+
+    fixture = json.loads(
+        (
+            Path(__file__).parents[1] / "fixtures" / "hallucination" / "structuralist-66pt3.json"
+        ).read_text(encoding="utf-8")
+    )
+    emitted = json.loads(fixture["raw_response"])
+    justification = emitted["base_case"]["justification"]
+    assert "66.3" in justification
+
+    grounded = _numerals(fixture["source_fact"])
+    found = _numerals(justification)
+    ungrounded = [v for v in found if not any(abs(v - k) <= max(0.05, 0.01 * k) for k in grounded)]
+    assert 66.3 in ungrounded
+    assert 46.3 not in found  # the model replaced it rather than adding to it
+
+
 def test_the_fabricated_gross_margin_is_caught() -> None:
     """The exact incident: the source said 46.3%, the analyst said 46.3%, and the
     structuralist wrote 66.3%. Every validator passed."""

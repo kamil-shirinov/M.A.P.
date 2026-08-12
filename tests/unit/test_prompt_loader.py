@@ -356,8 +356,7 @@ def test_the_analyst_v2_demands_numbers_not_adjectives() -> None:
         trusted={"ticker": TICKER, "as_of_date": AS_OF, "horizon_days": HORIZON},
         untrusted={"material_facts": quarantine("- Revenue rose 8%.")},
     )
-    assert "Return:" in body
-    assert "Vol:" in body
+    assert "ESTIMATE <scenario> weight=0.NN return=+0.NN vol=0.NN" in body
     assert "You must commit to numbers" in body
     assert "not an answer" in body
 
@@ -369,8 +368,9 @@ def test_the_analyst_v2_states_the_convention_with_a_worked_example() -> None:
         untrusted={"material_facts": quarantine("- A fact.")},
     )
     assert "decimal fraction" in body
-    assert "`+0.05` is a 5% rise" in body
+    assert "`return=+0.05` is a 5% rise" in body
     assert "never `+5`" in body
+    assert "ESTIMATE bullish weight=0.30 return=+0.06 vol=0.28" in body
 
 
 def test_the_analyst_v2_warns_against_a_degenerate_spread() -> None:
@@ -387,7 +387,7 @@ def test_the_structuralist_v2_copies_numbers_rather_than_inventing_them() -> Non
     precision" — an instruction that pushes toward zero when the narrative has no
     numbers at all."""
     body = _v2("structuralist", untrusted={"narrative": quarantine("Return: +0.05")})
-    assert "Copy those numbers exactly" in body
+    assert "Copy them exactly as written" in body
     assert "conservatively" not in body
     assert "multiplying or dividing by 100, stop" in body
 

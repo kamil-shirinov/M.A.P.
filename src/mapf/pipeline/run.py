@@ -26,6 +26,7 @@ from mapf.agents.analyst import AnalystAgent, AnalystRequest
 from mapf.agents.base import LLMAgent
 from mapf.agents.intake import IntakeAgent, IntakeRequest
 from mapf.agents.structuralist import StructuralistAgent, StructuralistRequest
+from mapf.core.fidelity import measure as measure_fidelity
 from mapf.core.hashing import new_run_id
 from mapf.core.models import (
     Document,
@@ -180,6 +181,23 @@ def execute(
             note="figures in a justification that trace to no material fact",
         )
 
+    fidelity = measure_fidelity(narrative.text, scenarios)
+    if fidelity.unparseable:
+        _logger.warning(
+            "analyst_estimate_unparseable",
+            ticker=request.ticker,
+            scenarios=list(fidelity.unparseable),
+            note="Agent 2 did not emit a usable ESTIMATE line; nothing to transcribe",
+        )
+    if fidelity.divergent:
+        _logger.warning(
+            "transcription_divergence",
+            ticker=request.ticker,
+            scenarios=list(fidelity.divergent),
+            max_return_divergence=fidelity.max_return_divergence,
+            note="Agent 3 emitted figures the analyst did not state",
+        )
+
     manifest = RunManifest(
         run_id=run_id,
         ticker=request.ticker,
@@ -203,6 +221,7 @@ def execute(
         ),
         dividends=dividend_window,
         quality=quality,
+        fidelity=fidelity,
         allow_nondeterministic=allow_nondeterministic,
         package_version=PACKAGE_VERSION,
         python_version=platform.python_version(),

@@ -284,7 +284,12 @@ Fixed in v2: fractions throughout, `price_modifier_pct` → `price_return`,
 `schema_version` → `2.0.0`, the analyst states `Return:` and `Vol:` as decimals
 with a worked example, the structuralist copies rather than converts.
 
-**The diagnostic experiment has NOT been run** — the server was down when it was
+**The diagnostic experiment ran on 2026-08-12 — see ADR 0014.** Units was entirely
+binding, the conservatism clause entirely inert, and the control reproduced production
+exactly, which is what makes the table evidence rather than anecdote. Both original
+hypotheses were wrong in opposite directions.
+
+*(superseded note)* ~~The diagnostic experiment has NOT been run~~ — the server was down when it was
 attempted. `scratchpad/probe/variants.py` pins the v1 prompt text inline so it
 remains valid; it runs four Agent-3-only variants (control, units stated,
 conservatism removed, both) against the cached narrative to establish which
@@ -351,6 +356,7 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 | [0011](decisions/0011-agent-contracts-and-the-repair-loop.md) | Agent contracts, the repair loop, and what none of it guarantees | Accepted |
 | [0012](decisions/0012-price-cache-and-retroactive-adjustment.md) | The price cache and retroactive adjustment | Accepted |
 | [0013](decisions/0013-ex-dividend-windows.md) | Forecast price, score price, flag where they diverge | Accepted |
+| [0014](decisions/0014-the-units-experiment.md) | Diagnosing the first live run by experiment | Accepted |
 
 ### Pinned in review, ADR owed
 

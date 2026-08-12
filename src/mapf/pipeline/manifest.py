@@ -29,6 +29,7 @@ from uuid import UUID
 
 from pydantic import Field
 
+from mapf.core.fidelity import TranscriptionFidelity
 from mapf.core.models import DividendWindow, DocumentId, DomainModel, Ticker, UtcDatetime
 from mapf.core.ports import FingerprintSource, SamplingParams
 from mapf.core.quality import QualityFlags
@@ -77,6 +78,10 @@ class RunManifest(DomainModel):
     # Warnings, never rejections. Phase 2 filters on these rather than
     # rediscovering them one forecast at a time.
     quality: QualityFlags = QualityFlags()
+    # v2's premise — analyst states magnitudes, structuralist transcribes — as a
+    # number rather than a claim. Two failure modes kept apart because they
+    # blame different agents.
+    fidelity: TranscriptionFidelity = TranscriptionFidelity()
 
     # Marks a run that is not reproducible. Phase 2 must either exclude these or
     # report them separately (ADR 0007).

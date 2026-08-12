@@ -584,3 +584,62 @@ def test_a_fabricated_figure_is_recorded_not_rejected(tmp_path: Path) -> None:
     result = _run(tmp_path, _Fabricates())
     assert any("66.3" in v for v in result.manifest.quality.ungrounded_numerals)
     assert (result.run_dir / "forecast.json").is_file()
+
+
+def test_agent_2_non_compliance_is_recorded_as_unparseable(tmp_path: Path) -> None:
+    """v1's failure: the analyst emits prose with no ESTIMATE line. Fidelity is
+    undefined rather than zero — blaming Agent 3 for Agent 2's silence would point
+    the next fix at the wrong agent."""
+    result = _run(tmp_path, CountingProvider())
+    assert result.manifest.fidelity.unparseable == ("bullish", "base_case", "bearish")
+    assert result.manifest.fidelity.fidelity is None
+    assert result.manifest.fidelity.analyst_compliance == 0.0
+
+
+def test_a_faithful_transcription_is_recorded_as_such(tmp_path: Path) -> None:
+    estimates = (
+        "**Bullish**\nESTIMATE bullish weight=0.25 return=+0.045 vol=0.38\n"
+        "**Base case**\nESTIMATE base_case weight=0.6 return=+0.008 vol=0.22\n"
+        "**Bearish**\nESTIMATE bearish weight=0.15 return=-0.082 vol=0.55\n"
+    ) + NARRATIVE
+
+    class _Compliant(CountingProvider):
+        def complete(self, *, model, prompt, sampling, json_schema=None, attempt=0):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if model.id == MODELS["intake"].id:
+                return LLMResponse(text="- Revenue rose 8%.", model_id=model.id)
+            if model.id == MODELS["analyst"].id:
+                return LLMResponse(text=estimates, model_id=model.id)
+            return LLMResponse(text=SCENARIOS, model_id=model.id)
+
+    result = _run(tmp_path, _Compliant())
+    assert result.manifest.fidelity.parsed == ("bullish", "base_case", "bearish")
+    assert result.manifest.fidelity.divergent == ()
+    assert result.manifest.fidelity.fidelity == 1.0
+
+
+def test_agent_3_infidelity_is_recorded_separately_from_non_compliance(
+    tmp_path: Path,
+) -> None:
+    """The analyst stated numbers and Agent 3 emitted different ones. Distinct from
+    the case above, because the remedy is a different agent's prompt."""
+    estimates = (
+        "**Bullish**\nESTIMATE bullish weight=0.25 return=+0.20 vol=0.38\n"
+        "**Base case**\nESTIMATE base_case weight=0.6 return=+0.008 vol=0.22\n"
+        "**Bearish**\nESTIMATE bearish weight=0.15 return=-0.082 vol=0.55\n"
+    ) + NARRATIVE
+
+    class _Unfaithful(CountingProvider):
+        def complete(self, *, model, prompt, sampling, json_schema=None, attempt=0):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if model.id == MODELS["intake"].id:
+                return LLMResponse(text="- Revenue rose 8%.", model_id=model.id)
+            if model.id == MODELS["analyst"].id:
+                return LLMResponse(text=estimates, model_id=model.id)
+            return LLMResponse(text=SCENARIOS, model_id=model.id)
+
+    result = _run(tmp_path, _Unfaithful())
+    assert result.manifest.fidelity.divergent == ("bullish",)
+    assert result.manifest.fidelity.unparseable == ()
+    assert result.manifest.fidelity.fidelity == pytest.approx(2 / 3)
+    assert result.manifest.fidelity.max_return_divergence == pytest.approx(0.155)
