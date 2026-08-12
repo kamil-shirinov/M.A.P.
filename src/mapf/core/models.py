@@ -239,17 +239,37 @@ class ScenarioNarrative(DomainModel):
 class Scenario(DomainModel):
     """One branch of the forecast.
 
+    **Every number here is a decimal fraction.** `price_return` of 0.045 is a 4.5%
+    move; `annualised_vol` of 0.22 is 22% annualised. One convention across the
+    whole object, deliberately.
+
+    The first live run produced 0.05 / 0.0 / -0.1 from an analyst arguing "moderate
+    up / flat / sharp down" — coherent as fractions, meaningless as percentage
+    points. The two numeric fields sat adjacent on *different* conventions and the
+    field names taught the inconsistency: one carried a `_pct` suffix and the other
+    did not. Nothing told the model which was which, because the schema
+    descriptions that might have are stripped before it ever sees them (ADR 0002).
+
+    Fractions rather than percentage points because volatility is conventionally a
+    decimal in finance, and because Phase 2's Monte Carlo consumes fractions and
+    would otherwise divide by 100 at the boundary — a conversion that exists only
+    to undo a presentation choice.
+
     `justification` is declared first on purpose. Pydantic preserves declaration
-    order in the generated schema, and a constrained decoder emits fields in
-    schema order — so the model states its reasoning before committing to the
-    numbers, conditioning them on it rather than rationalising afterwards.
+    order in the generated schema, and a constrained decoder emits fields in schema
+    order — so the model states its reasoning before committing to the numbers,
+    conditioning them on it rather than rationalising afterwards (ADR 0006).
     """
 
-    justification: str = Field(min_length=20, max_length=400)
+    # 240, not 400. At 400 the model pasted the analyst's paragraph verbatim and
+    # hit the ceiling mid-word in all three branches — turning a field that exists
+    # to make it reason into a copy buffer, which defeats ADR 0006 entirely. A
+    # budget too small to paste into forces compression, which is the point.
+    justification: str = Field(min_length=20, max_length=240)
     probability_weight: float = Field(ge=0.0, le=1.0)
-    # A modifier of -100% implies a price of zero and anything below it a negative
-    # price. The upper bound is a sanity rail, not a market claim.
-    price_modifier_pct: float = Field(gt=-100.0, le=1000.0)
+    # -1.0 is a total loss; below it is a negative price. The upper rail is a
+    # sanity bound, not a market claim.
+    price_return: float = Field(gt=-1.0, le=10.0)
     annualised_vol: float = Field(gt=0.0, le=3.0)
 
 
@@ -274,13 +294,13 @@ class ScenarioSet(DomainModel):
         return self
 
     @model_validator(mode="after")
-    def _check_modifiers_ordered(self) -> Self:
-        bear = self.bearish.price_modifier_pct
-        base = self.base_case.price_modifier_pct
-        bull = self.bullish.price_modifier_pct
+    def _check_returns_ordered(self) -> Self:
+        bear = self.bearish.price_return
+        base = self.base_case.price_return
+        bull = self.bullish.price_return
         if not (bear < base < bull):
             raise ValueError(
-                "price_modifier_pct must be strictly ordered "
+                "price_return must be strictly ordered "
                 f"bearish < base_case < bullish, got {bear!r} < {base!r} < {bull!r}"
             )
         return self
@@ -301,7 +321,11 @@ class Forecast(DomainModel):
     holds (ADR 0002). Field order matches the agreed on-disk shape.
     """
 
-    schema_version: Literal["1.0.0"] = "1.0.0"
+    # 2.0.0, not 1.1.0: `price_modifier_pct` became `price_return` and its units
+    # changed from percentage points to a fraction. A 1.x reader would parse a 2.0
+    # artifact without error and be wrong by a factor of 100. Phase 2 must refuse
+    # to score across the boundary (ADR 0012).
+    schema_version: Literal["2.0.0"] = "2.0.0"
     run_id: UUID
     ticker: Ticker
     as_of: UtcDatetime

@@ -63,13 +63,13 @@ SCENARIOS = json.dumps(
         name: {
             "justification": f"A sufficiently long justification for the {name} branch.",
             "probability_weight": weight,
-            "price_modifier_pct": modifier,
+            "price_return": modifier,
             "annualised_vol": vol,
         }
         for name, weight, modifier, vol in (
-            ("bullish", 0.25, 4.5, 0.38),
-            ("base_case", 0.60, 0.8, 0.22),
-            ("bearish", 0.15, -8.2, 0.55),
+            ("bullish", 0.25, 0.045, 0.38),
+            ("base_case", 0.60, 0.008, 0.22),
+            ("bearish", 0.15, -0.082, 0.55),
         )
     }
 )
@@ -505,3 +505,82 @@ rss_urls = []
 [paths]
 runs_dir = "{tmp_path / "runs"}"
 """
+
+
+# ---------------------------------------------------------------------------
+# Quality flags reach the manifest (items 5 and 6)
+# ---------------------------------------------------------------------------
+def test_a_degenerate_spread_is_recorded_not_rejected(tmp_path: Path) -> None:
+    """The first live run produced three near-identical numbers and nothing said
+    so. A warning, because a genuinely flat outlook is legitimate."""
+    flat = json.dumps(
+        {
+            name: {
+                "justification": f"A sufficiently long justification for the {name} branch.",
+                "probability_weight": weight,
+                "price_return": ret,
+                "annualised_vol": 0.2,
+            }
+            for name, weight, ret in (
+                ("bullish", 0.25, 0.0005),
+                ("base_case", 0.60, 0.0),
+                ("bearish", 0.15, -0.001),
+            )
+        }
+    )
+
+    class _Flat(CountingProvider):
+        def complete(self, *, model, prompt, sampling, json_schema=None, attempt=0):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if model.id == MODELS["intake"].id:
+                return LLMResponse(text="- Revenue rose 8%.", model_id=model.id)
+            if model.id == MODELS["analyst"].id:
+                return LLMResponse(text=NARRATIVE, model_id=model.id)
+            return LLMResponse(text=flat, model_id=model.id)
+
+    result = _run(tmp_path, _Flat())
+    assert result.manifest.quality.degenerate_spread is True
+    assert result.manifest.quality.spread < result.manifest.quality.spread_floor
+    # Recorded, not raised: the forecast still exists on disk.
+    assert (result.run_dir / "forecast.json").is_file()
+
+
+def test_a_healthy_forecast_carries_no_quality_flags(baseline: Any) -> None:
+    assert baseline.manifest.quality.any_flag is False
+
+
+def test_a_fabricated_figure_is_recorded_not_rejected(tmp_path: Path) -> None:
+    """The 66.3% incident, reproduced. The source and the analyst both said 46.3%;
+    the structuralist wrote 66.3% and every validator passed."""
+    fabricated = json.dumps(
+        {
+            name: {
+                "justification": (
+                    "The high gross margin of 66.3% suggests a stable profit floor."
+                    if name == "base_case"
+                    else f"A sufficiently long justification for the {name} branch."
+                ),
+                "probability_weight": weight,
+                "price_return": ret,
+                "annualised_vol": 0.2,
+            }
+            for name, weight, ret in (
+                ("bullish", 0.25, 0.045),
+                ("base_case", 0.60, 0.008),
+                ("bearish", 0.15, -0.082),
+            )
+        }
+    )
+
+    class _Fabricates(CountingProvider):
+        def complete(self, *, model, prompt, sampling, json_schema=None, attempt=0):  # type: ignore[no-untyped-def]
+            self.calls += 1
+            if model.id == MODELS["intake"].id:
+                return LLMResponse(text="- Gross margin was 46.3%.", model_id=model.id)
+            if model.id == MODELS["analyst"].id:
+                return LLMResponse(text=NARRATIVE, model_id=model.id)
+            return LLMResponse(text=fabricated, model_id=model.id)
+
+    result = _run(tmp_path, _Fabricates())
+    assert any("66.3" in v for v in result.manifest.quality.ungrounded_numerals)
+    assert (result.run_dir / "forecast.json").is_file()

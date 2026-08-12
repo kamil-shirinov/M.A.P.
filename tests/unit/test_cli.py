@@ -232,13 +232,13 @@ class _StubProvider:
                 name: {
                     "justification": f"A sufficiently long justification for {name}.",
                     "probability_weight": weight,
-                    "price_modifier_pct": modifier,
+                    "price_return": modifier,
                     "annualised_vol": 0.3,
                 }
                 for name, weight, modifier in (
-                    ("bullish", 0.25, 4.5),
-                    ("base_case", 0.60, 0.8),
-                    ("bearish", 0.15, -8.2),
+                    ("bullish", 0.25, 0.045),
+                    ("base_case", 0.60, 0.008),
+                    ("bearish", 0.15, -0.082),
                 )
             }
         )

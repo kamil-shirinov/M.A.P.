@@ -77,9 +77,9 @@ temperature = 0.0
 # is for, and what was not actually true until the agents took the template and
 # version as constructor parameters.
 [prompts]
-intake = "v1"
-analyst = "v1"
-structuralist = "v1"
+intake = "v2"
+analyst = "v2"
+structuralist = "v2"
 
 # ---------------------------------------------------------------------------
 # Caches — load-bearing infrastructure, not optimisation (CLAUDE.md §6)

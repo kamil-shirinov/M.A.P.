@@ -227,6 +227,14 @@ module-level import attribution) are shared vocabulary, not god objects — the 
 betweenness is many communities agreeing on one word, which is what the layering
 was for.
 
+### Logged for Phase 3 — do not fix now
+
+**Volatility is badly calibrated.** The first live run gave the base case an
+`annualised_vol` of 0.05 for AAPL, whose realised volatility is nearer 0.25 — off
+by a factor of five. That is a calibration problem, not a units one, and it is
+exactly what Phase 3's isotonic regression exists to address. Do not attempt to fix
+it by editing prompts until there is a scoring harness to measure the fix against.
+
 ### Logged for Phase 2 — do not build now
 
 **Rendering must become opt-in.** `write_chart` inlines the whole plotly bundle, so
@@ -242,6 +250,47 @@ and the answer is no — see Known issues 4 below. Do not build the variant unti
 Phase 2 can score it; building a comparison before there is anything to measure it
 with is the wrong order. But the blocker below is worth removing sooner than that,
 because it also blocks per-model prompt variants, which is a Phase 1/2 activity.
+
+### First live run — 2026-08-11, and what it changed
+
+`map run AAPL --horizon 21` completed end to end. **The machine worked and the
+numbers did not**, and the diagnosis is worth keeping because the first hypothesis
+was wrong in an instructive way.
+
+Reported output was `+0.1% / +0.0% / -0.1%`. Three separate defects, and only the
+last is the one it looked like:
+
+1. **A display bug caused a wrong diagnosis.** The CLI formatted with `:+.1f`, so a
+   stored `0.05` printed as `+0.1` — a doubling. The terminal and the artifact
+   disagreed, and the disagreement is what the diagnosis started from. Fixed first
+   and separately.
+2. **The analyst was never asked for magnitudes.** `scenario_analyst.v1` line 25
+   requested "a **qualitative** statement of where the price could go", and the
+   model complied: "moderate upward move", "relatively flat", "sharp downward
+   move". Not one numeral. Meanwhile `structuralist.v1` said "you **transcribe what
+   is already there**" and "convert faithfully and **conservatively rather than
+   inventing precision**". Agent 2 was told not to produce numbers and Agent 3 was
+   told not to invent them — **someone has to**, and Agent 3 resolved the
+   contradiction by being maximally conservative. That is a design contradiction in
+   the prompts, not a model failure.
+3. **Two adjacent numeric fields on different conventions.** `annualised_vol` is a
+   fraction, `price_modifier_pct` was percentage points, and the field names taught
+   the inconsistency — one carried a unit suffix, the other did not. The output is
+   coherent as fractions (`+5% / flat / -10%`) and meaningless as percentage
+   points. The schema `description`s that might have said so are stripped before
+   the model sees them (ADR 0002), and neither prompt picked up the slack.
+
+Fixed in v2: fractions throughout, `price_modifier_pct` → `price_return`,
+`schema_version` → `2.0.0`, the analyst states `Return:` and `Vol:` as decimals
+with a worked example, the structuralist copies rather than converts.
+
+**The diagnostic experiment has NOT been run** — the server was down when it was
+attempted. `scratchpad/probe/variants.py` pins the v1 prompt text inline so it
+remains valid; it runs four Agent-3-only variants (control, units stated,
+conservatism removed, both) against the cached narrative to establish which
+instruction was binding. It is diagnostic only: **a good result from "conservatism
+removed" is not a licence to let a 4B invent magnitudes from prose** — that is the
+same surface that fabricated 66.3%.
 
 ## Known issues
 

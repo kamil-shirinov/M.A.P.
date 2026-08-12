@@ -37,7 +37,8 @@ def _path_dates(start: date, horizon_days: int) -> list[date]:
 
 def _path_prices(spot: float, scenario: Scenario, horizon_days: int) -> list[float]:
     # `horizon_days >= 1` is validated on Forecast, so no zero guard is needed here.
-    end = spot * (1.0 + scenario.price_modifier_pct / 100.0)
+    # `price_return` is a fraction, so no division: 0.045 IS 4.5%.
+    end = spot * (1.0 + scenario.price_return)
     growth = (end / spot) ** (1.0 / horizon_days)
     return [spot * growth**step for step in range(horizon_days + 1)]
 
@@ -67,7 +68,7 @@ def build_figure(window: PriceWindow, forecast: Forecast) -> Any:
                 mode="lines",
                 name=(
                     f"{_LABELS[name]} — p={scenario.probability_weight:.2f}, "
-                    f"{scenario.price_modifier_pct:+.1f}%"
+                    f"{scenario.price_return * 100:+.4g}%"
                 ),
                 line={"color": _COLOURS[name], "width": 2, "dash": "dot"},
             )

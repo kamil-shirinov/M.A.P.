@@ -185,7 +185,7 @@ def test_material_facts_require_provenance() -> None:
 # Forecast
 # ---------------------------------------------------------------------------
 def test_forecast_defaults_schema_version() -> None:
-    assert _forecast().schema_version == "1.0.0"
+    assert _forecast().schema_version == "2.0.0"
 
 
 def test_naive_as_of_is_rejected() -> None:

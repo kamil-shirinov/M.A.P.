@@ -40,7 +40,7 @@ def make_scenario(
     return Scenario(
         justification=justification,
         probability_weight=weight,
-        price_modifier_pct=modifier,
+        price_return=modifier,
         annualised_vol=vol,
     )
 
@@ -48,7 +48,7 @@ def make_scenario(
 def make_scenario_set(
     *,
     weights: tuple[float, float, float] = (0.25, 0.60, 0.15),
-    modifiers: tuple[float, float, float] = (4.5, 0.8, -8.2),
+    modifiers: tuple[float, float, float] = (0.045, 0.008, -0.082),
     vols: tuple[float, float, float] = (0.38, 0.22, 0.55),
     justification: str = JUSTIFICATION,
 ) -> ScenarioSet:

@@ -95,7 +95,8 @@ def run(
             scenario = getattr(result.forecast.scenarios, label)
             typer.echo(
                 f"  {label:11} p={scenario.probability_weight:.2f}  "
-                f"{as_shown(scenario.price_modifier_pct)}%  "
+                # Stored as a fraction; multiplied here for human display only.
+                f"{as_shown(scenario.price_return * 100)}%  "
                 f"vol={scenario.annualised_vol:.4g}"
             )
         if not result.manifest.dividends.known:

@@ -53,6 +53,56 @@ Nothing here claims it is better.
 
 ---
 
+## What Phase 1 does not guarantee — an incident
+
+The first live run produced a forecast that passed every check in this project and
+contained a figure the model invented. It is worth reading in full, because it is
+the clearest available statement of what the machinery here is and is not for.
+
+The source article said Apple's gross margin was **46.3%**. Agent 1 extracted that
+correctly. Agent 2 reasoned about it correctly, quoting 46.3% twice. Agent 3, while
+transcribing that reasoning into the structured forecast, wrote:
+
+> "the high gross margin of **66.3%** suggests a stable profit floor"
+
+Nothing caught it. The output was valid JSON under a constrained grammar. Its three
+probability weights summed to 1.0. Its scenarios were correctly ordered. Every
+field was inside its bounds. The repair loop was never triggered because there was
+nothing to repair. 489 tests passed, `mypy --strict` passed, four architectural
+contracts held. The forecast was written to disk, charted, and reported as a
+success — **and one of the premises underneath it did not exist.**
+
+That is not a bug that was fixed. **It is the failure mode this project is
+structurally unable to detect**, and it is documented in `mapf/agents/__init__.py`
+in exactly those terms, written before it happened:
+
+> A forecast can be schema-valid, internally consistent, fully traced, and built
+> entirely on a premise the model invented. […] Nothing here detects that, because
+> nothing here compares the forecast to reality.
+
+The same run also produced three scenarios spanning 0.15% — a "bullish" case of
++0.05% over 21 days, for a stock that routinely moves several percent in that
+window. Also valid. Also unremarked.
+
+**What changed as a result:** a crude numeral check now flags figures in a
+justification that trace back to no extracted fact, and a spread check flags
+scenarios that cluster too tightly for their horizon. Both are **warnings recorded
+in the manifest, never rejections** — a model paraphrasing "46.3%" as "about 46%"
+must not fail a run, and a genuinely flat outlook is a legitimate forecast. Neither
+check is reliable. Both convert an invisible failure into a visible one *some* of
+the time, which is the entire claim being made for them.
+
+**What did not change, and cannot:** nothing here verifies that a forecast is
+*right*. Validators guarantee internal consistency. Grammars guarantee shape.
+Neither has any access to whether the numbers mean anything. That is Phase 2's job
+and only Phase 2's — which is why a forecast that cannot be scored is treated in
+this project as a bug rather than a feature.
+
+The forecasts this system produces are **falsifiable, not verified.** The incident
+above is the evidence for that distinction, not an exception to it.
+
+---
+
 ## Requirements
 
 - Apple Silicon Mac (developed on an M1, 16 GB). Models load **one at a time** — the

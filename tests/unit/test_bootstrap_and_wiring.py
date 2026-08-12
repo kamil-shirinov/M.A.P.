@@ -272,14 +272,18 @@ def test_the_chart_writes_a_single_file(tmp_path: Path) -> None:
     assert path.stat().st_size > 500_000
 
 
-def test_scenario_paths_end_at_the_stated_modifier() -> None:
+def test_scenario_paths_end_at_the_stated_return() -> None:
     """A path that does not arrive where the forecast says it does is a chart that
-    disagrees with its own JSON."""
+    disagrees with its own JSON.
+
+    No division by 100: `price_return` is a fraction, and the whole point of the
+    migration was to remove that conversion from every consumer.
+    """
     from mapf.render.chart import _path_prices
 
     forecast = _forecast()
     prices = _path_prices(forecast.spot_price, forecast.scenarios.bullish, forecast.horizon_days)
-    expected = forecast.spot_price * (1 + forecast.scenarios.bullish.price_modifier_pct / 100)
+    expected = forecast.spot_price * (1 + forecast.scenarios.bullish.price_return)
     assert prices[0] == pytest.approx(forecast.spot_price)
     assert prices[-1] == pytest.approx(expected)
     assert len(prices) == forecast.horizon_days + 1

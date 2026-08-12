@@ -31,6 +31,7 @@ from pydantic import Field
 
 from mapf.core.models import DividendWindow, DocumentId, DomainModel, Ticker, UtcDatetime
 from mapf.core.ports import FingerprintSource, SamplingParams
+from mapf.core.quality import QualityFlags
 
 
 class AgentRecord(DomainModel):
@@ -73,6 +74,9 @@ class RunManifest(DomainModel):
     agents: tuple[AgentRecord, ...] = Field(min_length=1)
     prices: PriceProvenance
     dividends: DividendWindow
+    # Warnings, never rejections. Phase 2 filters on these rather than
+    # rediscovering them one forecast at a time.
+    quality: QualityFlags = QualityFlags()
 
     # Marks a run that is not reproducible. Phase 2 must either exclude these or
     # report them separately (ADR 0007).

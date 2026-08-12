@@ -20,6 +20,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import UUID
 
+import structlog
+
 from mapf.agents.analyst import AnalystAgent, AnalystRequest
 from mapf.agents.base import LLMAgent
 from mapf.agents.intake import IntakeAgent, IntakeRequest
@@ -34,9 +36,12 @@ from mapf.core.models import (
     ScenarioSet,
 )
 from mapf.core.ports import DividendSource, MarketDataProvider
+from mapf.core.quality import check as check_quality
 from mapf.pipeline.manifest import AgentRecord, PriceProvenance, RunManifest
 from mapf.pipeline.trace import CountingTrace
 from mapf.render.chart import write_chart
+
+_logger = structlog.get_logger(__name__)
 
 PACKAGE_VERSION = "0.1.0"
 
@@ -156,6 +161,25 @@ def execute(
         request.ticker, as_of_date, as_of_date + timedelta(days=request.horizon_days)
     )
 
+    # Soft checks. Neither can reject a forecast; both must stop it passing silently.
+    quality = check_quality(scenarios, horizon_days=request.horizon_days, facts=facts.facts)
+    if quality.degenerate_spread:
+        _logger.warning(
+            "degenerate_spread",
+            ticker=request.ticker,
+            spread=quality.spread,
+            floor=quality.spread_floor,
+            horizon_days=request.horizon_days,
+            note="three scenarios within a hair of each other are not three scenarios",
+        )
+    if quality.ungrounded_numerals:
+        _logger.warning(
+            "ungrounded_numerals",
+            ticker=request.ticker,
+            values=list(quality.ungrounded_numerals),
+            note="figures in a justification that trace to no material fact",
+        )
+
     manifest = RunManifest(
         run_id=run_id,
         ticker=request.ticker,
@@ -178,6 +202,7 @@ def execute(
             bars=len(window.bars),
         ),
         dividends=dividend_window,
+        quality=quality,
         allow_nondeterministic=allow_nondeterministic,
         package_version=PACKAGE_VERSION,
         python_version=platform.python_version(),

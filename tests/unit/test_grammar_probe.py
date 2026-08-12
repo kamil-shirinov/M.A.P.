@@ -31,10 +31,10 @@ VALID = json.dumps(
         name: {
             "justification": "A sufficiently long placeholder justification here.",
             "probability_weight": 0.33,
-            "price_modifier_pct": modifier,
+            "price_return": modifier,
             "annualised_vol": 0.3,
         }
-        for name, modifier in (("bullish", 4.0), ("base_case", 0.0), ("bearish", -4.0))
+        for name, modifier in (("bullish", 0.04), ("base_case", 0.0), ("bearish", -0.04))
     }
 )
 

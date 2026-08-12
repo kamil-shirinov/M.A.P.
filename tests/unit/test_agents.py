@@ -111,13 +111,13 @@ def _scenarios(bull: float = 0.25, base: float = 0.60, bear: float = 0.15) -> st
             name: {
                 "justification": justification,
                 "probability_weight": weight,
-                "price_modifier_pct": modifier,
+                "price_return": modifier,
                 "annualised_vol": vol,
             }
             for name, weight, modifier, vol in (
-                ("bullish", bull, 4.5, 0.38),
-                ("base_case", base, 0.8, 0.22),
-                ("bearish", bear, -8.2, 0.55),
+                ("bullish", bull, 0.045, 0.38),
+                ("base_case", base, 0.008, 0.22),
+                ("bearish", bear, -0.082, 0.55),
             )
         }
     )
@@ -282,7 +282,7 @@ INVERTED_ORDER = _with_branch(
     bullish={
         "justification": _JUSTIFICATION,
         "probability_weight": 0.25,
-        "price_modifier_pct": -20.0,
+        "price_return": -0.20,
         "annualised_vol": 0.38,
     }
 )
@@ -290,7 +290,7 @@ VOL_OUT_OF_RANGE = _with_branch(
     bearish={
         "justification": _JUSTIFICATION,
         "probability_weight": 0.15,
-        "price_modifier_pct": -8.2,
+        "price_return": -0.082,
         "annualised_vol": 3.5,
     }
 )
@@ -298,7 +298,7 @@ SHORT_JUSTIFICATION = _with_branch(
     base_case={
         "justification": "ok.",
         "probability_weight": 0.60,
-        "price_modifier_pct": 0.8,
+        "price_return": 0.008,
         "annualised_vol": 0.22,
     }
 )

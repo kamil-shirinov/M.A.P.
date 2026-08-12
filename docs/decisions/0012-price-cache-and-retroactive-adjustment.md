@@ -1,6 +1,6 @@
 # 0012 — The price cache and retroactive adjustment
 
-Status: Accepted · Date: 2026-08-11 · Phase 1
+Status: Accepted · Date: 2026-08-11 · Amended 2026-08-12 · Phase 1
 
 ## Context
 
@@ -104,6 +104,27 @@ Phase 2 must additionally:
   concrete obligation this decision creates.
 - Treat a corpus assembled incrementally over weeks as suspect until proven
   single-vintage.
+
+### Amendment, 2026-08-12 — `schema_version` is the same class of obligation
+
+`forecast.json` moved from `1.0.0` to **`2.0.0`** when `price_modifier_pct` became
+`price_return` and its units changed from percentage points to a decimal fraction.
+
+It belongs here rather than in a separate ADR because it is structurally identical
+to the adjustment-basis problem: **a reader that ignores the marker parses the
+artifact without error and is wrong by a constant factor.** A 1.x consumer reading
+a 2.0 forecast sees `0.045` where it expects `4.5` and silently produces scores a
+hundred times too small. No exception is raised, nothing looks broken, and the
+result is a plausible number.
+
+So the Phase 2 obligation is the same, and now has three parts rather than two.
+**The evaluation harness must read `schema_version`, `adjustment`, `provider` and
+`fetched_on`, and refuse to score across mixed values** — or report each population
+separately. Any of the four differing is a reason to separate, not to reconcile.
+
+The version is a `Literal` on `Forecast`, so an artifact carrying the wrong one
+cannot be constructed, and an old artifact fails validation loudly rather than
+being coerced.
 
 If Phase 2 later needs total-return scoring, or a corpus that spans a split, that
 is the point at which option 2 becomes necessary. This decision is designed to be

@@ -235,6 +235,10 @@ def test_every_shipped_template_loads() -> None:
         "structuralist.v1.md",
         "structuralist_repair.v1.md",
         "grammar_probe.v1.md",
+        "intake.v2.md",
+        "scenario_analyst.v2.md",
+        "structuralist.v2.md",
+        "structuralist_repair.v2.md",
     }
 
 
@@ -331,3 +335,96 @@ def test_the_hash_is_stable_across_stores() -> None:
         _intake(FilePromptStore(), "clean").template_sha256
         == _intake(FilePromptStore(), "other").template_sha256
     )
+
+
+# ---------------------------------------------------------------------------
+# v2 — the units convention, stated with a worked example
+# ---------------------------------------------------------------------------
+def _v2(name: str, **slots: object) -> str:
+    store = FilePromptStore()
+    return "\n".join(
+        m.content
+        for m in store.render(name, "v2", **slots).messages  # type: ignore[arg-type]
+    )
+
+
+def test_the_analyst_v2_demands_numbers_not_adjectives() -> None:
+    """v1 asked for "a qualitative statement of where the price could go", so the
+    model gave one — and Agent 3 had nothing to transcribe."""
+    body = _v2(
+        "scenario_analyst",
+        trusted={"ticker": TICKER, "as_of_date": AS_OF, "horizon_days": HORIZON},
+        untrusted={"material_facts": quarantine("- Revenue rose 8%.")},
+    )
+    assert "Return:" in body
+    assert "Vol:" in body
+    assert "You must commit to numbers" in body
+    assert "not an answer" in body
+
+
+def test_the_analyst_v2_states_the_convention_with_a_worked_example() -> None:
+    body = _v2(
+        "scenario_analyst",
+        trusted={"ticker": TICKER, "as_of_date": AS_OF, "horizon_days": HORIZON},
+        untrusted={"material_facts": quarantine("- A fact.")},
+    )
+    assert "decimal fraction" in body
+    assert "`+0.05` is a 5% rise" in body
+    assert "never `+5`" in body
+
+
+def test_the_analyst_v2_warns_against_a_degenerate_spread() -> None:
+    body = _v2(
+        "scenario_analyst",
+        trusted={"ticker": TICKER, "as_of_date": AS_OF, "horizon_days": HORIZON},
+        untrusted={"material_facts": quarantine("- A fact.")},
+    )
+    assert "are not three scenarios" in body
+
+
+def test_the_structuralist_v2_copies_numbers_rather_than_inventing_them() -> None:
+    """v1 said "convert faithfully and conservatively rather than inventing
+    precision" — an instruction that pushes toward zero when the narrative has no
+    numbers at all."""
+    body = _v2("structuralist", untrusted={"narrative": quarantine("Return: +0.05")})
+    assert "Copy those numbers exactly" in body
+    assert "conservatively" not in body
+    assert "multiplying or dividing by 100, stop" in body
+
+
+def test_the_structuralist_v2_asks_for_its_own_words() -> None:
+    """The 400-char justification was being used as a copy buffer for the analyst's
+    paragraph, truncated mid-word — which defeats ADR 0006 entirely."""
+    body = _v2("structuralist", untrusted={"narrative": quarantine("n")})
+    assert "The justification is yours, not the analyst's" in body
+    assert "Do not copy the analyst's paragraph" in body
+
+
+def test_the_structuralist_v2_forbids_figures_not_in_the_narrative() -> None:
+    """The first live run fabricated a gross margin of 66.3% where the source said
+    46.3%."""
+    body = _v2("structuralist", untrusted={"narrative": quarantine("n")})
+    assert "not stated in the narrative" in body
+
+
+def test_a_missing_number_is_not_an_instruction_to_forecast_zero() -> None:
+    body = _v2("structuralist", untrusted={"narrative": quarantine("n")})
+    assert "not an instruction to forecast no movement" in body
+
+
+def test_the_repair_v2_keeps_the_units_discipline() -> None:
+    body = _v2(
+        "structuralist_repair",
+        trusted={"attempt": TrustedText("2"), "validation_errors": TrustedText("- x: y")},
+        untrusted={"narrative": quarantine("n"), "previous_output": quarantine("{}")},
+    )
+    assert "Do not rescale anything while fixing it" in body
+
+
+@pytest.mark.parametrize("name", ["intake", "scenario_analyst", "structuralist"])
+def test_v1_is_kept_intact_beside_v2(name: str) -> None:
+    """Versioned, not edited in place: the v1 text is the record of what produced
+    the first live run, and the experiment that diagnoses it depends on it."""
+    store = FilePromptStore()
+    assert f"{name}.v1.md" in store.available()
+    assert f"{name}.v2.md" in store.available()

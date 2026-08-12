@@ -143,18 +143,18 @@ def test_weights_that_are_individually_valid_but_jointly_wrong_are_rejected() ->
 # ---------------------------------------------------------------------------
 def test_inverted_ordering_is_rejected() -> None:
     with pytest.raises(ValidationError, match="strictly ordered"):
-        make_scenario_set(modifiers=(-8.2, 0.8, 4.5))
+        make_scenario_set(modifiers=(-0.082, 0.008, 0.045))
 
 
 def test_equal_modifiers_are_rejected() -> None:
     """Ordering is strict. Three identical scenarios are not a forecast."""
     with pytest.raises(ValidationError, match="strictly ordered"):
-        make_scenario_set(modifiers=(1.0, 1.0, 1.0))
+        make_scenario_set(modifiers=(0.01, 0.01, 0.01))
 
 
 def test_base_outside_the_bracket_is_rejected() -> None:
     with pytest.raises(ValidationError, match="strictly ordered"):
-        make_scenario_set(modifiers=(4.5, 9.9, -8.2))
+        make_scenario_set(modifiers=(0.045, 0.099, -0.082))
 
 
 # ---------------------------------------------------------------------------
@@ -192,27 +192,29 @@ def test_justification_of_20_chars_is_accepted() -> None:
     assert len(make_scenario(justification="x" * 20).justification) == 20
 
 
-def test_justification_of_400_chars_is_accepted() -> None:
-    assert len(make_scenario(justification="x" * 400).justification) == 400
+def test_justification_of_240_chars_is_accepted() -> None:
+    assert len(make_scenario(justification="x" * 240).justification) == 240
 
 
-def test_justification_of_401_chars_is_rejected() -> None:
+def test_justification_of_241_chars_is_rejected() -> None:
+    """240, not 400: at 400 the model pasted the analyst's paragraph verbatim and
+    truncated mid-word, turning the field into a copy buffer (ADR 0006)."""
     with pytest.raises(ValidationError):
-        make_scenario(justification="x" * 401)
+        make_scenario(justification="x" * 241)
 
 
 # ---------------------------------------------------------------------------
-# price_modifier_pct bounds
+# price_return bounds
 # ---------------------------------------------------------------------------
-def test_modifier_of_minus_100_is_rejected() -> None:
-    """-100% implies a price of zero; anything below implies a negative price."""
+def test_a_total_loss_return_is_rejected() -> None:
+    """-1.0 is a price of zero; anything below is a negative price."""
     with pytest.raises(ValidationError):
-        make_scenario(modifier=-100.0)
+        make_scenario(modifier=-1.0)
 
 
-def test_modifier_below_minus_100_is_rejected() -> None:
+def test_a_return_below_total_loss_is_rejected() -> None:
     with pytest.raises(ValidationError):
-        make_scenario(modifier=-150.0)
+        make_scenario(modifier=-1.5)
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +227,7 @@ def test_extra_fields_are_forbidden() -> None:
         Scenario(
             justification=JUSTIFICATION,
             probability_weight=0.5,
-            price_modifier_pct=1.0,
+            price_return=0.01,
             annualised_vol=0.2,
             confidence=0.9,  # type: ignore[call-arg]
         )
