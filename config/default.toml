@@ -72,6 +72,15 @@ temperature = 0.0
 # that first — MLX runtimes have weaker constrained-decoding support than GGUF —
 # and try the GGUF build of the same model before touching decode_schema.
 
+# Which prompt version each agent uses. A per-model prompt variant is a change
+# here, not a change to mapf.agents — which is what CLAUDE.md §4 says versioning
+# is for, and what was not actually true until the agents took the template and
+# version as constructor parameters.
+[prompts]
+intake = "v1"
+analyst = "v1"
+structuralist = "v1"
+
 # ---------------------------------------------------------------------------
 # Caches — load-bearing infrastructure, not optimisation (CLAUDE.md §6)
 # ---------------------------------------------------------------------------

@@ -127,6 +127,7 @@ def build_run(
             "prompts": prompts,
             "trace": trace,
             "stage": stage,
+            "version": getattr(settings.prompts, stage),
         }
 
     agents = Agents(

@@ -9,7 +9,7 @@ an edit to a module in this package, the abstraction has leaked (`CLAUDE.md` §4
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any, Protocol, TypeVar
+from typing import Any, ClassVar, Protocol, TypeVar
 
 from mapf.core.models import TrustedText
 from mapf.core.ports import (
@@ -36,10 +36,19 @@ class Agent(Protocol[InT_contra, OutT_co]):
 class LLMAgent:
     """Shared base: render a template, call the model, record the exchange.
 
+    `template` and `version` are constructor parameters with class-level defaults,
+    not module constants. They were constants, and that was an abstraction leak:
+    `CLAUDE.md` §4 says prompts are versioned precisely so per-model variants can
+    coexist "without touching logic", and with the name baked into the module the
+    only way to point an agent at a different prompt was to edit this package.
+
     Holds no model knowledge beyond the `ModelInfo` it was handed, and no cache
     knowledge at all — a `CachingProvider` is indistinguishable from a bare one
     through the `LLMProvider` Protocol, which is exactly the intent.
     """
+
+    TEMPLATE: ClassVar[str] = ""
+    VERSION: ClassVar[str] = "v1"
 
     def __init__(
         self,
@@ -50,7 +59,11 @@ class LLMAgent:
         prompts: PromptStore,
         trace: Trace,
         stage: str,
+        template: str | None = None,
+        version: str | None = None,
     ) -> None:
+        self._template = template or self.TEMPLATE
+        self._version = version or self.VERSION
         self._provider = provider
         self._model = model
         self._sampling = sampling
@@ -70,6 +83,14 @@ class LLMAgent:
     @property
     def stage(self) -> str:
         return self._stage
+
+    @property
+    def template(self) -> str:
+        return self._template
+
+    @property
+    def version(self) -> str:
+        return self._version
 
     def _render(
         self,

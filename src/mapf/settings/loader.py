@@ -108,6 +108,20 @@ class ModelsSettings(_Section):
         return self
 
 
+class PromptsSettings(_Section):
+    """Which prompt version each agent uses.
+
+    Config rather than code, because `CLAUDE.md` §4 says versioned prompts exist so
+    per-model variants can coexist without touching logic. Until the agents took
+    `template`/`version` as parameters that was not actually true — the name was a
+    module constant and a variant meant editing `mapf.agents`.
+    """
+
+    intake: str = "v1"
+    analyst: str = "v1"
+    structuralist: str = "v1"
+
+
 class CacheSettings(_Section):
     llm_dir: Path
     price_dir: Path
@@ -169,6 +183,7 @@ class Settings(BaseSettings):
 
     inference: InferenceSettings
     models: ModelsSettings
+    prompts: PromptsSettings = PromptsSettings()
     cache: CacheSettings
     data: DataSettings
     news: NewsSettings

@@ -283,3 +283,62 @@ def test_scenario_paths_end_at_the_stated_modifier() -> None:
     assert prices[0] == pytest.approx(forecast.spot_price)
     assert prices[-1] == pytest.approx(expected)
     assert len(prices) == forecast.horizon_days + 1
+
+
+# ---------------------------------------------------------------------------
+# Prompt selection is config, not code (known issue 5)
+# ---------------------------------------------------------------------------
+def test_an_agent_uses_its_class_default_template() -> None:
+    from mapf.agents.intake import IntakeAgent
+
+    agent = IntakeAgent(
+        provider=FakeProvider(Path("/nonexistent")),
+        model=MODEL,
+        sampling=SAMPLING,
+        prompts=object(),  # type: ignore[arg-type]
+        trace=object(),  # type: ignore[arg-type]
+        stage="intake",
+    )
+    assert (agent.template, agent.version) == ("intake", "v1")
+
+
+def test_a_prompt_variant_needs_no_edit_to_the_agents_package() -> None:
+    """The abstraction CLAUDE.md §4 claims: a per-model prompt variant is a config
+    edit. It was not true while the template name was a module constant."""
+    from mapf.agents.structuralist import StructuralistAgent
+
+    agent = StructuralistAgent(
+        provider=FakeProvider(Path("/nonexistent")),
+        model=MODEL,
+        sampling=SAMPLING,
+        prompts=object(),  # type: ignore[arg-type]
+        trace=object(),  # type: ignore[arg-type]
+        stage="structuralist",
+        max_attempts=3,
+        template="structuralist_single_agent",
+        version="v7",
+    )
+    assert (agent.template, agent.version) == ("structuralist_single_agent", "v7")
+
+
+def test_the_configured_prompt_version_reaches_the_agents(tmp_path: Path) -> None:
+    config = _config(tmp_path).read_text(encoding="utf-8")
+    config += '\n[prompts]\nintake = "v9"\nanalyst = "v9"\nstructuralist = "v9"\n'
+    path = tmp_path / "v9.toml"
+    path.write_text(config, encoding="utf-8")
+
+    settings = load([path])
+    wiring = build_run(
+        settings,
+        provider=FakeProvider(tmp_path),
+        resolved=dict.fromkeys(("intake", "analyst", "structuralist"), MODEL),
+        run_id=new_run_id(),
+    )
+    assert wiring.agents.intake.version == "v9"
+    assert wiring.agents.analyst.version == "v9"
+    assert wiring.agents.structuralist.version == "v9"
+
+
+def test_prompt_versions_default_to_v1_when_unconfigured(tmp_path: Path) -> None:
+    """The section is optional; an existing config keeps working."""
+    assert _settings(tmp_path).prompts.structuralist == "v1"

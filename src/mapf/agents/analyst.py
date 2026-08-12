@@ -18,9 +18,6 @@ from mapf.core.models import (
 )
 from mapf.core.quarantine import quarantine
 
-TEMPLATE = "scenario_analyst"
-VERSION = "v1"
-
 # Prose cannot be schema-checked, and inventing elaborate validation for it would
 # manufacture confidence without evidence. These two bounds catch the failures that
 # are unambiguous — a refusal, an empty response, a truncation, a runaway loop —
@@ -40,10 +37,12 @@ class AnalystRequest(DomainModel):
 class AnalystAgent(LLMAgent):
     """`AnalystRequest -> ScenarioNarrative`."""
 
+    TEMPLATE = "scenario_analyst"
+
     def run(self, request: AnalystRequest, /) -> ScenarioNarrative:
         prompt = self._render(
-            TEMPLATE,
-            VERSION,
+            self._template,
+            self._version,
             trusted={
                 "ticker": TrustedText(request.ticker),
                 "as_of_date": TrustedText(request.as_of_date.isoformat()),

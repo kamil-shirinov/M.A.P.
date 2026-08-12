@@ -14,6 +14,8 @@ exactly what this loop answers.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from pydantic import ValidationError
 
 from mapf.agents.base import LLMAgent
@@ -29,10 +31,6 @@ from mapf.core.ports import (
 )
 from mapf.core.quarantine import quarantine
 from mapf.core.schema import decode_schema
-
-TEMPLATE = "structuralist"
-REPAIR_TEMPLATE = "structuralist_repair"
-VERSION = "v1"
 
 
 class StructuralistRequest(DomainModel):
@@ -57,6 +55,9 @@ def _format_errors(error: ValidationError) -> tuple[str, ...]:
 class StructuralistAgent(LLMAgent):
     """`StructuralistRequest -> ScenarioSet`."""
 
+    TEMPLATE = "structuralist"
+    REPAIR_TEMPLATE: ClassVar[str] = "structuralist_repair"
+
     def __init__(
         self,
         *,
@@ -67,6 +68,9 @@ class StructuralistAgent(LLMAgent):
         trace: Trace,
         stage: str,
         max_attempts: int,
+        template: str | None = None,
+        version: str | None = None,
+        repair_template: str | None = None,
     ) -> None:
         super().__init__(
             provider=provider,
@@ -75,7 +79,10 @@ class StructuralistAgent(LLMAgent):
             prompts=prompts,
             trace=trace,
             stage=stage,
+            template=template,
+            version=version,
         )
+        self._repair_template = repair_template or self.REPAIR_TEMPLATE
         if max_attempts < 1:
             raise ValueError(f"max_attempts must be at least 1, got {max_attempts}")
         self._max_attempts = max_attempts
@@ -118,10 +125,10 @@ class StructuralistAgent(LLMAgent):
     ) -> RenderedPrompt:
         narrative = quarantine(request.narrative.text)
         if attempt == 0:
-            return self._render(TEMPLATE, VERSION, untrusted={"narrative": narrative})
+            return self._render(self._template, self._version, untrusted={"narrative": narrative})
         return self._render(
-            REPAIR_TEMPLATE,
-            VERSION,
+            self._repair_template,
+            self._version,
             trusted={
                 "attempt": TrustedText(str(attempt + 1)),
                 # Trusted because it is built from field paths and pydantic's own

@@ -19,9 +19,6 @@ from mapf.core.models import (
 )
 from mapf.core.quarantine import quarantine
 
-TEMPLATE = "intake"
-VERSION = "v1"
-
 _BULLETS = ("- ", "* ", "• ")
 
 
@@ -55,10 +52,12 @@ def _parse_facts(raw: str) -> tuple[str, ...]:
 class IntakeAgent(LLMAgent):
     """`IntakeRequest -> MaterialFacts`."""
 
+    TEMPLATE = "intake"
+
     def run(self, request: IntakeRequest, /) -> MaterialFacts:
         prompt = self._render(
-            TEMPLATE,
-            VERSION,
+            self._template,
+            self._version,
             trusted={
                 "ticker": TrustedText(request.ticker),
                 "as_of_date": TrustedText(request.as_of_date.isoformat()),

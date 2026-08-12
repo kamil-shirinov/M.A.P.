@@ -257,7 +257,14 @@ because it also blocks per-model prompt variants, which is a Phase 1/2 activity.
    `test_no_vendor_names_appear_in_application_code` scans every `.py` under `src/`.
 4. ~~Not under version control.~~ **Closed 2026-08-09** — `git init` + initial commit.
    Local only, not on GitHub.
-5. **Prompt selection is hardcoded in `agents/`, and that is an abstraction leak.**
+5. ~~**Prompt selection is hardcoded in `agents/`.**~~ **Closed 2026-08-12.** `template`
+   and `version` are constructor parameters with class-level defaults, the version is
+   read from a `[prompts]` config table, and `bootstrap` passes it through. A per-model
+   prompt variant is now a config edit, which is what `CLAUDE.md` §4 always claimed.
+   The pipeline half stands and is fine: `execute` still hardcodes the three-stage
+   sequence, and a different topology is honestly a different pipeline function.
+
+   *Original text:* **Prompt selection is hardcoded in `agents/`, and that is an abstraction leak.**
    Each agent module holds `TEMPLATE` and `VERSION` as module constants
    (`TEMPLATE = "structuralist"`); no agent takes a template as a constructor
    parameter. Two consequences, and the second matters sooner than the first:
