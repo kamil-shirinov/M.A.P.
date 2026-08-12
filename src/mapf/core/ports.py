@@ -83,6 +83,9 @@ class LLMResponse(DomainModel):
     finish_reason: str | None = None
     prompt_tokens: int | None = Field(default=None, ge=0)
     completion_tokens: int | None = Field(default=None, ge=0)
+    # A reasoning model can burn its whole budget here and emit no answer.
+    # Invisible unless recorded, and it looks exactly like a refusal.
+    reasoning_tokens: int | None = Field(default=None, ge=0)
     # Must be recorded even on a hit, or the second run's trace is empty and
     # DoD criterion 5 becomes unauditable.
     cache_hit: bool = False

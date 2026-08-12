@@ -331,3 +331,65 @@ def test_an_injected_client_is_not_closed_by_us() -> None:
         pass
     assert client.is_closed is False
     client.close()
+
+
+# ---------------------------------------------------------------------------
+# Budget exhaustion — a reasoning model that never reaches its answer
+# ---------------------------------------------------------------------------
+def test_an_empty_answer_after_a_full_budget_is_not_a_refusal() -> None:
+    """The first v2 live run: 6996 completion tokens, empty content, and an error
+    saying "likely a refusal". The remedy for a refusal is the prompt's content;
+    the remedy here is its length. The message has to distinguish them."""
+    from mapf.core.errors import ModelBudgetExhaustedError
+
+    provider = _provider(
+        _responds(
+            {
+                "model": "gemma",
+                "choices": [
+                    {
+                        "message": {"content": "", "reasoning_content": "..."},
+                        "finish_reason": "length",
+                    }
+                ],
+                "usage": {
+                    "completion_tokens": 6996,
+                    "completion_tokens_details": {"reasoning_tokens": 6990},
+                },
+            }
+        )
+    )
+    with pytest.raises(ModelBudgetExhaustedError) as caught:
+        provider.complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING)
+    assert caught.value.reasoning_tokens == 6990
+    assert "finished thinking" in str(caught.value)
+    assert "max_tokens" in str(caught.value)
+
+
+def test_an_empty_answer_that_stopped_normally_is_not_budget_exhaustion() -> None:
+    """`finish_reason=stop` with empty content is a genuine empty answer, and the
+    agents' own length checks should judge it."""
+    provider = _provider(
+        _responds(
+            {"model": "m", "choices": [{"message": {"content": ""}, "finish_reason": "stop"}]}
+        )
+    )
+    assert provider.complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING).text == ""
+
+
+def test_reasoning_tokens_are_recorded_when_the_model_answers() -> None:
+    """Invisible unless recorded — and it is the number that explains why a run
+    that looks idle is actually working hard."""
+    provider = _provider(
+        _responds(
+            {
+                "model": "m",
+                "choices": [{"message": {"content": "an answer"}, "finish_reason": "stop"}],
+                "usage": {
+                    "completion_tokens": 500,
+                    "completion_tokens_details": {"reasoning_tokens": 430},
+                },
+            }
+        )
+    )
+    assert provider.complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING).reasoning_tokens == 430

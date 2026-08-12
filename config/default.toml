@@ -60,6 +60,11 @@ temperature = 0.0            # CLAUDE.md §6 — deterministic where the backend
 alias = "google/gemma-4-12b-qat"
 temperature = 0.7            # the one agent where sampling diversity is wanted
 seed = 20260809              # recorded as *requested*; many local backends ignore it
+# Explicit, because the server default is invisible and this build reasons before
+# it answers: on 2026-08-12 it spent an entire ~7000-token default budget thinking
+# and emitted nothing. A configured ceiling makes the failure reproducible and the
+# fix a config edit rather than a mystery.
+max_tokens = 12000
 
 [models.structuralist]
 alias = "qwen/qwen3-4b-2507"

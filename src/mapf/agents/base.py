@@ -132,6 +132,7 @@ class LLMAgent:
                 "finish_reason": response.finish_reason,
                 "prompt_tokens": response.prompt_tokens,
                 "completion_tokens": response.completion_tokens,
+                "reasoning_tokens": response.reasoning_tokens,
             },
         )
         return response

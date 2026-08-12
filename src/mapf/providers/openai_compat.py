@@ -23,6 +23,7 @@ from mapf.core.errors import (
     InferenceStatusError,
     InferenceTimeoutError,
     InferenceUnreachableError,
+    ModelBudgetExhaustedError,
     ModelNotAvailableError,
 )
 from mapf.core.hashing import canonical_json, sha256_hex
@@ -267,13 +268,30 @@ class OpenAICompatProvider:
 
         usage = payload.get("usage")
         usage = usage if isinstance(usage, dict) else {}
+        details = usage.get("completion_tokens_details")
+        details = details if isinstance(details, dict) else {}
+        reasoning_tokens = details.get("reasoning_tokens")
+
+        finish_reason = first.get("finish_reason")
+        if not content.strip() and finish_reason == "length":
+            # A reasoning-capable build streams into `reasoning_content` and only
+            # then writes its answer. Out of budget first, `content` is empty while
+            # thousands of tokens were generated — which looks exactly like a
+            # refusal and is not one.
+            raise ModelBudgetExhaustedError(
+                str(payload.get("model") or model.id),
+                int(usage.get("completion_tokens") or 0),
+                int(reasoning_tokens or 0),
+            )
+
         return LLMResponse(
             text=content,
             # The server's own id, not the alias we asked for: they can differ, and
             # the manifest should record what actually answered.
             model_id=str(payload.get("model") or model.id),
-            finish_reason=first.get("finish_reason"),
+            finish_reason=finish_reason,
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
+            reasoning_tokens=reasoning_tokens,
             cache_hit=False,
         )

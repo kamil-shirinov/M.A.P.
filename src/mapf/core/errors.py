@@ -135,6 +135,32 @@ class InferenceStatusError(InferenceError):
         super().__init__(f"inference server returned HTTP {status_code}: {body[:300]}")
 
 
+class ModelBudgetExhaustedError(InferenceError):
+    """The model spent its whole token budget and emitted no answer.
+
+    Distinct from a refusal and from a protocol error, because the remedy is
+    different and because the alternative message actively misleads. A
+    reasoning-capable model streams into a separate `reasoning_content` field and
+    only then writes its answer; if the budget runs out first, `content` is empty
+    while thousands of tokens were generated.
+
+    Reported as "too short; likely a refusal" — which is what happened before this
+    existed — it sends the reader to the prompt's *content* when the problem is its
+    *length*.
+    """
+
+    def __init__(self, model_id: str, completion_tokens: int, reasoning_tokens: int) -> None:
+        self.model_id = model_id
+        self.completion_tokens = completion_tokens
+        self.reasoning_tokens = reasoning_tokens
+        super().__init__(
+            f"{model_id} generated {completion_tokens} tokens "
+            f"({reasoning_tokens} of them reasoning) and produced no answer: the "
+            "token budget ran out before it finished thinking. Raise max_tokens for "
+            "this agent, shorten its prompt, or use a build that does not reason."
+        )
+
+
 class InferenceProtocolError(InferenceError):
     """The server answered, but not in the shape the OpenAI-compatible API defines."""
 
