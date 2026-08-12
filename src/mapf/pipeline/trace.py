@@ -78,6 +78,10 @@ class CountingTrace:
         self.attempts: dict[str, int] = {}
         self.cache_hits: dict[str, int] = {}
         self.templates: dict[str, tuple[str, str, str]] = {}
+        # Summed per stage. Agent 2 runs at temperature 0.7, so reasoning
+        # length varies run to run — that variance is worth measuring rather
+        # than assuming, and it is invisible unless recorded.
+        self.reasoning_tokens: dict[str, int] = {}
 
     def record(
         self,
@@ -93,6 +97,10 @@ class CountingTrace:
             self.attempts[stage] = max(self.attempts.get(stage, 0), attempt + 1)
             if cache_hit:
                 self.cache_hits[stage] = self.cache_hits.get(stage, 0) + 1
+            if data and data.get("reasoning_tokens"):
+                self.reasoning_tokens[stage] = self.reasoning_tokens.get(stage, 0) + int(
+                    data["reasoning_tokens"]
+                )
             if data and stage not in self.templates:
                 template = str(data.get("template", ""))
                 digest = str(data.get("template_sha256", ""))

@@ -15,8 +15,24 @@ base_url = "http://localhost:1234/v1"
 # Collapsing them into one number makes those indistinguishable.
 connect_timeout_s = 10.0     # the server is local; if it will not accept a socket in
                              #   ten seconds it is not running
-read_timeout_s = 600.0       # generous by design: a 12B on M1 runs at 8-15 tok/s and a
-                             #   model swap can add 30 s or more before the first token
+read_timeout_s = 1300.0      # generous by design, and now derived rather than guessed.
+                             #   The analyst must be able to spend its whole budget inside
+                             #   this window; see the arithmetic under min_tokens_per_second.
+                             #   A model swap can add 30 s or more before the first token.
+
+# The hardware assumption that couples max_tokens to read_timeout_s. They are set
+# independently and mean nothing to each other, but a budget the model cannot
+# finish spending before the timeout fires is not a budget: a run that reached it
+# would fail as a timeout and send you hunting for a cold model load that never
+# happened. Startup validation rejects an inconsistent pair.
+# Reference machine: Apple M1, 16 GB. MEASURED at 16.0 tok/s on the 12B analyst,
+# warm, on 2026-08-12 — not an estimate. 12.0 is set below that as margin for a
+# cold cache and a longer context. Someone on different hardware must re-measure:
+# time a generation of known token count and divide.
+min_tokens_per_second = 12.0
+budget_margin = 0.8          # a full budget may consume at most this share of the
+                             #   read timeout; the rest covers prompt processing
+                             #   and a cold model load
 max_repair_attempts = 3      # Agent 3 only. On exhaustion: typed exception, never a
                              #   partial or coerced Forecast
 
@@ -64,6 +80,15 @@ seed = 20260809              # recorded as *requested*; many local backends igno
 # it answers: on 2026-08-12 it spent an entire ~7000-token default budget thinking
 # and emitted nothing. A configured ceiling makes the failure reproducible and the
 # fix a config edit rather than a mystery.
+#
+# 12000, and the timeout is sized to match rather than the other way round.
+# Observed reasoning on this prompt: 2968 tokens on one run, still unfinished at
+# 5997 on another — this build's reasoning length varies widely at temperature 0.7,
+# so a budget chosen from a single observation will fail on an unlucky run.
+# 12000 / 12 tok/s = 1000 s, inside 80% of the 1300 s timeout.
+#
+# The honest cost: a single analyst call can take up to ~12 minutes on this
+# hardware. That is a real constraint on the architecture, not a tuning detail.
 max_tokens = 12000
 
 [models.structuralist]

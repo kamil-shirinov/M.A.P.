@@ -24,7 +24,7 @@ from mapf.core.models import DomainModel, ScenarioSet
 # that window.
 SPREAD_FLOOR_COEFFICIENT = 0.005
 
-JUSTIFICATION_CEILING = 240
+JUSTIFICATION_CEILING = 400
 
 _NUMERAL = re.compile(r"-?\d+(?:\.\d+)?")
 

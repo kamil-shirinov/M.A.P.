@@ -192,15 +192,18 @@ def test_justification_of_20_chars_is_accepted() -> None:
     assert len(make_scenario(justification="x" * 20).justification) == 20
 
 
-def test_justification_of_240_chars_is_accepted() -> None:
-    assert len(make_scenario(justification="x" * 240).justification) == 240
+def test_justification_of_400_chars_is_accepted() -> None:
+    assert len(make_scenario(justification="x" * 400).justification) == 400
 
 
-def test_justification_of_241_chars_is_rejected() -> None:
-    """240, not 400: at 400 the model pasted the analyst's paragraph verbatim and
-    truncated mid-word, turning the field into a copy buffer (ADR 0006)."""
+def test_justification_of_401_chars_is_rejected() -> None:
+    """400, restored. It was cut to 240 on the theory that a budget too small to
+    paste into forces compression; ADR 0014 records that theory as wrong — at 240
+    the model still pasted and still truncated. What stopped the copying was the v2
+    instruction "the justification is yours". `justifications_at_ceiling` in the
+    manifest is the regression signal that makes the larger ceiling safe."""
     with pytest.raises(ValidationError):
-        make_scenario(justification="x" * 241)
+        make_scenario(justification="x" * 401)
 
 
 # ---------------------------------------------------------------------------

@@ -28,7 +28,12 @@ import structlog
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
-from mapf.core.errors import ConfigurationError, DeterminismPolicyError, PlaceholderConfigError
+from mapf.core.errors import (
+    ConfigurationError,
+    DeterminismPolicyError,
+    PlaceholderConfigError,
+    UnreachableTokenBudgetError,
+)
 
 _logger = structlog.get_logger(__name__)
 
@@ -64,6 +69,23 @@ class InferenceSettings(_Section):
     connect_timeout_s: float = Field(gt=0.0)
     read_timeout_s: float = Field(gt=0.0)
     max_repair_attempts: int = Field(ge=1, le=10)
+
+    min_tokens_per_second: float = Field(default=10.0, gt=0.0)
+    """Slowest generation rate this machine is expected to sustain.
+
+    **A hardware assumption, stated so it can be corrected.** On the reference M1
+    (16 GB) a 12B at Q4 runs at roughly 10-15 tok/s, so 10 is the pessimistic end.
+    It exists only to couple `max_tokens` to `read_timeout_s`, which are otherwise
+    set independently and mean nothing to each other. Someone on faster or slower
+    hardware needs to change this, and needs to know the constraint exists.
+    """
+
+    budget_margin: float = Field(default=0.8, gt=0.0, le=1.0)
+    """Fraction of the read timeout a full token budget may consume.
+
+    Not 1.0: prompt processing, a cold model load and the network all take time the
+    generation rate does not account for.
+    """
 
 
 class ModelSettings(_Section):
@@ -188,6 +210,31 @@ class Settings(BaseSettings):
     data: DataSettings
     news: NewsSettings
     paths: PathsSettings
+
+    @model_validator(mode="after")
+    def _token_budgets_are_reachable(self) -> Self:
+        """`max_tokens` and `read_timeout_s` are set independently; the hardware
+        couples them.
+
+        A budget the model cannot finish spending before the read timeout fires is
+        not a budget — a run that reached it would fail as a timeout and send the
+        reader hunting for a cold model load that never happened. Checked at
+        startup so the two cannot drift apart in a later edit.
+        """
+        allowed = self.inference.read_timeout_s * self.inference.budget_margin
+        for agent in ("intake", "analyst", "structuralist"):
+            configured = getattr(self.models, agent).max_tokens
+            if configured is None:
+                continue
+            if configured / self.inference.min_tokens_per_second > allowed:
+                raise UnreachableTokenBudgetError(
+                    agent,
+                    configured,
+                    self.inference.read_timeout_s,
+                    self.inference.min_tokens_per_second,
+                    self.inference.budget_margin,
+                )
+        return self
 
     @classmethod
     def settings_customise_sources(

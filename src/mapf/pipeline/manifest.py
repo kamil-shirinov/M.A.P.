@@ -49,6 +49,9 @@ class AgentRecord(DomainModel):
     template_version: str = Field(min_length=1)
     template_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     attempts: int = Field(default=1, ge=1)
+    # A reasoning build can spend most of its budget here and emit nothing.
+    # Recorded so the distribution over runs is measurable rather than assumed.
+    reasoning_tokens: int = Field(default=0, ge=0)
     cache_hits: int = Field(default=0, ge=0)
 
 

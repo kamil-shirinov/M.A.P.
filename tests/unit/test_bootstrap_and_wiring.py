@@ -346,3 +346,20 @@ def test_the_configured_prompt_version_reaches_the_agents(tmp_path: Path) -> Non
 def test_prompt_versions_default_to_v1_when_unconfigured(tmp_path: Path) -> None:
     """The section is optional; an existing config keeps working."""
     assert _settings(tmp_path).prompts.structuralist == "v1"
+
+
+def test_reasoning_tokens_are_summed_per_stage(tmp_path: Path) -> None:
+    """Agent 2 runs at temperature 0.7, so reasoning length varies run to run.
+    That variance is worth measuring rather than assuming, and it is invisible
+    unless the manifest carries it."""
+    trace = CountingTrace(JsonlTrace(tmp_path / "t.jsonl"))
+    trace.record(stage="analyst", attempt=0, data={"reasoning_tokens": 2968})
+    trace.record(stage="structuralist", attempt=0, data={"reasoning_tokens": 140})
+    trace.record(stage="structuralist", attempt=1, data={"reasoning_tokens": 210})
+    assert trace.reasoning_tokens == {"analyst": 2968, "structuralist": 350}
+
+
+def test_a_stage_that_never_reasoned_records_nothing(tmp_path: Path) -> None:
+    trace = CountingTrace(JsonlTrace(tmp_path / "t.jsonl"))
+    trace.record(stage="intake", attempt=0, data={"reasoning_tokens": None})
+    assert trace.reasoning_tokens == {}

@@ -261,11 +261,19 @@ class Scenario(DomainModel):
     conditioning them on it rather than rationalising afterwards (ADR 0006).
     """
 
-    # 240, not 400. At 400 the model pasted the analyst's paragraph verbatim and
-    # hit the ceiling mid-word in all three branches — turning a field that exists
-    # to make it reason into a copy buffer, which defeats ADR 0006 entirely. A
-    # budget too small to paste into forces compression, which is the point.
-    justification: str = Field(min_length=20, max_length=240)
+    # 400. It was cut to 240 after the model pasted the analyst's paragraph and
+    # truncated mid-word in all three branches — on the theory that a budget too
+    # small to paste into would force compression. That theory was wrong (ADR
+    # 0014): at 240 it still pasted and still truncated, just earlier. The model
+    # copied because it was *told to transcribe*, and the v2 instruction "the
+    # justification is yours, not the analyst's" is what stopped it.
+    #
+    # So 240 was constraining real synthesis rather than preventing copying — the
+    # longest justification of the first clean v2 run came in at 234 of 240.
+    # `QualityFlags.justifications_at_ceiling` is the regression signal that makes
+    # raising it safe: if copying returns, lengths pile up at the cap and the
+    # manifest says so.
+    justification: str = Field(min_length=20, max_length=400)
     probability_weight: float = Field(ge=0.0, le=1.0)
     # -1.0 is a total loss; below it is a negative price. The upper rail is a
     # sanity bound, not a market claim.

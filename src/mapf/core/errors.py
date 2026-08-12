@@ -58,6 +58,39 @@ class PlaceholderConfigError(ConfigurationError):
         super().__init__(f"{message}. {hint}" if hint else message)
 
 
+class UnreachableTokenBudgetError(ConfigurationError):
+    """A token budget that cannot be spent before the read timeout fires.
+
+    `max_tokens` and `read_timeout_s` are set independently and mean nothing to
+    each other, but the hardware couples them: a budget the model cannot finish
+    spending in time is not a budget, it is a timeout wearing one. A run that
+    actually reached it would fail as `InferenceTimeoutError` and send the reader
+    looking for a cold model load that never happened.
+
+    The same class of defect as a manifest field that does not mean what its name
+    says: a limit that claims one thing and enforces another.
+    """
+
+    def __init__(
+        self,
+        agent: str,
+        max_tokens: int,
+        read_timeout_s: float,
+        tokens_per_second: float,
+        margin: float,
+    ) -> None:
+        self.agent = agent
+        self.max_tokens = max_tokens
+        needed = max_tokens / tokens_per_second
+        super().__init__(
+            f"agent {agent!r} may generate {max_tokens} tokens, which at "
+            f"{tokens_per_second:g} tok/s takes about {needed:.0f}s — beyond "
+            f"{margin:.0%} of inference.read_timeout_s ({read_timeout_s:g}s). "
+            f"Lower models.{agent}.max_tokens, raise inference.read_timeout_s, or "
+            "correct inference.min_tokens_per_second if this machine is faster."
+        )
+
+
 class DeterminismPolicyError(ConfigurationError):
     """An agent required to be deterministic was configured with sampling.
 

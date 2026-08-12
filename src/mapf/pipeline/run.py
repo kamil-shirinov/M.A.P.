@@ -95,6 +95,7 @@ def _record(agent: LLMAgent, trace: CountingTrace) -> AgentRecord:
         template_sha256=digest,
         attempts=trace.attempts.get(stage, 1),
         cache_hits=trace.cache_hits.get(stage, 0),
+        reasoning_tokens=trace.reasoning_tokens.get(stage, 0),
     )
 
 

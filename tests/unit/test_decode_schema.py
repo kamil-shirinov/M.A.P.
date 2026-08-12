@@ -61,7 +61,7 @@ def test_constraints_survive_stripping() -> None:
         "annualised_vol",
     ]
     assert scenario["properties"]["justification"]["minLength"] == 20
-    assert scenario["properties"]["justification"]["maxLength"] == 240
+    assert scenario["properties"]["justification"]["maxLength"] == 400
     assert scenario["properties"]["annualised_vol"]["exclusiveMinimum"] == 0.0
     assert scenario["properties"]["annualised_vol"]["maximum"] == 3.0
     assert scenario["properties"]["price_return"]["exclusiveMinimum"] == -1.0

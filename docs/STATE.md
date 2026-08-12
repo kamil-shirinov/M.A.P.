@@ -249,6 +249,30 @@ was for.
 - Vols 0.18–0.22, against AAPL's realised ~0.25. Much closer than v1's 0.05, still
   a Phase 3 calibration question.
 
+**Token budget and read timeout are now coupled, and the numbers are measured.**
+`max_tokens = 12000` and `read_timeout_s = 600` could not both be satisfied: at any
+plausible rate a 12000-token budget cannot be spent in 600 s, so a run that reached
+it would have failed as `InferenceTimeoutError` and sent the reader hunting for a
+cold model load. Same class as the manifest bug — a limit that means something other
+than what it claims.
+
+`inference.min_tokens_per_second` now states the hardware assumption explicitly and
+a startup validator rejects an inconsistent pair. **The rate is measured, not
+guessed: 16.0 tok/s on the 12B, warm, on the reference M1** — the 10.0 originally
+written down was an assumption, and a wrong one. Configured at 12.0 for margin.
+
+The first attempt at these numbers was still wrong, and the new error caught it:
+`max_tokens = 6000` failed with "generated 6000 tokens (5997 of them reasoning) and
+produced no answer". **The analyst's reasoning length varies widely** — 2968 tokens
+on one run, still unfinished at 5997 on another, 3486 on the run that succeeded.
+A budget picked from one observation fails on an unlucky one. Now 12000 tokens with
+a 1300 s timeout, which means **a single analyst call can take up to ~12 minutes on
+this hardware.** That is a real architectural constraint, not a tuning detail, and it
+is the kind of thing worth weighing before the pipeline grows.
+
+`reasoning_tokens` is now recorded per agent in every manifest, so the variance is
+measurable over time rather than assumed.
+
 **Getting there required a real fix.** The first v2 attempt failed with "analyst
 output rejected... likely a refusal; length was 0 characters". It was not a
 refusal: this build of the analyst reasons into a separate `reasoning_content`
@@ -260,7 +284,26 @@ counts, and `reasoning_tokens` is recorded. **Note the analyst runs at
 temperature 0.7, so reasoning length varies run to run** — 12000 is headroom, not
 a guarantee.
 
-**Proposed: raise the justification ceiling back to 400.** The 240 cap was set on
+**Done: ceiling raised to 400 (2026-08-12).** Distribution before and after, on the
+same narrative:
+
+| ceiling | bullish | base | bearish | max/cap | at ceiling |
+|---|---|---|---|---|---|
+| 240 | 234 | 209 | 191 | 98% | 0 of 3 |
+| 400 | 262 | 212 | 224 | 66% | 0 of 3 |
+
+**The distribution did not shift up proportionally.** Given 67% more room, the
+lengths grew 12% / 1% / 17% — the model writes what the reasoning needs and stops.
+So 240 was binding on the longest branch only, and the earlier hypothesis that "the
+model fills whatever space it is given" is not supported. At 400 the longest sits at
+66% of the cap, which is real headroom rather than a new binding constraint.
+
+**Caveat on the word "distribution": the structuralist runs at `temperature=0`, so
+these are three lengths per ceiling, not a sample.** Re-running gives identical
+output. A genuine distribution needs several narratives, which is a Phase 2 corpus
+question.
+
+*(superseded proposal)* ~~Proposed: raise the justification ceiling back to 400.~~ The 240 cap was set on
 reasoning that ADR 0014 records as unsupported. This run confirms the mechanism was
 the instruction, not the room: with "the justification is yours, not the analyst's"
 in place, the model composes rather than copies. But the longest justification came

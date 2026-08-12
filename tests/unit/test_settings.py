@@ -392,3 +392,61 @@ def test_no_vendor_names_appear_in_application_code() -> None:
         if "lm studio" in text or "lmstudio" in text or "ollama" in text:
             offenders.append(str(path.relative_to(REPO_ROOT)))
     assert offenders == []
+
+
+# ---------------------------------------------------------------------------
+# Token budgets must be reachable inside the read timeout
+# ---------------------------------------------------------------------------
+def test_an_unreachable_token_budget_is_rejected(tmp_path: Path) -> None:
+    """`max_tokens` and `read_timeout_s` are set independently and the hardware
+    couples them. A budget the model cannot finish spending before the timeout
+    fires is a timeout wearing a budget's name — the run would fail as
+    InferenceTimeoutError and send the reader hunting for a cold model load."""
+    from mapf.core.errors import UnreachableTokenBudgetError
+
+    content = VALID_TOML.replace(
+        "read_timeout_s = 600.0", "read_timeout_s = 600.0\nmin_tokens_per_second = 10.0"
+    ).replace('alias = "gemma4:12b"', 'alias = "gemma4:12b"\nmax_tokens = 12000')
+    with pytest.raises(UnreachableTokenBudgetError) as caught:
+        load([_write(tmp_path, content)])
+    assert caught.value.agent == "analyst"
+    assert "1200s" in str(caught.value)
+    assert "min_tokens_per_second" in str(caught.value)
+
+
+def test_a_reachable_budget_is_accepted(tmp_path: Path) -> None:
+    content = VALID_TOML.replace(
+        "read_timeout_s = 600.0", "read_timeout_s = 900.0\nmin_tokens_per_second = 10.0"
+    ).replace('alias = "gemma4:12b"', 'alias = "gemma4:12b"\nmax_tokens = 6000')
+    settings = load([_write(tmp_path, content)])
+    assert settings.models.analyst.max_tokens == 6000
+
+
+def test_faster_hardware_can_be_declared(tmp_path: Path) -> None:
+    """The rate is an assumption about the machine, stated so it can be corrected
+    rather than discovered."""
+    content = VALID_TOML.replace(
+        "read_timeout_s = 600.0", "read_timeout_s = 600.0\nmin_tokens_per_second = 40.0"
+    ).replace('alias = "gemma4:12b"', 'alias = "gemma4:12b"\nmax_tokens = 12000')
+    assert load([_write(tmp_path, content)]).models.analyst.max_tokens == 12000
+
+
+def test_an_unset_budget_is_not_checked(tmp_path: Path) -> None:
+    """`max_tokens` is optional; only a configured one can be unreachable."""
+    assert load([_write(tmp_path, VALID_TOML)]).models.intake.max_tokens is None
+
+
+def test_the_committed_config_has_a_reachable_budget() -> None:
+    """The shipped pair must satisfy its own validator, or the first run after a
+    clone fails on config."""
+    import os
+
+    os.environ["MAP_DATA__SEC__USER_AGENT"] = "Test Runner test@example.com"
+    try:
+        settings = load([REPO_ROOT / "config" / "default.toml"])
+    finally:
+        del os.environ["MAP_DATA__SEC__USER_AGENT"]
+    budget = settings.models.analyst.max_tokens
+    assert budget is not None
+    needed = budget / settings.inference.min_tokens_per_second
+    assert needed <= settings.inference.read_timeout_s * settings.inference.budget_margin
