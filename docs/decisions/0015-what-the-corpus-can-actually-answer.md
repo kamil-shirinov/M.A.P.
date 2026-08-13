@@ -1,6 +1,6 @@
 # 0015 — What a feasible corpus can actually answer
 
-Status: **Proposed** — needs a decision on Phase 2's primary question · Date: 2026-08-13 · Phase 2
+Status: Accepted · Date: 2026-08-13 · Phase 2
 
 ## Context
 
@@ -86,10 +86,58 @@ secondary, explicitly underpowered one.**
   estimate and the interval, and **state the power alongside it**, so a null result
   reads as "underpowered" rather than "no skill".
 
-This is not a retreat. Calibration is the property the forecasts are most obviously
-failing, it is what Phase 3's isotonic regression exists to fix, and a
+**This is a design choice rather than a compromise, and the reason is that
+calibration is the only question with a complete arc.** We can measure the
+failure, fix it in Phase 3 with isotonic regression, and then measure the fix on
+the same corpus — three steps that close. Directional skill offers only the first
+step and not even that reliably: we could fail to measure it and would have no
+mechanism to fix it if we did. A question whose answer cannot change what we build
+is not worth the compute, however interesting it is.
+
+Calibration is also the property the forecasts are most obviously failing, and a
 well-calibrated forecaster with no directional edge is still a useful object. A
 directional claim we cannot support at any affordable sample size is not.
+
+## Finding 3 — the horizon should be 5 days, not 21
+
+Tested before freezing the corpus, because 21 days is baked into panel
+construction and expensive to revisit.
+
+**Power is horizon-invariant at fixed compute**, which is what theory predicts:
+both the signal and the noise scale with the horizon's volatility. At 240
+forecasts, power to detect `rho=0.20` was 19% / 14% / 26% at 5 / 10 / 21 days, and
+to detect a 2x-overconfident forecast 74% / 78% / 80% — flat within simulation
+noise. So the statistical case is neutral and the decision rests elsewhere.
+
+The mechanical case is not neutral at all:
+
+| horizon | sigma over the window | max dates per ticker (2y) | P(ex-dividend in window) |
+|---|---|---|---|
+| 5 | 0.035 | 99 | **8%** |
+| 10 | 0.050 | 49 | 16% |
+| 21 | 0.072 | 23 | **33%** |
+
+**A third of all 21-day windows contain an ex-dividend date.** ADR 0013 requires
+those to be excluded or separately reported, so the 21-day horizon quietly costs a
+third of the reportable sample before anything is scored — 118 down to 79, against
+109 at 5 days. Power to detect a 2x calibration error accordingly runs 94% / 87% /
+87%.
+
+The second column matters too: at 5 days a two-year calendar yields 99
+non-overlapping windows per ticker against 23. Panel shape stops being dictated by
+the length of the post-cutoff span, which was the constraint that forced 30x8 in
+the first place.
+
+**One argument for the short horizon this simulation cannot test.** Post-earnings
+announcement drift is documented at 5-10 days, so true `rho` may well be larger
+there — but the simulation takes `rho` as a parameter, so it can say what power we
+have at a given skill and nothing about whether the skill is real. That case rests
+on the literature, not on anything measured here, and it should be described that
+way.
+
+**Decision: 5 trading days.** Chosen for the dividend-contamination and
+calendar-freedom arguments, which are measured, with the drift argument as an
+untested bonus rather than a justification.
 
 ## Consequences
 

@@ -18,7 +18,10 @@ from mapf.eval.power import (
     PanelDesign,
     _panel_windows,
     _realised_returns,
+    evaluate_calibration,
     evaluate_skill,
+    ex_dividend_window_probability,
+    max_non_overlapping_dates,
 )
 
 
@@ -98,3 +101,44 @@ def test_more_skill_is_more_detectable() -> None:
     )
     assert strong.power > weak.power
     assert strong.relative_improvement > weak.relative_improvement
+
+
+# ---------------------------------------------------------------------------
+# Calibration power, and the horizon decision
+# ---------------------------------------------------------------------------
+def test_perfect_calibration_is_not_flagged() -> None:
+    """Two-sided test, correctly sized. A forecaster with the right dispersion must
+    not be declared miscalibrated, or every reported calibration failure is noise."""
+    result = evaluate_calibration(
+        1.0, design=PanelDesign(), market=MarketModel(), trials=40, bootstrap_draws=150
+    )
+    assert result.power <= 0.10
+
+
+def test_a_grossly_overconfident_forecaster_is_always_caught() -> None:
+    """The first live run's actual failure: vol 0.05 against a realised 0.25."""
+    result = evaluate_calibration(
+        0.2, design=PanelDesign(), market=MarketModel(), trials=40, bootstrap_draws=150
+    )
+    assert result.power >= 0.95
+
+
+def test_calibration_is_far_more_detectable_than_direction() -> None:
+    """The finding ADR 0015 rests on, asserted so it cannot silently stop being true."""
+    design, market = PanelDesign(), MarketModel()
+    calibration = evaluate_calibration(
+        0.5, design=design, market=market, trials=40, bootstrap_draws=150
+    )
+    direction = evaluate_skill(0.20, design=design, market=market, trials=40, bootstrap_draws=150)
+    assert calibration.power > 2 * direction.power
+
+
+def test_a_shorter_horizon_frees_the_calendar() -> None:
+    assert max_non_overlapping_dates(5, 504) > 4 * max_non_overlapping_dates(21, 504)
+
+
+def test_a_third_of_21_day_windows_are_dividend_contaminated() -> None:
+    """The measured argument for the 5-day horizon: ADR 0013 excludes these, so the
+    longer window quietly costs a third of the reportable sample."""
+    assert ex_dividend_window_probability(21) == pytest.approx(0.333, abs=0.01)
+    assert ex_dividend_window_probability(5) == pytest.approx(0.079, abs=0.01)

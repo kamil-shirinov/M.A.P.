@@ -158,6 +158,97 @@ def _moving_block_bootstrap(
     return means
 
 
+def evaluate_calibration(
+    sigma_ratio: float,
+    *,
+    design: PanelDesign,
+    market: MarketModel,
+    trials: int = 150,
+    bootstrap_draws: int = 300,
+    seed: int = 20260813,
+) -> PowerResult:
+    """Power to detect a forecaster with NO directional skill that misjudges spread.
+
+    `sigma_ratio` is predicted dispersion over true: 0.2 is five times overconfident,
+    which is what the first live run actually produced (vol 0.05 against a realised
+    0.25). Two-sided, because being too wide is also a calibration failure.
+    """
+    rng = np.random.default_rng(seed)
+    sigma = market.annual_vol * math.sqrt(design.horizon_days / TRADING_DAYS_PER_YEAR)
+    reportable = design.reportable_forecasts
+
+    detections = 0
+    differences_seen: list[float] = []
+    baseline_seen: list[float] = []
+
+    for _ in range(trials):
+        ticker_ids, starts = _panel_windows(design, rng)
+        realised = _realised_returns(design, market, ticker_ids, starts, rng)
+        y, window_starts = _reportable_subset(design, ticker_ids, starts, realised, reportable)
+
+        zeros = np.zeros_like(y)
+        differences = np.asarray(
+            crps_normal(zeros, sigma * sigma_ratio, y) - crps_normal(zeros, sigma, y),
+            dtype=np.float64,
+        )
+        means = _moving_block_bootstrap(
+            differences,
+            window_starts,
+            rng,
+            draws=bootstrap_draws,
+            block_days=design.horizon_days * 2,
+        )
+        lower, upper = np.percentile(means, [2.5, 97.5])
+        if lower > 0 or upper < 0:
+            detections += 1
+        differences_seen.append(float(np.mean(differences)))
+        baseline_seen.append(float(np.mean(crps_normal(zeros, sigma, y))))
+
+    baseline = float(np.mean(baseline_seen))
+    difference = float(np.mean(differences_seen))
+    return PowerResult(
+        skill=sigma_ratio,
+        mean_difference=difference,
+        baseline_crps=baseline,
+        relative_improvement=-difference / baseline,
+        power=detections / trials,
+    )
+
+
+def _reportable_subset(
+    design: PanelDesign,
+    ticker_ids: NDArray[np.int64],
+    starts: NDArray[np.int64],
+    realised: NDArray[np.float64],
+    reportable: int,
+) -> tuple[NDArray[np.float64], NDArray[np.int64]]:
+    """Holdout tickers, then the post-cutoff share. What the headline is computed on."""
+    holdout = set(range(int(design.tickers * design.holdout_fraction)))
+    mask = np.array([t in holdout for t in ticker_ids])
+    keep_every = max(int(round(1.0 / design.post_cutoff_fraction)), 1)
+    mask &= (np.arange(mask.size) % keep_every) == 0
+    return realised[mask][:reportable], starts[mask][:reportable]
+
+
+def max_non_overlapping_dates(horizon_days: int, calendar_days: int) -> int:
+    """How many non-overlapping windows of this length fit one ticker's calendar.
+
+    The mechanical argument for a shorter horizon: at 21 days a two-year calendar
+    yields ~23 dates per ticker, at 5 days ~96. Panel shape stops being dictated by
+    the length of the post-cutoff span.
+    """
+    return max((calendar_days - horizon_days) // horizon_days, 0)
+
+
+def ex_dividend_window_probability(horizon_days: int, payments_per_year: int = 4) -> float:
+    """Chance a window contains an ex-dividend date, and so is contaminated (ADR 0013).
+
+    Not a simulation result — just arithmetic — but it is a real and quantifiable
+    advantage of a shorter horizon that is easy to overlook.
+    """
+    return min(payments_per_year * horizon_days / TRADING_DAYS_PER_YEAR, 1.0)
+
+
 def evaluate_skill(
     skill: float,
     *,
@@ -186,13 +277,9 @@ def evaluate_skill(
         ticker_ids, starts = _panel_windows(design, rng)
         realised = _realised_returns(design, market, ticker_ids, starts, rng)
 
-        # Report on the post-cutoff holdout only: half the tickers, then half of
-        # those windows by cutoff side.
-        holdout_tickers = set(range(int(design.tickers * design.holdout_fraction)))
-        mask = np.array([t in holdout_tickers for t in ticker_ids])
-        mask &= (np.arange(mask.size) % 2) == 0
-        realised = realised[mask][:reportable]
-        window_starts = starts[mask][:reportable]
+        realised, window_starts = _reportable_subset(
+            design, ticker_ids, starts, realised, reportable
+        )
 
         # A forecast mean correlated with the outcome at `skill`, with the rest of
         # its variance independent — the standard construction for a fixed
