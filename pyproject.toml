@@ -50,6 +50,18 @@ dependencies = [
   "feedparser>=6.0",        # RSS/Atom dialects are inconsistent in practice. Hand-rolling
                             #   on stdlib xml.etree is brittle across real-world feeds
 
+  # --- evaluation (Phase 2) ---
+  "numpy>=1.26",            # vectorised sampling for the Monte Carlo mixture and the
+                            #   block bootstrap. Already present transitively via pandas,
+                            #   but depending on a transitive dependency implicitly is how
+                            #   a build breaks when the intermediary drops it
+  "arch>=7.0",              # GARCH(1,1) baseline. Hand-rolling the MLE is ~50 lines and a
+                            #   bad idea here: a poorly-fit baseline flatters M.A.P., and
+                            #   that failure is invisible in the result
+  "scipy>=1.11",            # normal CDF/PDF for the closed-form CRPS. Arrives with arch
+                            #   anyway; declared because relying on a transitive dependency
+                            #   is how a build breaks when the intermediary drops it
+
   # --- output ---
   "plotly>=5.22",           # chart.html as a single self-contained file, no server and
                             #   no build step. matplotlib rejected: DoD criterion 8 asks
@@ -130,7 +142,7 @@ warn_required_dynamic_aliases = true
 # These libraries ship no type information. The ignore is confined to the adapter
 # modules that wrap them; it must never be widened to first-party code.
 [[tool.mypy.overrides]]
-module = ["yfinance.*", "plotly.*", "feedparser.*", "pyarrow.*"]
+module = ["yfinance.*", "plotly.*", "feedparser.*", "pyarrow.*", "arch.*", "scipy.*"]
 ignore_missing_imports = true
 
 # ---------------------------------------------------------------------------
@@ -165,6 +177,7 @@ type = "layers"
 layers = [
   "mapf.cli",
   "mapf.bootstrap",
+  "mapf.eval",
   "mapf.pipeline",
   "mapf.agents",
   "mapf.render",
@@ -187,6 +200,12 @@ forbidden_modules = ["mapf.providers", "mapf.data", "mapf.settings"]
 name = "Pipeline is parameterised by Protocols, never imports adapters"
 type = "forbidden"
 source_modules = ["mapf.pipeline"]
+forbidden_modules = ["mapf.providers", "mapf.data"]
+
+[[tool.importlinter.contracts]]
+name = "Evaluation is parameterised by Protocols, never imports adapters"
+type = "forbidden"
+source_modules = ["mapf.eval"]
 forbidden_modules = ["mapf.providers", "mapf.data"]
 
 [[tool.importlinter.contracts]]
