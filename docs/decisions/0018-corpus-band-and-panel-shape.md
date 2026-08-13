@@ -152,11 +152,34 @@ otherwise rescuable.
   what "calibrated" means.** Item 2.02 windows open on an earnings release, so
   realised volatility is far above the 25% unconditional baseline the power figures
   assume: an earnings jump with 5% standard deviation raises the 5-day dispersion
-  from 3.52% to 6.12%, an implied annual 43%. A model that states unconditional
-  volatility will read as k ≈ 0.58 — decisively detectable — but the finding would
-  be **"the model does not widen its interval for earnings"**, which is a sharper
-  and more interesting claim than generic overconfidence. It must be reported as
-  that claim and not as the other one.
+  from 3.52% to 6.12%, an implied annual 43%. This is handled by **splitting the
+  claim in two**, reported separately and never merged:
+
+  - **Absolute calibration**, scoped explicitly to earnings windows. A model
+    stating unconditional volatility reads as k ≈ 0.58 — decisively detectable —
+    but the finding is *"does not widen its interval for earnings"*, not generic
+    overconfidence, and must be worded as such.
+  - **Relative calibration against the baselines on the same windows.** The
+    confound **largely cancels in the paired comparison**: the random walk and
+    GARCH also run on unconditional or trailing volatility and also fail to widen
+    for a scheduled event, so both sides carry the same handicap and the paired
+    difference isolates what is actually different about M.A.P. This is the
+    confound-robust comparison and the more interesting of the two.
+
+- **A third baseline is added: trailing realised volatility scaled by an
+  earnings-day multiplier.** It costs no inference. Its purpose is to be the
+  benchmark that *does* widen, which converts the confound into the measurement:
+  if M.A.P. loses to it, the finding sharpens from "miscalibrated on earnings
+  windows" to **"fails to widen for a scheduled event that a two-line heuristic
+  handles"** — a more useful result than either absolute number.
+
+  **The multiplier is derived from data, never assumed.** The 5% figure above is
+  illustrative arithmetic and is not used. The estimator is the ratio of realised
+  dispersion in earnings windows to the same ticker's non-earnings windows,
+  computed per ticker over the pre-corpus history and applied out of sample.
+  Item 2.02 filing dates *are* the earnings dates, so the corpus builder already
+  fetches everything the estimator needs — no extra source, and the multiplier is
+  fit on history strictly before the forecast window it is applied to.
 - Power figures in ADR 0015 assume σ from a 25% annual vol. They are recomputed at
   earnings-window volatility before the primary result is quoted.
 - Option 3 (a second item type) stays available and unused. If the clean band ever
@@ -188,3 +211,37 @@ which is exactly 0 for any constant responder. That requires an **in-knowledge
 control period** to be interpretable — if `d'` is 0 even deep inside the training
 data, the instrument is dead rather than the knowledge absent. The current run adds
 2023H1 and 2023H2 as controls for that reason.
+
+**The consequence is stronger than "underpowered", and ADR 0017 is corrected by
+it.** Every accuracy figure in the original analyst recall curve — the 50%, 60%,
+20%, 33% readings — is response bias rather than a measurement of recall. Those
+numbers were **invalid, not merely noisy**, so the correct statement is not that
+the second signal was too weak to confirm the boundary. It is that **the analyst
+boundary has never had a second signal at any point.** The hedge curve has been
+alone since the beginning.
+
+### Stopping rule — pre-committed, before the results are looked at
+
+Three instruments have failed and probe iteration can absorb unlimited effort, so
+the exit is fixed in advance rather than decided while tired:
+
+- **If `d'` is clearly above zero at the 2023H1/H2 controls and the curve has a
+  knee** — the instrument works and has found something. That is the convergent
+  validity that has been missing. Use it, and set the boundary where the knee is.
+- **If `d'` is at or near zero even at the controls** — the instrument is dead, not
+  the knowledge absent. **Stop. Do not build a fourth variant.**
+
+On the dead-instrument branch the fallback needs no invention, because it is already
+what Option 4 was chosen to tolerate:
+
+1. Place the boundary at the **earliest plausible point**, so that "clean" is
+   conservatively small rather than optimistically large.
+2. **Widen the ambiguous band** to absorb the uncertainty.
+3. Document the split as **single-signal — hedge rate only, with the
+   self-reported cutoff as weak and internally contradictory corroboration.**
+4. Proceed to construction.
+
+Option 4 tolerates a fuzzy line by design. A boundary that moves only changes how
+much lands in the ambiguous band, and because both bands are run with the identical
+design, **the leakage estimate survives regardless of where the line is drawn.**
+That is precisely why the fuzziness is affordable.
