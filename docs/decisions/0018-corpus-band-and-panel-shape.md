@@ -245,3 +245,38 @@ Option 4 tolerates a fuzzy line by design. A boundary that moves only changes ho
 much lands in the ambiguous band, and because both bands are run with the identical
 design, **the leakage estimate survives regardless of where the line is drawn.**
 That is precisely why the fuzziness is affordable.
+
+### Budget exhaustion is non-random missingness, and it is worst at the knee
+
+The analyst deliberates longest on what it cannot retrieve, so items lost to
+`ModelBudgetExhaustedError` are preferentially the ones it is least certain about.
+Dropping them leaves the confident items and **biases `d'` upward**, and it does so
+hardest in the post-cutoff periods — exactly where the knee would be read.
+
+Two mitigations, neither of which requires trusting a caveat:
+
+1. **`d'` is reported as bounds, never as a point estimate.** Once with exhausted
+   items dropped, once with them coded as discrimination failures — a miss on
+   signal trials, a false alarm on noise trials. The truth lies inside that
+   interval. **A knee that survives both readings is real; a knee that appears only
+   under the dropped reading was manufactured by the missingness.**
+2. **Deliberation length is a fourth signal, and it is free.** `reasoning_tokens`
+   is already recorded per item. If the model thinks longer about what it cannot
+   retrieve, deliberation length by period is itself a boundary curve — and it is
+   **immune to this bias, because an exhausted item is not missing data but the
+   maximal observation**, censored at the budget rather than absent. That gives
+   four signals in total: hedge rate, `d'`, self-report, and deliberation length.
+
+The confound becomes the measurement, the same move as the earnings baseline.
+
+### Contingency, held in reserve — do not switch mid-run
+
+Gemma 4 has configurable thinking, and for a *recall* probe deliberation is
+arguably irrelevant: either the model holds the fact or it does not. Suppressing
+thinking would remove exhaustion entirely and cut ~347 s/item to seconds.
+
+**If the exhaustion rate climbs materially in the post-cutoff periods, that is the
+fix — not another round of discounting.** It is recorded here so it is not
+reinvented under pressure. It must not be switched on mid-run: it changes the
+instrument, so any comparison would be across two different instruments, and the
+run would have to restart from the controls.
