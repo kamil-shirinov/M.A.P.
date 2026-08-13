@@ -177,6 +177,7 @@ type = "layers"
 layers = [
   "mapf.cli",
   "mapf.bootstrap",
+  "mapf.corpus",
   "mapf.eval",
   "mapf.pipeline",
   "mapf.agents",
@@ -209,10 +210,16 @@ source_modules = ["mapf.eval"]
 forbidden_modules = ["mapf.providers", "mapf.data"]
 
 [[tool.importlinter.contracts]]
+name = "Corpus selection is parameterised by Protocols, never imports adapters"
+type = "forbidden"
+source_modules = ["mapf.corpus"]
+forbidden_modules = ["mapf.providers", "mapf.data"]
+
+[[tool.importlinter.contracts]]
 name = "Core is a sink"
 type = "forbidden"
 source_modules = ["mapf.core"]
 forbidden_modules = [
   "mapf.agents", "mapf.bootstrap", "mapf.cli", "mapf.data", "mapf.pipeline",
-  "mapf.prompts", "mapf.providers", "mapf.render", "mapf.settings",
+  "mapf.prompts", "mapf.providers", "mapf.render", "mapf.settings", "mapf.corpus",
 ]

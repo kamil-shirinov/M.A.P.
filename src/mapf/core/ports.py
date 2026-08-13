@@ -177,6 +177,31 @@ class DividendSource(Protocol):
     def dividends_in(self, ticker: str, start: date, end: date) -> DividendWindow: ...
 
 
+class FilingSource(Protocol):
+    """Item 2.02 filing dates — quarterly earnings, and nothing else.
+
+    The item filter is the whole point. An 8-K count across *all* item types runs
+    8–12 a year and suggests a panel that cannot actually be built; Item 2.02 is
+    four a year at most (ADR 0018). Widening it silently changes what a forecast
+    window contains.
+    """
+
+    def earnings_dates(self, ticker: str, start: date, end: date) -> tuple[date, ...]:
+        """Filing dates in ascending order. Empty is a legitimate answer."""
+        ...
+
+
+class PriceAvailability(Protocol):
+    """Whether a ticker has usable history over a window.
+
+    Kept separate from `MarketDataProvider` because selection asks a yes/no
+    question about a few hundred tickers, and must not fetch, parse and cache a
+    full window for each one only to discard it.
+    """
+
+    def has_history(self, ticker: str, start: date, end: date) -> bool: ...
+
+
 class SymbolIndex(Protocol):
     """The local, searchable symbol universe. US-listed only, by construction."""
 
