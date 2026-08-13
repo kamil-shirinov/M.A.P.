@@ -280,3 +280,49 @@ fix — not another round of discounting.** It is recorded here so it is not
 reinvented under pressure. It must not be switched on mid-run: it changes the
 instrument, so any comparison would be across two different instruments, and the
 run would have to restart from the controls.
+
+## Outcome — the rule fired on the dead branch
+
+**The controls came back dead, and the fallback is in force.**
+
+| period | n | exhausted | YES answers | d′ dropped | d′ coded | interval | bias c |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 2023H1 (control) | 24 | 8% | **0 of 22** | −0.08 | −0.90 | **[−0.90, −0.08]** | 1.73 |
+| 2023H2 (control) | 24 | 8% | **0 of 22** | −0.08 | −0.90 | **[−0.90, −0.08]** | 1.73 |
+
+Both control periods sit deep inside the training data of every model in the
+registry. **The analyst said YES to 0 of 44 usable control items**, including
+events it must have seen. `d'` is at or below zero under both codings and its
+worst-case 95% lower bound is −2.78. The response bias `c = 1.73` is extreme.
+
+This is not a model that has forgotten 2023. It is an instrument that cannot
+measure recall in this model at all, because the model will not answer YES to a
+dated factual question regardless of whether the event happened. **Per the
+pre-committed rule: stopped, and no fourth variant built.**
+
+The bounded reading earned its place immediately — the two codings differ by 0.82,
+which is larger than either estimate, so a point estimate here would have carried
+false precision in a case where nothing was measured.
+
+### The fallback, applied
+
+1. **Ambiguity starts at the earliest plausible cutoff, 2025H1** — where the hedge
+   curve first lifts off zero.
+2. **The ambiguous band widens to 2025H1–2025H2**, absorbing the uncertainty.
+3. **Clean band: 2026H1 onward**, 161 trading days, resting on **the hedge curve
+   alone** with the self-reported cutoff as weak and internally contradictory
+   corroboration. Documented as single-signal wherever it is reported.
+4. Construction proceeds on that basis.
+
+Option 4 is what makes this affordable: both bands run with the identical design,
+so **the leakage estimate survives wherever the line falls.**
+
+### The fourth curve is still accumulating
+
+The deliberation curve is unaffected by the dead instrument — it does not depend on
+the model answering correctly, only on how long it thinks — so the run continues
+purely to collect it. Controls read **median 382 and 338 reasoning tokens** with
+heavy right tails (means 1381 and 1374, ~8% censored at the budget). If the median
+climbs materially past 2025H1 while the controls sit near 350, that is a second
+signal obtained for free; if it stays flat, the split remains single-signal and is
+reported as such. **It is a bonus, not a blocker: construction does not wait on it.**
