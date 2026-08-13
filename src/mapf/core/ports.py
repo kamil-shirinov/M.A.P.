@@ -191,15 +191,19 @@ class FilingSource(Protocol):
         ...
 
 
-class PriceAvailability(Protocol):
-    """Whether a ticker has usable history over a window.
+class LiquidityScreen(Protocol):
+    """Median daily dollar volume over a window, or `None` for no usable history.
 
-    Kept separate from `MarketDataProvider` because selection asks a yes/no
-    question about a few hundred tickers, and must not fetch, parse and cache a
-    full window for each one only to discard it.
+    Kept separate from `MarketDataProvider` because selection asks one summary
+    question about a few hundred tickers and must not assemble a full validated
+    `PriceWindow` for each only to discard it.
+
+    One number rather than a `has_history` predicate plus a volume lookup: both
+    answers come from the same fetch, and splitting them invites two fetches or a
+    cache that has to be reasoned about.
     """
 
-    def has_history(self, ticker: str, start: date, end: date) -> bool: ...
+    def median_dollar_volume(self, ticker: str, start: date, end: date) -> float | None: ...
 
 
 class SymbolIndex(Protocol):

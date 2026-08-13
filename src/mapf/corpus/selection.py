@@ -33,12 +33,13 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from mapf.core.models import DomainModel, Ticker
-from mapf.core.ports import FilingSource, PriceAvailability
+from mapf.core.ports import FilingSource, LiquidityScreen
 
 Split = Literal["dev", "holdout"]
 RejectionReason = Literal[
     "no_cik",
     "no_price_history",
+    "illiquid",
     "too_few_filings",
     "not_reached",
 ]
@@ -69,7 +70,12 @@ class SelectionCriteria(DomainModel):
     seed: int
     target_tickers: int = Field(default=120, ge=1)
     min_filings_per_band: int = Field(default=2, ge=1)
-    history_days: int = Field(default=730, ge=1)
+    history_days: int = Field(default=365, ge=1)
+    # A seeded draw from every US filer is dominated by micro-caps, whose realised
+    # volatility is nowhere near the large-cap 25% every power figure in ADR 0018
+    # assumes. The screen keeps the assumption without making selection subjective:
+    # the floor is pre-registered here and applied mechanically along the ordering.
+    min_median_dollar_volume: float = Field(default=50_000_000.0, ge=0.0)
     # The ambiguous band is roughly twice as long, so it supplies roughly twice the
     # filings. Left uncapped it would more than double the inference bill for a
     # number that is only ever read as a difference. Capping the second band to the
@@ -147,18 +153,25 @@ def select(
     *,
     criteria: SelectionCriteria,
     filings: FilingSource,
-    prices: PriceAvailability,
+    liquidity: LiquidityScreen,
     ciks: Sequence[str] | None = None,
 ) -> Corpus:
     """Walk the seeded ordering, accepting until the target is met.
 
     `ciks` is the set of tickers known to the SEC index; a candidate outside it is
     rejected as `no_cik` rather than silently queried and found empty.
+
+    The liquidity screen is measured over `history_days` ending the day before the
+    earlier band opens, so selection never sees inside a forecast window.
     """
     ordering = seeded_ordering(candidates, criteria.seed)
     digest = sha256("\n".join(ordering).encode()).hexdigest()
     known = {c.strip().upper() for c in ciks} if ciks is not None else None
     first, second = criteria.bands
+    # Measured strictly before either band opens. A screen that overlapped a band
+    # would select on data from the period being forecast.
+    screen_end = min(first.first_open, second.first_open) - timedelta(days=1)
+    screen_start = screen_end - timedelta(days=criteria.history_days)
 
     accepted: list[TickerPlan] = []
     rejected: list[Rejection] = []
@@ -170,10 +183,18 @@ def select(
         if known is not None and ticker not in known:
             rejected.append(Rejection(ticker=ticker, reason="no_cik"))
             continue
-        if not prices.has_history(
-            ticker, _history_start(first, criteria.history_days), second.last_open
-        ):
+        volume = liquidity.median_dollar_volume(ticker, screen_start, screen_end)
+        if volume is None:
             rejected.append(Rejection(ticker=ticker, reason="no_price_history"))
+            continue
+        if volume < criteria.min_median_dollar_volume:
+            rejected.append(
+                Rejection(
+                    ticker=ticker,
+                    reason="illiquid",
+                    detail=f"median ${volume:,.0f}/day < ${criteria.min_median_dollar_volume:,.0f}",
+                )
+            )
             continue
 
         per_band: list[BandFilings] = []
@@ -218,5 +239,3 @@ def select(
     )
 
 
-def _history_start(band: Band, history_days: int) -> date:
-    return band.first_open - timedelta(days=history_days)

@@ -42,12 +42,21 @@ class FakeFilings:
         return tuple(date(start.year, 1 + 2 * i, 15) for i in range(n))
 
 
-class FakePrices:
-    def __init__(self, missing: set[str] | None = None) -> None:
+class FakeLiquidity:
+    def __init__(
+        self,
+        missing: set[str] | None = None,
+        thin: dict[str, float] | None = None,
+    ) -> None:
         self.missing = missing or set()
+        self.thin = thin or {}
+        self.windows: list[tuple[date, date]] = []
 
-    def has_history(self, ticker: str, start: date, end: date) -> bool:
-        return ticker not in self.missing
+    def median_dollar_volume(self, ticker: str, start: date, end: date) -> float | None:
+        self.windows.append((start, end))
+        if ticker in self.missing:
+            return None
+        return self.thin.get(ticker, 500_000_000.0)
 
 
 def _criteria(**over: object) -> SelectionCriteria:
@@ -63,7 +72,7 @@ def _criteria(**over: object) -> SelectionCriteria:
 
 def _select(
     filings: FakeFilings | None = None,
-    prices: FakePrices | None = None,
+    liquidity: FakeLiquidity | None = None,
     candidates: Sequence[str] | None = None,
     **over: object,
 ) -> Corpus:
@@ -71,7 +80,7 @@ def _select(
         list(candidates if candidates is not None else UNIVERSE),
         criteria=_criteria(**over),
         filings=filings or FakeFilings(),
-        prices=prices or FakePrices(),
+        liquidity=liquidity or FakeLiquidity(),
     )
 
 
@@ -144,8 +153,8 @@ def test_the_split_is_balanced() -> None:
 
 def test_the_split_stays_balanced_when_tickers_are_rejected() -> None:
     """Alternating along the acceptance order, not hashing, is what holds this."""
-    prices = FakePrices(missing=set(UNIVERSE[:20]))
-    corpus = _select(prices=prices, target_tickers=8)
+    liquidity = FakeLiquidity(missing=set(UNIVERSE[:20]))
+    corpus = _select(liquidity=liquidity, target_tickers=8)
     dev = sum(1 for p in corpus.accepted if p.split == "dev")
     assert len(corpus.accepted) == 8
     assert dev == 4
@@ -161,7 +170,7 @@ def test_a_rejected_ticker_is_replaced_by_the_next_name_in_sequence() -> None:
 
     # Knock out the third: the fill must be ordering[5], never a hand-picked name.
     victim = ordering[2]
-    corpus = _select(prices=FakePrices(missing={victim}), target_tickers=5)
+    corpus = _select(liquidity=FakeLiquidity(missing={victim}), target_tickers=5)
     assert [p.ticker for p in corpus.accepted] == [
         ordering[0], ordering[1], ordering[3], ordering[4], ordering[5],
     ]
@@ -169,7 +178,7 @@ def test_a_rejected_ticker_is_replaced_by_the_next_name_in_sequence() -> None:
 
 def test_every_rejection_carries_a_reason() -> None:
     victim = seeded_ordering(UNIVERSE, 20260813)[1]
-    corpus = _select(prices=FakePrices(missing={victim}), target_tickers=5)
+    corpus = _select(liquidity=FakeLiquidity(missing={victim}), target_tickers=5)
     assert all(r.reason for r in corpus.rejected)
     assert next(r for r in corpus.rejected if r.ticker == victim).reason == "no_price_history"
 
@@ -179,7 +188,7 @@ def test_candidates_outside_the_sec_index_are_rejected_as_no_cik() -> None:
         ["AAPL", "NOTREAL"],
         criteria=_criteria(target_tickers=2),
         filings=FakeFilings(),
-        prices=FakePrices(),
+        liquidity=FakeLiquidity(),
         ciks=["AAPL"],
     )
     assert [p.ticker for p in corpus.accepted] == ["AAPL"]
@@ -272,3 +281,47 @@ def test_a_band_with_fewer_filings_than_the_cap_is_left_alone() -> None:
         by_band = {b.band: b.dates for b in plan.filings}
         assert len(by_band["ambiguous"]) == 2
         assert len(by_band["clean"]) == 3
+
+
+# ---------------------------------------------------------------------------
+# The liquidity screen
+# ---------------------------------------------------------------------------
+def test_a_thinly_traded_name_is_rejected_as_illiquid() -> None:
+    """A seeded draw from every US filer is mostly micro-caps, whose volatility is
+    nowhere near the large-cap figure the power analysis assumes."""
+    victim = seeded_ordering(UNIVERSE, 20260813)[1]
+    corpus = _select(liquidity=FakeLiquidity(thin={victim: 1_000_000.0}), target_tickers=5)
+    rejection = next(r for r in corpus.rejected if r.ticker == victim)
+    assert rejection.reason == "illiquid"
+    assert "$1,000,000/day" in rejection.detail
+
+
+def test_no_history_is_distinguished_from_illiquid() -> None:
+    order = seeded_ordering(UNIVERSE, 20260813)
+    corpus = _select(
+        liquidity=FakeLiquidity(missing={order[0]}, thin={order[1]: 1.0}),
+        target_tickers=4,
+    )
+    reasons = {r.ticker: r.reason for r in corpus.rejected}
+    assert reasons[order[0]] == "no_price_history"
+    assert reasons[order[1]] == "illiquid"
+
+
+def test_the_screen_window_closes_before_either_band_opens() -> None:
+    """Screening on data from inside a band would select on the period forecast."""
+    liquidity = FakeLiquidity()
+    _select(liquidity=liquidity, target_tickers=3)
+    start, end = liquidity.windows[0]
+    assert end < AMBIG.first_open
+    assert end < CLEAN.first_open
+    assert start < end
+
+
+def test_a_name_exactly_at_the_floor_is_kept() -> None:
+    victim = seeded_ordering(UNIVERSE, 20260813)[0]
+    corpus = _select(
+        liquidity=FakeLiquidity(thin={victim: 50_000_000.0}),
+        target_tickers=3,
+        min_median_dollar_volume=50_000_000.0,
+    )
+    assert victim in {p.ticker for p in corpus.accepted}
