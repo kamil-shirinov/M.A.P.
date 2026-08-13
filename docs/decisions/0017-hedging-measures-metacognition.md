@@ -78,10 +78,19 @@ being an argument and becomes a monitored quantity. **If fidelity ever drops bel
   evidence for how soft these boundaries are, and averaging it away would destroy
   exactly that evidence.
 - **The analyst boundary rests on one signal.** Its hedge curve says ~2025H1; its
-  recall curve was underpowered (~6 items per half-year, SE 0.20 against a 50%
-  baseline) and could not confirm or contradict it. That is a design error in the
-  probe, not a property of the model — corrected by a scoped re-run at 24 items
-  per period over 2024H2–2026H1.
+  recall curve could not confirm or contradict it.
+
+  **Correction, 2026-08-13 — this was worse than the "underpowered" originally
+  written here.** The recall instrument asked yes/no questions, and the analyst
+  answered NO to 24 of 24 in a properly sized re-run. A constant responder scores
+  exactly 50% on a balanced item set, so **every accuracy figure in the original
+  curve — 50%, 60%, 20%, 33% — is response bias rather than recall.** They were
+  *invalid*, not merely noisy. The honest statement is therefore not that the
+  second signal was too weak to confirm the boundary: **the analyst boundary has
+  never had a second signal at any point.** The bias-immune statistic is
+  sensitivity, `d' = z(hit) − z(false alarm)`, which is 0 for any constant
+  responder and requires an in-knowledge control period to be interpretable. See
+  ADR 0018 for the re-run and its pre-committed stopping rule.
 - **No structuralist boundary was measured at all.** Both methods are silent.
   Recorded as unknown, never as clean.
 - **Generalisable beyond this project:** any leakage probe that relies on a model
