@@ -49,6 +49,28 @@ _YES = re.compile(r"\byes\b", re.IGNORECASE)
 _NO = re.compile(r"\bno\b", re.IGNORECASE)
 
 
+# The probe ran at 2,500 tokens while the pipeline ran at 12,000, and the analyst
+# exhausted its budget mid-reason on every open question — producing holes in
+# exactly the curve that matters most. Two numbers that had to move together and
+# did not, which is the same defect as the max_tokens/read_timeout pair.
+#
+# So probe budgets are DERIVED from the agent's configured budget rather than set
+# beside it. Temperature is not inherited: a probe must be deterministic, and the
+# analyst runs at 0.7.
+PROBE_BUDGET_MULTIPLE = 1.0
+
+
+def probe_budget(agent_max_tokens: int | None, *, floor: int = 4000) -> int:
+    """Token budget for a probe call, inherited from what the agent actually uses.
+
+    `floor` covers an agent with no configured ceiling, where the pipeline would
+    otherwise be relying on a server default that the probe cannot see.
+    """
+    if agent_max_tokens is None:
+        return floor
+    return max(int(agent_max_tokens * PROBE_BUDGET_MULTIPLE), floor)
+
+
 @dataclass(frozen=True)
 class EventItem:
     """A yes/no question whose answer EDGAR settles.

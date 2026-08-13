@@ -441,6 +441,8 @@ ADRs live in `docs/decisions/`. Index them here as they are written.
 | [0012](decisions/0012-price-cache-and-retroactive-adjustment.md) | The price cache and retroactive adjustment | Accepted |
 | [0013](decisions/0013-ex-dividend-windows.md) | Forecast price, score price, flag where they diverge | Accepted |
 | [0014](decisions/0014-the-units-experiment.md) | Diagnosing the first live run by experiment | Accepted |
+| [0015](decisions/0015-what-the-corpus-can-actually-answer.md) | What a feasible corpus can actually answer | Accepted |
+| [0016](decisions/0016-five-day-horizon.md) | The forecast horizon is five trading days | Accepted |
 
 ### Pinned in review, ADR owed
 

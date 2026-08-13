@@ -147,3 +147,25 @@ def test_an_event_item_records_its_edgar_provenance() -> None:
         "0000320193-25-000001",
     )
     assert item.accession is not None
+
+
+# ---------------------------------------------------------------------------
+# Probe budgets inherit rather than being configured beside the pipeline's
+# ---------------------------------------------------------------------------
+def test_a_probe_inherits_the_agent_budget() -> None:
+    """The probe ran at 2,500 tokens while the pipeline ran at 12,000, and the
+    analyst exhausted its budget mid-reason on every open question — holes in
+    exactly the curve that mattered most. Two numbers that had to move together
+    and did not, the same defect as the max_tokens/read_timeout pair."""
+    from mapf.eval.cutoff import probe_budget
+
+    assert probe_budget(12000) == 12000
+    assert probe_budget(2500) == 4000  # floored: a probe is never tighter than this
+
+
+def test_an_unconfigured_agent_gets_the_floor() -> None:
+    """No configured ceiling means the pipeline is relying on a server default the
+    probe cannot see, so it must not guess low."""
+    from mapf.eval.cutoff import probe_budget
+
+    assert probe_budget(None) == 4000

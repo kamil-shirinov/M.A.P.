@@ -48,8 +48,9 @@ def test_within_ticker_windows_never_overlap() -> None:
 
 def test_a_calendar_too_short_for_the_panel_is_rejected() -> None:
     with pytest.raises(ValueError, match="need"):
+        # 60 windows of 5 days need 300 trading days; 252 leaves 247 usable.
         _panel_windows(
-            PanelDesign(dates_per_ticker=40, calendar_days=252), np.random.default_rng(0)
+            PanelDesign(dates_per_ticker=60, calendar_days=252), np.random.default_rng(0)
         )
 
 
@@ -131,6 +132,11 @@ def test_calibration_is_far_more_detectable_than_direction() -> None:
     )
     direction = evaluate_skill(0.20, design=design, market=market, trials=40, bootstrap_draws=150)
     assert calibration.power > 2 * direction.power
+
+
+def test_the_panel_default_horizon_is_five_days() -> None:
+    """Frozen by ADR 0016. Pinned so a later edit has to be deliberate."""
+    assert PanelDesign().horizon_days == 5
 
 
 def test_a_shorter_horizon_frees_the_calendar() -> None:

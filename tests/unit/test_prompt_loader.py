@@ -239,6 +239,7 @@ def test_every_shipped_template_loads() -> None:
         "scenario_analyst.v2.md",
         "structuralist.v2.md",
         "structuralist_repair.v2.md",
+        "scenario_analyst.v3.md",
     }
 
 
@@ -428,3 +429,42 @@ def test_v1_is_kept_intact_beside_v2(name: str) -> None:
     store = FilePromptStore()
     assert f"{name}.v1.md" in store.available()
     assert f"{name}.v2.md" in store.available()
+
+
+def test_the_analyst_v3_worked_example_is_scaled_to_a_five_day_horizon() -> None:
+    """Horizon and worked-example scale are coupled (ADR 0016). v2's `+0.06` is
+    0.83 sigma over 21 days but 1.70 sigma over 5 — left unchanged the model would
+    anchor on 21-day magnitudes for a 5-day window, which is the units bug of
+    2026-08-12 in different clothes."""
+    body = _v2_or_later("scenario_analyst", "v3")
+    assert "ESTIMATE bullish weight=0.30 return=+0.03 vol=0.28" in body
+    assert "half a percent" in body
+    assert "single trading week" in body
+
+
+def test_the_analyst_v3_states_that_volatility_does_not_rescale() -> None:
+    """The trap inside the fix: `return` is a move over the window and shrinks with
+    the horizon, `vol` is annualised and does not. Rescaling both would be the same
+    error in the opposite direction."""
+    body = _v2_or_later("scenario_analyst", "v3")
+    assert "annualised" in body
+    assert "does not shrink with the horizon" in body
+
+
+def test_v2_is_kept_beside_v3() -> None:
+    """v2 is the record of what produced the 21-day runs; deleting it would make
+    those unreproducible."""
+    assert "scenario_analyst.v2.md" in FilePromptStore().available()
+
+
+def _v2_or_later(name: str, version: str) -> str:
+    store = FilePromptStore()
+    return "\n".join(
+        m.content
+        for m in store.render(
+            name,
+            version,
+            trusted={"ticker": TICKER, "as_of_date": AS_OF, "horizon_days": TrustedText("5")},
+            untrusted={"material_facts": quarantine("- A fact.")},
+        ).messages
+    )

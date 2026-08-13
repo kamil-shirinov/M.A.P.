@@ -106,9 +106,15 @@ temperature = 0.0
 # here, not a change to mapf.agents — which is what CLAUDE.md §4 says versioning
 # is for, and what was not actually true until the agents took the template and
 # version as constructor parameters.
+# The analyst is on v3 because its worked example is scaled to the forecast
+# horizon, and the horizon moved from 21 to 5 trading days (ADR 0016). Horizon and
+# worked-example scale are COUPLED and must move together: left at v2, the model
+# would anchor on 21-day magnitudes for a 5-day window, which is the units bug of
+# 2026-08-12 wearing different clothes. intake and structuralist carry no
+# horizon-scaled content and stay at v2.
 [prompts]
 intake = "v2"
-analyst = "v2"
+analyst = "v3"
 structuralist = "v2"
 
 # ---------------------------------------------------------------------------

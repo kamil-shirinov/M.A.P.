@@ -41,7 +41,7 @@ TRADING_DAYS_PER_YEAR = 252
 class PanelDesign:
     tickers: int = 30
     dates_per_ticker: int = 8
-    horizon_days: int = 21
+    horizon_days: int = 5  # frozen by ADR 0016
     calendar_days: int = 504  # two years of trading days
     holdout_fraction: float = 0.5
     post_cutoff_fraction: float = 0.5

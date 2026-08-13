@@ -19,7 +19,9 @@ from mapf.settings import ModelRegistry, load
 @app.command()
 def run(
     ticker: str = typer.Argument(..., help="Ticker to forecast, e.g. AAPL."),
-    horizon: int = typer.Option(21, "--horizon", help="Forecast horizon in trading days."),
+    horizon: int = typer.Option(
+        5, "--horizon", help="Forecast horizon in trading days (ADR 0016)."
+    ),
     news_dir: Path | None = typer.Option(None, help="Override the configured news directory."),
     fixtures: Path | None = typer.Option(
         None, help="Replay recorded LLM fixtures instead of calling a server."
