@@ -153,6 +153,21 @@ untested bonus rather than a justification.
   independent — and most likely reflects the bootstrap's fixed 42-day blocks
   becoming mostly empty at low density rather than anything about panel design.
   It needs a variable block size before it means anything.
+
+  **Update 2026-08-13 — the diagnosis was right, and the defect is fixed.**
+  `_moving_block_bootstrap` drew block starts uniformly across the span and
+  silently discarded the empty draws, so the resample was far smaller than the
+  sample. Blocks now begin only on occupied days and are drawn until the resample
+  matches the sample size. Re-derived, the figures are **20% / 18% / 13% / 12%** —
+  monotone rather than erratic, so the instability is gone and the direction of
+  the original conclusion survives.
+
+  **It stays uncited, for a different reason.** It is measured over 2–16 years and
+  every live question concerns a 7–20 month band; a result can be sound at one
+  scale and irrelevant at another. Where clustering matters it is now measured
+  directly on the panel in question (ADR 0018), validated against forced-clustering
+  stress cases. This experiment is retained as the record of a fixed bug, not as
+  evidence for anything.
 - The dominant cost is the analyst at ~6.7 minutes of a ~9 minute run. If
   directional skill ever becomes the priority, that is the number to attack first —
   but not before there is a way to measure whether attacking it made things worse.

@@ -16,12 +16,14 @@ from mapf.eval.power import (
     TRADING_DAYS_PER_YEAR,
     MarketModel,
     PanelDesign,
+    _moving_block_bootstrap,
     _panel_windows,
     _realised_returns,
     evaluate_calibration,
     evaluate_skill,
     ex_dividend_window_probability,
     max_non_overlapping_dates,
+    occupied_blocks,
 )
 
 
@@ -148,3 +150,65 @@ def test_a_third_of_21_day_windows_are_dividend_contaminated() -> None:
     longer window quietly costs a third of the reportable sample."""
     assert ex_dividend_window_probability(21) == pytest.approx(0.333, abs=0.01)
     assert ex_dividend_window_probability(5) == pytest.approx(0.079, abs=0.01)
+
+
+# ---------------------------------------------------------------------------
+# The block bootstrap under a clustered panel
+#
+# Item 2.02 filings land in reporting season, so most of the calendar carries no
+# observation at all. The earlier implementation drew block starts uniformly over
+# the span and silently dropped the empty draws, which is what made the ADR 0015
+# calendar-span experiment unusable.
+# ---------------------------------------------------------------------------
+def _clustered_starts() -> np.ndarray:
+    """Three reporting seasons inside a 160-day band; the rest of it empty."""
+    return np.concatenate(
+        [np.repeat(np.arange(base, base + 15), 8) for base in (10, 70, 130)]
+    ).astype(np.int64)
+
+
+def test_the_resample_is_the_size_of_the_sample_even_when_the_calendar_is_empty() -> None:
+    """The defect being guarded: a resample far smaller than the sample inflates
+    the bootstrap variance, and every power figure built on it is wrong."""
+    starts = _clustered_starts()
+    differences = np.ones(starts.size, dtype=np.float64)
+    means = _moving_block_bootstrap(
+        differences, starts, np.random.default_rng(0), draws=50, block_days=10
+    )
+    # Constant differences: any correctly sized resample averages to exactly 1.0.
+    assert np.allclose(means, 1.0)
+
+
+def test_every_drawn_block_carries_observations() -> None:
+    """With 80% of the calendar empty, uniform block starts would mostly miss."""
+    starts = _clustered_starts()
+    rng = np.random.default_rng(1)
+    differences = rng.normal(size=starts.size)
+    means = _moving_block_bootstrap(
+        differences, starts, rng, draws=200, block_days=10
+    )
+    # A bootstrap that kept only a handful of blocks per draw would scatter far
+    # more widely than the sample's own standard error.
+    assert means.std(ddof=1) < 3.0 * differences.std(ddof=1) / math.sqrt(starts.size)
+
+
+def test_the_bootstrap_still_recovers_the_sample_mean() -> None:
+    starts = _clustered_starts()
+    rng = np.random.default_rng(2)
+    differences = rng.normal(loc=0.5, size=starts.size)
+    means = _moving_block_bootstrap(
+        differences, starts, rng, draws=400, block_days=10
+    )
+    assert means.mean() == pytest.approx(differences.mean(), abs=0.05)
+
+
+def test_occupied_blocks_counts_clusters_not_forecasts() -> None:
+    """360 forecasts over three seasons are not 360 independent observations."""
+    starts = _clustered_starts()
+    assert starts.size == 360
+    assert occupied_blocks(starts, 21) <= 9
+
+
+def test_occupied_blocks_is_the_full_count_when_dates_are_spread() -> None:
+    spread = np.arange(0, 200, 21, dtype=np.int64)
+    assert occupied_blocks(spread, 21) == spread.size

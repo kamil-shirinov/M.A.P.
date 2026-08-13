@@ -139,23 +139,43 @@ def _moving_block_bootstrap(
     and the serial dependence (windows that overlap), which resampling individual
     forecasts would destroy — and destroying it is how a confidence interval ends
     up far too narrow.
+
+    Blocks begin only on days that actually carry an observation, and enough are
+    drawn to match the original sample size. Both matter once the panel is not
+    uniform in time: Item 2.02 filings cluster into reporting season, leaving most
+    of the calendar empty, and an earlier version that drew block starts uniformly
+    across the span silently discarded every empty draw. The resample was then far
+    smaller than the sample, which is why the calendar-span experiment in ADR 0015
+    produced a result that had to be withheld.
     """
-    span = int(starts.max()) + 1
-    n_blocks = max(1, math.ceil(span / block_days))
     order = np.argsort(starts)
     sorted_starts = starts[order]
     sorted_diffs = differences[order]
+    occupied = np.unique(sorted_starts)
+    target = differences.size
 
     means = np.empty(draws, dtype=np.float64)
     for draw in range(draws):
         picked: list[NDArray[np.float64]] = []
-        for _ in range(n_blocks):
-            begin = int(rng.integers(0, max(span - block_days, 1)))
+        taken = 0
+        while taken < target:
+            begin = int(occupied[rng.integers(0, occupied.size)])
             lo, hi = np.searchsorted(sorted_starts, (begin, begin + block_days))
-            if hi > lo:
-                picked.append(sorted_diffs[lo:hi])
-        means[draw] = float(np.mean(np.concatenate(picked))) if picked else 0.0
+            picked.append(sorted_diffs[lo:hi])
+            taken += hi - lo
+        resample = np.concatenate(picked)[:target]
+        means[draw] = float(np.mean(resample))
     return means
+
+
+def occupied_blocks(starts: NDArray[np.int64], block_days: int) -> int:
+    """How many distinct calendar blocks the panel actually lands on.
+
+    The honest denominator for a clustered panel. 240 forecasts spread over six
+    occupied blocks are not 240 independent observations, and the raw count says
+    nothing about which of those two a corpus is.
+    """
+    return int(np.unique(np.asarray(starts) // block_days).size)
 
 
 def evaluate_calibration(
