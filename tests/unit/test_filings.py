@@ -35,11 +35,21 @@ class FakeSymbols:
         return Symbol(ticker=ticker, name="Test Co", cik=self.cik)
 
 
+def _accession(filed: str, index: int) -> str:
+    """Unique per row and per block, so a fixture never makes two filings look
+    like one. Tolerates the deliberately malformed dates used below."""
+    digits = "".join(c for c in filed if c.isdigit()) or "0"
+    return f"0000320193-26-{(int(digits) + index) % 1_000_000:06d}"
+
+
 def _block(rows: list[tuple[str, str, str]]) -> dict[str, list[str]]:
     return {
         "form": [r[0] for r in rows],
         "filingDate": [r[1] for r in rows],
         "items": [r[2] for r in rows],
+        # Unique per row *and* per block, so a fixture never accidentally makes two
+        # different filings look like one.
+        "accessionNumber": [_accession(r[1], i) for i, r in enumerate(rows)],
     }
 
 
@@ -261,6 +271,7 @@ def test_columns_of_unequal_length_are_truncated_rather_than_trusted() -> None:
                 "form": ["8-K", "8-K"],
                 "filingDate": ["2025-02-01"],
                 "items": ["2.02", "2.02"],
+                "accessionNumber": ["0000320193-26-000001", "0000320193-26-000002"],
             },
             "files": [],
         }
@@ -290,3 +301,49 @@ def test_a_non_dict_archive_entry_is_skipped() -> None:
     payload = {"filings": {"recent": _block([]), "files": ["not-an-object"]}}
     adapter = _adapter(lambda request: httpx.Response(200, json=payload))
     assert adapter.earnings_dates("AAPL", START, END) == ()
+
+
+# ---------------------------------------------------------------------------
+# Accession numbers — what makes an item reproducible
+# ---------------------------------------------------------------------------
+def test_filings_carry_accession_numbers() -> None:
+    adapter = _adapter(_recent([("8-K", "2025-02-01", "2.02")]))
+    filings = adapter.earnings_filings("AAPL", START, END)
+    assert filings[0].accession == _accession("2025-02-01", 0)
+    assert filings[0].cik == 320193
+    assert filings[0].filed == date(2025, 2, 1)
+
+
+def test_the_archive_path_segment_strips_dashes() -> None:
+    """EDGAR's archive directories are the accession without punctuation."""
+    adapter = _adapter(_recent([("8-K", "2025-02-01", "2.02")]))
+    segment = adapter.earnings_filings("AAPL", START, END)[0].path_segment
+    assert segment == _accession("2025-02-01", 0).replace("-", "")
+
+
+def test_two_filings_on_one_day_stay_distinct() -> None:
+    """A date alone cannot identify a filing; an accession can."""
+    adapter = _adapter(
+        _recent([("8-K", "2025-02-01", "2.02"), ("8-K", "2025-02-01", "2.02")])
+    )
+    filings = adapter.earnings_filings("AAPL", START, END)
+    assert len({f.accession for f in filings}) == 2
+    # The date-only view still collapses them, which is why it is not the identifier.
+    assert adapter.earnings_dates("AAPL", START, END) == (date(2025, 2, 1),)
+
+
+def test_a_malformed_accession_drops_only_that_row() -> None:
+    payload = {
+        "filings": {
+            "recent": {
+                "form": ["8-K", "8-K"],
+                "filingDate": ["2025-02-01", "2025-03-01"],
+                "items": ["2.02", "2.02"],
+                "accessionNumber": ["not-an-accession", "0000320193-26-000012"],
+            },
+            "files": [],
+        }
+    }
+    adapter = _adapter(lambda request: httpx.Response(200, json=payload))
+    filings = adapter.earnings_filings("AAPL", START, END)
+    assert [f.filed for f in filings] == [date(2025, 3, 1)]

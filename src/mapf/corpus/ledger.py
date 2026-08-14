@@ -39,8 +39,28 @@ FailureReason = Literal[
     "market_data",
     "repair_exhausted",
     "no_material_facts",
+    "missing_exhibit",
     "other",
 ]
+
+# The split that decides what a resume retries.
+#
+# A transient failure is one a later attempt could plausibly survive: the server
+# was down, the socket timed out, a scraper throttled. Those are left absent from
+# the completed set so the next pass picks them up.
+#
+# A terminal failure is a property of the item, not of the moment. A filing with
+# no Exhibit 99.1 has no exhibit on the next pass either. Retrying it every resume
+# would consume the failure threshold afresh each time and eventually halt the run
+# on an item that can never succeed — so it is recorded as done, with its failure
+# preserved, and never attempted again.
+TERMINAL_REASONS: frozenset[str] = frozenset(
+    {"missing_exhibit", "repair_exhausted", "no_material_facts"}
+)
+
+
+def is_terminal(reason: FailureReason | None) -> bool:
+    return reason in TERMINAL_REASONS
 
 
 class LedgerEntry(DomainModel):
@@ -102,7 +122,24 @@ class Ledger:
                 continue
 
     def completed(self) -> set[tuple[str, str, date]]:
-        """Items a resume must skip. Failures are deliberately absent: a failed
-        item is retried on the next pass, which is what makes a transient outage
-        cost minutes rather than the run."""
-        return {e.key for e in self.entries() if e.status == "complete"}
+        """Items a resume must not attempt again.
+
+        A *transient* failure is deliberately absent, so the next pass retries it
+        and an outage costs minutes rather than the run. A *terminal* failure is
+        present, because it would fail identically on every resume — retrying it
+        would consume the failure threshold each pass and eventually halt the run
+        on an item that can never succeed.
+        """
+        return {
+            e.key
+            for e in self.entries()
+            if e.status == "complete" or is_terminal(e.reason)
+        }
+
+    def resolved(self) -> dict[tuple[str, str, date], LedgerEntry]:
+        """Every item with a terminal outcome, latest entry winning."""
+        out: dict[tuple[str, str, date], LedgerEntry] = {}
+        for entry in self.entries():
+            if entry.status == "complete" or is_terminal(entry.reason):
+                out[entry.key] = entry
+        return out

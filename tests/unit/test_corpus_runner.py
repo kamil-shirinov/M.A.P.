@@ -23,11 +23,12 @@ from mapf.core.errors import (
     InferenceUnreachableError,
     MapError,
     MarketDataUnavailableError,
+    MissingExhibitError,
     ModelBudgetExhaustedError,
     NoMaterialFactsError,
     TemplateNotFoundError,
 )
-from mapf.corpus.ledger import Ledger, LedgerEntry
+from mapf.corpus.ledger import Ledger, LedgerEntry, is_terminal
 from mapf.corpus.runner import (
     CorpusHaltedError,
     CorpusItem,
@@ -560,3 +561,100 @@ def test_a_malformed_frozen_model_entry_is_skipped_not_fatal() -> None:
     """Prompts are the load-bearing check; a junk model entry must not mask them."""
     frozen = {**FROZEN, "models": {"analyst": "not-a-mapping"}}
     verify_freeze(frozen, live_digest=MATCHING, live_models=LIVE_MODELS)
+
+
+# ---------------------------------------------------------------------------
+# Transient versus terminal — what a resume retries
+# ---------------------------------------------------------------------------
+def test_a_missing_exhibit_is_classified_and_terminal() -> None:
+    assert _reason_for(MissingExhibitError("no EX-99.1")) == "missing_exhibit"
+    assert is_terminal("missing_exhibit") is True
+
+
+def test_a_server_outage_is_transient() -> None:
+    assert is_terminal("inference_unreachable") is False
+    assert is_terminal(None) is False
+
+
+def test_a_terminal_failure_is_not_retried_on_the_next_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A filing with no exhibit has none next time either. Retrying it every pass
+    would consume the failure threshold until the run halts on an impossible item."""
+    item = (CorpusItem("AAA", "clean", date(2026, 2, 3)),)
+    _run(
+        monkeypatch,
+        [MissingExhibitError("no EX-99.1")],
+        tmp_path,
+        items=item,
+        max_band_failure_rate=1.0,
+    )
+    recorder = Recorder([])
+    monkeypatch.setattr("mapf.corpus.runner.execute", recorder)
+    run_band(
+        item,
+        documents=lambda i: (),
+        agents=object(),  # type: ignore[arg-type]
+        market=object(),  # type: ignore[arg-type]
+        dividends=object(),  # type: ignore[arg-type]
+        trace=object(),  # type: ignore[arg-type]
+        ledger=Ledger(tmp_path / "ledger.jsonl"),
+        config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
+        sleep=lambda _: None,
+    )
+    assert recorder.calls == []
+
+
+def test_a_transient_failure_is_retried_on_the_next_pass(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    item = (CorpusItem("AAA", "clean", date(2026, 2, 3)),)
+    _run(
+        monkeypatch,
+        [InferenceUnreachableError("http://x", "down")] * 3,
+        tmp_path,
+        items=item,
+        max_band_failure_rate=1.0,
+    )
+    recorder = Recorder([])
+    monkeypatch.setattr("mapf.corpus.runner.execute", recorder)
+    run_band(
+        item,
+        documents=lambda i: (),
+        agents=object(),  # type: ignore[arg-type]
+        market=object(),  # type: ignore[arg-type]
+        dividends=object(),  # type: ignore[arg-type]
+        trace=object(),  # type: ignore[arg-type]
+        ledger=Ledger(tmp_path / "ledger.jsonl"),
+        config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
+        sleep=lambda _: None,
+    )
+    assert len(recorder.calls) == 1
+
+
+def test_resolved_reports_terminal_outcomes(tmp_path: Path) -> None:
+    ledger = Ledger(tmp_path / "l.jsonl")
+    ledger.append(
+        LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="complete")
+    )
+    ledger.append(
+        LedgerEntry(
+            ticker="B",
+            band="clean",
+            filing_date=VINTAGE,
+            status="failed",
+            reason="missing_exhibit",
+        )
+    )
+    ledger.append(
+        LedgerEntry(
+            ticker="C",
+            band="clean",
+            filing_date=VINTAGE,
+            status="failed",
+            reason="inference_timeout",
+        )
+    )
+    resolved = ledger.resolved()
+    assert {k[0] for k in resolved} == {"A", "B"}
+    assert resolved[("B", "clean", VINTAGE)].reason == "missing_exhibit"

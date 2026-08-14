@@ -113,6 +113,24 @@ class SymbolMatch(DomainModel):
 # ---------------------------------------------------------------------------
 # News
 # ---------------------------------------------------------------------------
+class EarningsFiling(DomainModel):
+    """One Item 2.02 8-K, identified well enough to fetch again.
+
+    The accession number is what makes a corpus item reproducible. A ticker and a
+    date very nearly resolve to a single filing, but not quite: an 8-K/A amendment
+    or two same-day filings are both real, and both would be ambiguous.
+    """
+
+    accession: str = Field(pattern=r"^\d{10}-\d{2}-\d{6}$")
+    cik: int = Field(ge=1)
+    filed: date
+
+    @property
+    def path_segment(self) -> str:
+        """EDGAR's archive directories strip the dashes from an accession."""
+        return self.accession.replace("-", "")
+
+
 class Document(DomainModel):
     """A unit of untrusted input.
 

@@ -35,6 +35,7 @@ from mapf.core.errors import (
     InferenceUnreachableError,
     MapError,
     MarketDataError,
+    MissingExhibitError,
     ModelBudgetExhaustedError,
     NoMaterialFactsError,
 )
@@ -168,6 +169,8 @@ def verify_freeze(
 
 
 def _reason_for(error: MapError) -> FailureReason:
+    if isinstance(error, MissingExhibitError):
+        return "missing_exhibit"
     if isinstance(error, InferenceUnreachableError):
         return "inference_unreachable"
     if isinstance(error, InferenceTimeoutError):

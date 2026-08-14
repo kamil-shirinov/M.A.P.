@@ -23,8 +23,10 @@ from typing import Any
 
 import httpx
 import structlog
+from pydantic import ValidationError
 
 from mapf.core.errors import MapError
+from mapf.core.models import EarningsFiling
 from mapf.core.ports import SymbolIndex
 from mapf.data.symbols import Throttle
 
@@ -70,14 +72,27 @@ class EdgarFilings:
         self._throttle = throttle
 
     def earnings_dates(self, ticker: str, start: date, end: date) -> tuple[date, ...]:
+        # Distinct dates: selection counts forecast windows, and two filings on
+        # one day are one window. `earnings_filings` keeps them separate.
+        return tuple(sorted({f.filed for f in self.earnings_filings(ticker, start, end)}))
+
+    def earnings_filings(
+        self, ticker: str, start: date, end: date
+    ) -> tuple[EarningsFiling, ...]:
+        """Filings with their accession numbers.
+
+        Selection only needs dates, but the corpus needs identifiers: a ticker and
+        a date very nearly resolve to one filing, and an 8-K/A amendment or two
+        same-day filings are exactly where "very nearly" fails.
+        """
         symbol = self._symbols.get(ticker)
         if symbol is None or symbol.cik is None:
             raise UnknownFilerError(f"no CIK for {ticker!r}; it is not in the SEC index")
 
         document = self._fetch(SUBMISSIONS_URL.format(cik=symbol.cik))
         filings = document.get("filings", {})
-        found = list(_earnings_dates(filings.get("recent", {})))
-        earliest = min(found) if found else None
+        found = list(_earnings_rows(filings.get("recent", {}), symbol.cik))
+        earliest = min((f.filed for f in found), default=None)
 
         # Only reach for the archives when `recent` genuinely does not cover the
         # window. For a large-cap filer it usually does.
@@ -88,11 +103,17 @@ class EdgarFilings:
                 name = archive.get("name")
                 if not name or not _overlaps(archive, start, end):
                     continue
-                found.extend(_earnings_dates(self._fetch(ARCHIVE_URL.format(name=name))))
+                found.extend(
+                    _earnings_rows(self._fetch(ARCHIVE_URL.format(name=name)), symbol.cik)
+                )
 
-        inside = sorted({d for d in found if start <= d <= end})
+        seen: dict[str, EarningsFiling] = {}
+        for filing in found:
+            if start <= filing.filed <= end:
+                seen.setdefault(filing.accession, filing)
+        inside = sorted(seen.values(), key=lambda f: (f.filed, f.accession))
         _logger.debug(
-            "edgar_earnings_dates",
+            "edgar_earnings_filings",
             ticker=ticker,
             cik=symbol.cik,
             found=len(inside),
@@ -117,7 +138,7 @@ class EdgarFilings:
         return parsed
 
 
-def _earnings_dates(block: Any) -> tuple[date, ...]:
+def _earnings_rows(block: Any, cik: int) -> tuple[EarningsFiling, ...]:
     """Pull Item 2.02 8-K dates out of one submissions block.
 
     EDGAR stores a submissions block column-wise — parallel arrays rather than a
@@ -129,16 +150,25 @@ def _earnings_dates(block: Any) -> tuple[date, ...]:
     forms = block.get("form") or []
     dates = block.get("filingDate") or []
     items = block.get("items") or []
-    out: list[date] = []
-    for form, filed, item_list in zip(forms, dates, items, strict=False):
+    accessions = block.get("accessionNumber") or []
+    out: list[EarningsFiling] = []
+    for form, filed, item_list, accession in zip(
+        forms, dates, items, accessions, strict=False
+    ):
         if form != FORM_8K:
             continue
         if EARNINGS_ITEM not in {part.strip() for part in str(item_list).split(",")}:
             continue
         try:
-            out.append(date.fromisoformat(str(filed)))
-        except ValueError:  # noqa: PERF203 - a malformed date must not kill the ticker
-            _logger.warning("edgar_unparseable_filing_date", value=filed)
+            out.append(
+                EarningsFiling(
+                    accession=str(accession), cik=cik, filed=date.fromisoformat(str(filed))
+                )
+            )
+        except (ValueError, ValidationError):  # noqa: PERF203 - one bad row must not kill the filer
+            _logger.warning(
+                "edgar_unparseable_filing_row", value=filed, accession=accession
+            )
     return tuple(out)
 
 

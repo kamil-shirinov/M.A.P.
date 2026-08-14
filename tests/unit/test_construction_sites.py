@@ -63,6 +63,10 @@ def test_the_construction_token_never_leaves_its_module() -> None:
 UNTRUSTED_TEXT_SITES = {
     # Where raw feed text formally enters the system.
     "mapf/data/news.py",
+    # Where filed exhibit text enters. An SEC filing is authoritative about what a
+    # company said, which is not the same as being safe to interpolate: it is
+    # attacker-influenced prose that reaches a model, so it is tainted like any feed.
+    "mapf/data/exhibits.py",
     # Where taint propagates: model output derived from feed text, which is
     # interpolated into the next agent's prompt (ADR 0005).
     "mapf/agents/intake.py",

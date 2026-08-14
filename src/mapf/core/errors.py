@@ -277,6 +277,20 @@ class PriceAdjustmentUnsupportedError(MarketDataError):
 # ---------------------------------------------------------------------------
 # Prompts
 # ---------------------------------------------------------------------------
+class ExhibitError(ProviderError):
+    """An Item 2.02 exhibit could not be retrieved."""
+
+
+class MissingExhibitError(ExhibitError):
+    """The filing carries no usable Exhibit 99.1.
+
+    Terminal rather than transient, and the distinction is load-bearing: a filing
+    without an exhibit has none on the next resume either, so retrying it would
+    consume the run's failure threshold afresh every pass and eventually halt on
+    an item that can never succeed (ADR 0019).
+    """
+
+
 class PromptError(MapError):
     """A prompt could not be loaded or rendered."""
 
