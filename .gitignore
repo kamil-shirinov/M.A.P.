@@ -45,3 +45,9 @@ config/local.toml
 
 config/local.toml
 graphify-out/
+
+# Obsidian per-session UI state (open tabs, pane layout). The rest of .obsidian/
+# is vault configuration and is tracked, so the graph view reproduces for anyone
+# who opens it.
+**/.obsidian/workspace.json
+**/.obsidian/workspace-mobile.json

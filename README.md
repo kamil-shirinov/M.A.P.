@@ -255,8 +255,8 @@ belong in the file.
 | Document | What it holds |
 |---|---|
 | `CLAUDE.md` | Working agreement, hard constraints, architecture rules |
-| `docs/STATE.md` | Where the project actually is. Read this second |
-| `docs/decisions/` | ADRs — every non-obvious choice, with the alternatives rejected |
+| `M.A.P.-vault/STATE.md` | Where the project actually is. Read this second |
+| `M.A.P.-vault/decisions/` | ADRs — every non-obvious choice, with the alternatives rejected |
 
 ---
 

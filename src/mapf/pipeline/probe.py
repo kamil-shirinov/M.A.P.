@@ -41,7 +41,7 @@ Outcome = Literal["enforced", "accepted_not_enforced", "rejected", "inconclusive
 _FLATTEN_REMEDY = (
     "Flatten the schema: inline the Scenario definition into each of the three "
     "branches so no $defs/$ref remains. That is a change to "
-    "mapf.core.schema.decode_schema, and it closes open question 8 in docs/STATE.md."
+    "mapf.core.schema.decode_schema, and it closes open question 8 in M.A.P.-vault/STATE.md."
 )
 
 
