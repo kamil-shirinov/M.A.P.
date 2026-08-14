@@ -14,6 +14,7 @@ from datetime import date
 import pytest
 from pydantic import ValidationError
 
+from mapf.core.models import EarningsFiling
 from mapf.corpus.selection import (
     Band,
     Corpus,
@@ -36,10 +37,35 @@ class FakeFilings:
         self.calls: list[tuple[str, date, date]] = []
 
     def earnings_dates(self, ticker: str, start: date, end: date) -> tuple[date, ...]:
+        return tuple(f.filed for f in self.earnings_filings(ticker, start, end))
+
+    def earnings_filings(
+        self, ticker: str, start: date, end: date
+    ) -> tuple[EarningsFiling, ...]:
         self.calls.append((ticker, start, end))
         band = "clean" if start.year == 2026 else "ambiguous"
         n = self.overrides.get((ticker, band), 3 if band == "clean" else 6)
-        return tuple(date(start.year, 1 + 2 * i, 15) for i in range(n))
+        return tuple(
+            EarningsFiling(
+                accession=f"0000000001-26-{start.year * 10 + i:06d}",
+                cik=1,
+                filed=date(start.year, 1 + 2 * i, 15),
+            )
+            for i in range(n)
+        )
+
+
+class FakeExhibits:
+    """Every filing has an exhibit unless the ticker is named as lacking them."""
+
+    def __init__(self, without: set[str] | None = None, partial: dict[str, int] | None = None):
+        self.without = without or set()
+        self.partial = partial or {}
+        self.seen: list[str] = []
+
+    def has_exhibit(self, filing: EarningsFiling) -> bool:
+        self.seen.append(filing.accession)
+        return True
 
 
 class FakeLiquidity:
@@ -74,6 +100,7 @@ def _select(
     filings: FakeFilings | None = None,
     liquidity: FakeLiquidity | None = None,
     candidates: Sequence[str] | None = None,
+    exhibits: object | None = None,
     **over: object,
 ) -> Corpus:
     return select(
@@ -81,6 +108,7 @@ def _select(
         criteria=_criteria(**over),
         filings=filings or FakeFilings(),
         liquidity=liquidity or FakeLiquidity(),
+        exhibits=exhibits,  # type: ignore[arg-type]
     )
 
 
@@ -189,7 +217,7 @@ def test_candidates_outside_the_sec_index_are_rejected_as_no_cik() -> None:
         criteria=_criteria(target_tickers=2),
         filings=FakeFilings(),
         liquidity=FakeLiquidity(),
-        ciks=["AAPL"],
+        ciks={"AAPL": 320193},
     )
     assert [p.ticker for p in corpus.accepted] == ["AAPL"]
     assert next(r for r in corpus.rejected if r.ticker == "NOTREAL").reason == "no_cik"
@@ -325,3 +353,153 @@ def test_a_name_exactly_at_the_floor_is_kept() -> None:
         min_median_dollar_volume=50_000_000.0,
     )
     assert victim in {p.ticker for p in corpus.accepted}
+
+
+# ---------------------------------------------------------------------------
+# Exhibit availability — a company property, screened rather than discovered
+# ---------------------------------------------------------------------------
+class ByTickerExhibits:
+    """Grants exhibits to every filing except the tickers named."""
+
+    def __init__(self, without: set[str], owner: dict[str, str]) -> None:
+        self.without, self.owner = without, owner
+
+    def has_exhibit(self, filing: EarningsFiling) -> bool:
+        return self.owner.get(filing.accession, "") not in self.without
+
+
+class TaggedFilings(FakeFilings):
+    """Filings whose accessions record which ticker produced them."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.owner: dict[str, str] = {}
+
+    def earnings_filings(
+        self, ticker: str, start: date, end: date
+    ) -> tuple[EarningsFiling, ...]:
+        found = super().earnings_filings(ticker, start, end)
+        out = []
+        for i, f in enumerate(found):
+            accession = f"00000000{abs(hash(ticker)) % 100:02d}-26-{start.year * 10 + i:06d}"
+            self.owner[accession] = ticker
+            out.append(EarningsFiling(accession=accession, cik=f.cik, filed=f.filed))
+        return tuple(out)
+
+
+def test_a_filer_that_never_attaches_ex_99_1_is_rejected_at_selection() -> None:
+    """Deterministic company behaviour, so it belongs in selection rather than
+    being discovered as run-time attrition."""
+    order = seeded_ordering(UNIVERSE, 20260813)
+    filings = TaggedFilings()
+    corpus = _select(
+        filings=filings,
+        target_tickers=5,
+        exhibits=ByTickerExhibits({order[1]}, filings.owner),
+    )
+    assert order[1] not in {p.ticker for p in corpus.accepted}
+    rejection = next(r for r in corpus.rejected if r.ticker == order[1])
+    assert rejection.reason == "no_exhibit"
+    assert "EX-99.1" in rejection.detail
+
+
+def test_a_replacement_must_clear_the_exhibit_check_too() -> None:
+    """Otherwise a failing ticker is replaced by another failing ticker."""
+    order = seeded_ordering(UNIVERSE, 20260813)
+    filings = TaggedFilings()
+    corpus = _select(
+        filings=filings,
+        target_tickers=3,
+        exhibits=ByTickerExhibits({order[0], order[1]}, filings.owner),
+    )
+    assert [p.ticker for p in corpus.accepted] == [order[2], order[3], order[4]]
+
+
+def test_without_an_exhibit_check_selection_is_unchanged() -> None:
+    assert _select(target_tickers=5).accepted == _select(
+        target_tickers=5, exhibits=None
+    ).accepted
+
+
+# ---------------------------------------------------------------------------
+# CIK uniqueness — dual-class listings are one company
+# ---------------------------------------------------------------------------
+def test_a_second_share_class_of_an_accepted_company_is_rejected() -> None:
+    """BRK-A and BRK-B file one 8-K with one exhibit. Admitting both would put the
+    same document in the corpus twice and count it as two observations."""
+    corpus = select(
+        ["BRK-A", "BRK-B", "AAPL"],
+        criteria=_criteria(target_tickers=3),
+        filings=FakeFilings(),
+        liquidity=FakeLiquidity(),
+        ciks={"BRK-A": 1067983, "BRK-B": 1067983, "AAPL": 320193},
+    )
+    accepted = [p.ticker for p in corpus.accepted]
+    assert len(accepted) == 2
+    assert "AAPL" in accepted
+    assert len({p.cik for p in corpus.accepted}) == 2
+    dupe = next(r for r in corpus.rejected if r.reason == "duplicate_cik")
+    assert dupe.ticker in {"BRK-A", "BRK-B"}
+
+
+def test_the_class_kept_is_the_one_the_ordering_reached_first() -> None:
+    """Not the larger, cheaper or more liquid one — judgement in selection is what
+    pre-registration exists to remove."""
+    ciks = {"BRK-A": 1067983, "BRK-B": 1067983}
+    first = next(t for t in seeded_ordering(list(ciks), 20260813) if t in ciks)
+    corpus = select(
+        list(ciks),
+        criteria=_criteria(target_tickers=2),
+        filings=FakeFilings(),
+        liquidity=FakeLiquidity(),
+        ciks=ciks,
+    )
+    assert [p.ticker for p in corpus.accepted] == [first]
+
+
+def test_the_cik_is_recorded_on_the_accepted_plan() -> None:
+    corpus = select(
+        ["AAPL"],
+        criteria=_criteria(target_tickers=1),
+        filings=FakeFilings(),
+        liquidity=FakeLiquidity(),
+        ciks={"AAPL": 320193},
+    )
+    assert corpus.accepted[0].cik == 320193
+
+
+# ---------------------------------------------------------------------------
+# Accessions travel with dates
+# ---------------------------------------------------------------------------
+def test_accessions_are_recorded_alongside_dates() -> None:
+    corpus = _select(target_tickers=2)
+    for plan in corpus.accepted:
+        for band in plan.filings:
+            assert len(band.accessions) == len(band.dates)
+
+
+def test_the_band_cap_keeps_dates_paired_with_their_accessions() -> None:
+    """Sampling dates and accessions separately would silently mismatch them."""
+    filings = TaggedFilings()
+    corpus = _select(filings=filings, target_tickers=2)
+    for plan in corpus.accepted:
+        for band in plan.filings:
+            for accession, day in zip(band.accessions, band.dates, strict=True):
+                assert filings.owner[accession] == plan.ticker
+                assert day.year in (2025, 2026)
+
+
+def test_two_filings_on_one_date_become_one_window() -> None:
+    class SameDay(FakeFilings):
+        def earnings_filings(
+            self, ticker: str, start: date, end: date
+        ) -> tuple[EarningsFiling, ...]:
+            base = super().earnings_filings(ticker, start, end)
+            extra = EarningsFiling(
+                accession="0000000009-26-999999", cik=1, filed=base[0].filed
+            )
+            return (*base, extra)
+
+    corpus = _select(filings=SameDay(), target_tickers=1, match_band_counts=False)
+    clean = next(b for b in corpus.accepted[0].filings if b.band == "clean")
+    assert len(clean.dates) == len(set(clean.dates))

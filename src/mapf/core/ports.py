@@ -29,6 +29,7 @@ from pydantic import Field
 from mapf.core.models import (
     DividendWindow,
     DomainModel,
+    EarningsFiling,
     PriceWindow,
     Symbol,
     SymbolMatch,
@@ -187,8 +188,31 @@ class FilingSource(Protocol):
     """
 
     def earnings_dates(self, ticker: str, start: date, end: date) -> tuple[date, ...]:
-        """Filing dates in ascending order. Empty is a legitimate answer."""
+        """Distinct filing dates, ascending. Empty is a legitimate answer."""
         ...
+
+    def earnings_filings(
+        self, ticker: str, start: date, end: date
+    ) -> tuple[EarningsFiling, ...]:
+        """The same filings with their accession numbers.
+
+        Dates alone identify a forecast window; accessions identify the document.
+        Both are needed, and they are not interchangeable: an 8-K/A amendment or
+        two same-day filings collapse in the date view and stay distinct here.
+        """
+        ...
+
+
+class ExhibitCheck(Protocol):
+    """Whether a filing carries a usable Exhibit 99.1.
+
+    A selection criterion, not a runtime condition. Whether a company attaches its
+    earnings release as EX-99.1 is a deterministic property of how that company
+    files — identical in every band and every quarter — so a filer that does not is
+    unusable from the start rather than intermittently unlucky (ADR 0018).
+    """
+
+    def has_exhibit(self, filing: EarningsFiling) -> bool: ...
 
 
 class LiquidityScreen(Protocol):
