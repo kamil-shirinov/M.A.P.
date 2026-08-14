@@ -326,3 +326,102 @@ heavy right tails (means 1381 and 1374, ~8% censored at the budget). If the medi
 climbs materially past 2025H1 while the controls sit near 350, that is a second
 signal obtained for free; if it stays flat, the split remains single-signal and is
 reported as such. **It is a bonus, not a blocker: construction does not wait on it.**
+
+
+## Constructed — measured shape, and the corrections it forced
+
+**120 tickers, 727 forecasts, dev/holdout 60/60.** Ordering digest
+`3164a783e8d48581…`; frozen in `corpus/frozen.json`.
+
+| band | forecasts | per ticker | distinct dates | 21d blocks | 5d blocks |
+| --- | --- | --- | --- | --- | --- |
+| clean | 365 | 3.04 | 94 | 11 | 39 |
+| ambiguous | 362 | 3.02 | 116 | 17 | 55 |
+
+Attrition over 1,161 examined: **illiquid 705 (60.7%), no_price_history 318
+(27.4%), too_few_filings 18 (1.6%), accepted 120 (10.3%)**. Liquidity is the entire
+binding constraint — the filings requirement passed 100% of liquid names in the
+first 250 and rejected only 1.6% overall, so the projection that filings would
+halve the yield was wrong.
+
+### The screen is uncontaminated, and it used one provider
+
+All 1,161 candidates were screened through `YFinanceProvider` directly rather than
+the failover chain, so **no provider mixing occurred and the pre-registered floor
+means one thing by construction.** Stooq could not have served in any case: its CSV
+endpoint now sits behind a JavaScript proof-of-work challenge, so the ADR 0003
+fallback is currently dead — recorded here because a single unofficial scraper is
+now a single point of failure for the whole project, not just for this walk.
+
+Volume needed checking, because price is normalised to split-adjusted and **volume
+is not normalised anywhere**. Measured across NVDA's 10:1 June 2024 split, yfinance
+adjusts both consistently: median close $85.93 pre-split (from ~$860) against
+volume 477M (from ~48M), same factor, and dollar volume continuous across the split
+at a ratio of 1.14 — ordinary activity difference, not a factor-of-ten artefact.
+
+A throttled fetch and a dead ticker both surface as `no_price_history`, so
+throttling could have silently rejected live names. It did not: the rate is flat
+across every hundred-candidate bucket (18–34%, no late-session spike) and **0 of 40
+re-probed names fetch successfully now.**
+
+### What `no_price_history` is — and the survivorship question
+
+Re-probing a sample of 40: **78% unknown to the price provider, 22% listed late in
+the window, 0% throttled.** At least 15 of the 318 are preferred shares, warrants
+or units (`MS-PQ`, `NEE-PN`, `PCG-PI`), which the SEC ticker file lists and the
+price provider names differently. This bucket is therefore **mostly non-common
+securities and notation mismatches, not dead companies** — benign for composition.
+
+The real survivorship exposure is elsewhere and is structural: **the universe comes
+from a current SEC ticker file, so both bands are conditioned on survival to August
+2026.** A company that failed during 2025 is absent from the ambiguous band. Because
+the headline is a difference and both bands hold *the same tickers*, the bias
+applies identically to each side and largely cancels — the same-ticker constraint
+earning its place a second time. It is recorded rather than corrected, and any
+absolute (non-differenced) statement about the ambiguous band must carry it.
+
+### Power, recomputed on the corpus's own volatility
+
+The screened universe is **29.6% median realised volatility, not the 25% assumed**,
+and dispersed: p25 23.2%, p75 42.1%, max 147.6%. The level is nearly irrelevant —
+CRPS scales with σ, so signal and noise scale together — but the **heterogeneity
+does not cancel**, and it moves power asymmetrically:
+
+| k | homogeneous 25% | empirical | p90-capped |
+| --- | --- | --- | --- |
+| 0.2 | 100% | **100%** | 100% |
+| 0.5 | 100% | **100%** | 100% |
+| 0.8 | 66% | **96%** | 89% |
+| 1.25 | 74% | **11%** | 24% |
+
+Heterogeneity makes over-confidence *easier* to detect and over-dispersion *harder*:
+high-volatility tickers produce large `|y|`, which punishes a too-narrow interval
+severely, while a too-wide one is partly correct for those same names.
+
+**The over-dispersion branch is therefore reported as underpowered at 11%.** A null
+there means nothing about the world (ADR 0015's rule), and it must never be read as
+"the forecaster is not too wide".
+
+**The p90 volatility cap is rejected**, and not merely because it buys the k=1.25
+branch back to only 24%. Capping the universe by realised volatility would be
+**selection on the dependent variable**: volatility is the quantity the calibration
+result is about, so trimming the sample by it tunes the corpus on the outcome
+distribution and makes the headline partly an artefact of where the cap was placed.
+
+### The relevant k, on current evidence
+
+The earlier justification cited the first live run's `k ≈ 0.2`, which came from the
+units-bug era and has no standing. **The v3 template states vol 0.20–0.22**, and the
+earnings multiplier is now measured rather than assumed — **1.28×**, from the
+corpus's own filing dates (earnings windows annualise to 55.3% pooled against 43.3%
+for all other windows).
+
+| denominator | k | power |
+| --- | --- | --- |
+| unconditional, median ticker (29.6%) | **0.71** | 96–100% |
+| earnings-window, median ticker (37.9%) | **0.55** | 100% |
+| earnings-window, pooled (55.3%) | 0.38 | wrong statistic — pooled is inflated by the skewed tail |
+
+**The power table uses the unconditional median, which is the conservative choice:**
+the simulation generates returns at 29.6% while real earnings windows run 1.28×
+hotter, so realised detectability is at least what the table reports.
