@@ -425,3 +425,45 @@ for all other windows).
 **The power table uses the unconditional median, which is the conservative choice:**
 the simulation generates returns at 29.6% while real earnings windows run 1.28×
 hotter, so realised detectability is at least what the table reports.
+
+
+## Amendment, 2026-08-15 — applying the replacement rule, not changing it
+
+The pre-flight exhibit fetch found that **30 of 727 items had no usable Exhibit 99.1**, concentrated
+in a handful of filers, and that both bands therefore exceeded the 2% failure allowance in ADR 0019.
+Left alone, the run would have halted during night one.
+
+**This is the pre-registered replacement rule being applied, not a new rule.** Whether a company
+attaches its earnings release as EX-99.1 is a deterministic property of how that company files —
+identical every quarter, identical in both bands. It is a selection criterion that should have been
+screened at selection; discovering it late makes it a *missed* criterion, not a new one. Tickers
+failing it are dropped and replaced by the next names in the seeded ordering, exactly as `no_cik` or
+`illiquid` names always were. **Replacements must clear every criterion including the exhibit check**,
+or a failing ticker is simply replaced by another failing ticker.
+
+A second criterion was added for the same reason: **CIK uniqueness**. `BRK-A` and `BRK-B` are two
+listings of one company filing one 8-K with one exhibit, so the corpus held the same document twice
+and counted it as two independent observations — three duplicate exhibit hashes made it visible. This
+is general rather than a Berkshire patch: `GOOGL`/`GOOG` and `FOXA`/`FOX` would behave identically.
+**The class kept is whichever the seeded ordering reached first.** "Larger", "cheaper" or "more
+liquid" would all be judgement calls, and judgement in selection is precisely what pre-registration
+exists to remove.
+
+| | before | after |
+| --- | --- | --- |
+| tickers | 120 | 120 |
+| forecasts | 727 | **709** |
+| dropped | — | `BRK-A` (duplicate CIK), `GEN` (no EX-99.1 on any filing) |
+| added | — | `CG`, `WULF` |
+| exhibits verified | 0 | **709 of 709** |
+
+Re-verified end to end: **every item in the amended corpus fetches its exhibit, with zero attrition.**
+
+**The amendment precedes all inference.** No forecast has been produced, so no result could have
+influenced which tickers were dropped. Commit `36e08a3` is retained in history rather than rewritten —
+the pair of commits is more auditable than a single clean freeze, because it shows what was known when.
+
+The frozen record now also carries the two things it was missing: **accession numbers** for every item,
+and the **content hash of every exhibit**. Until this amendment there were no per-item hashes at all,
+only prompt-template and ticker-ordering digests, so the claim that the corpus is "a list of
+identifiers plus content hashes" was not yet true. It is now.

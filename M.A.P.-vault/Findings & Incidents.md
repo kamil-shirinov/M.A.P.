@@ -263,3 +263,29 @@ syntax, and both match the grep — the difference is whether the sentence is de
 The instruction that mattered most in the same pass was in `CLAUDE.md`: it names where ADRs get written, so
 leaving it stale would have recreated the old folder next session and split the decision record across two
 locations, with nothing failing to signal it.
+
+
+---
+
+## 18 · The field whose name promised something it didn't hold
+
+EDGAR's `index.json` lists a filing's files, each with `name`, `size` and **`type`**. The exhibit
+lookup matched `type == "EX-99.1"`, which is exactly what that field looks like it holds.
+
+It holds the directory-listing **icon filename** — `"text.gif"`, `"compressed.gif"`.
+
+So the match never succeeded. Not intermittently: **for every filing, identically.** The pre-flight
+dry run reported 350 of 350 items missing their exhibit, and that number is the dangerous part — a
+uniform 100% failure reads as a *finding about the corpus* ("these filers don't attach EX-99.1") far
+more readily than as a bug. It was one plausible sentence away from being written up as attrition.
+
+The real document types live in the SGML submission header, served HTML-escaped inside
+`{accession}-index-headers.html`.
+
+**Same family as #5, the manifest version collision:** a field whose *name* implies one thing while
+its *contents* are another, read confidently because the name was persuasive. In both cases the code
+was correct about everything except what the data meant, and in both cases the fix began with printing
+the raw value instead of reasoning about it.
+
+**What made it survivable:** the dry run existed at all. Fetching 727 exhibits with zero LLM calls is
+about thirty minutes; discovering this on night three of a twelve-night run is not.
