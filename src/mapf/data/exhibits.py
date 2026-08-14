@@ -18,10 +18,10 @@ one adapter is a dependency the whole project then carries.
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from html import unescape
 from html.parser import HTMLParser
-from typing import Any
 
 import httpx
 import structlog
@@ -33,17 +33,35 @@ from mapf.data.symbols import Throttle
 
 _logger = structlog.get_logger(__name__)
 
-INDEX_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{segment}/index.json"
+# The SGML submission header, which is the only machine-readable place the EDGAR
+# *document type* appears. `index.json` looks like the obvious source and is not:
+# its `type` field is the directory-listing icon name ("text.gif"), so matching it
+# against "EX-99.1" never succeeds — and fails identically for every filing, which
+# reads as universal attrition rather than as a bug.
+HEADERS_URL = (
+    "https://www.sec.gov/Archives/edgar/data/{cik}/{segment}/{accession}-index-headers.html"
+)
 DOCUMENT_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{segment}/{name}"
 
 # EX-99.1 is the convention; EX-99 without a suffix is common enough on older
 # filings to accept. Anything further out is a different exhibit entirely.
 EXHIBIT_TYPES = ("EX-99.1", "EX-99")
+# Tags arrive HTML-escaped inside the header page, so it is unescaped before this
+# runs. One <DOCUMENT> block per filed document.
+_DOCUMENT_RE = re.compile(
+    r"<TYPE>(?P<type>[^\n<]+).*?<FILENAME>(?P<name>[^\n<]+)", re.DOTALL
+)
 _SKIP_TAGS = frozenset({"script", "style", "head"})
 MIN_EXHIBIT_CHARS = 200
 
 
-__all__ = ["EdgarExhibits", "ExhibitError", "MissingExhibitError", "html_to_text"]
+__all__ = [
+    "EdgarExhibits",
+    "ExhibitError",
+    "MissingExhibitError",
+    "find_exhibit",
+    "html_to_text",
+]
 
 
 class _TextExtractor(HTMLParser):
@@ -84,10 +102,14 @@ class EdgarExhibits:
         self._throttle = throttle
 
     def fetch(self, filing: EarningsFiling) -> Document:
-        index = self._get(
-            INDEX_URL.format(cik=filing.cik, segment=filing.path_segment)
-        ).json()
-        name = _find_exhibit(index)
+        headers = self._get(
+            HEADERS_URL.format(
+                cik=filing.cik,
+                segment=filing.path_segment,
+                accession=filing.accession,
+            )
+        ).text
+        name = find_exhibit(headers)
         if name is None:
             raise MissingExhibitError(
                 f"{filing.accession} carries no {'/'.join(EXHIBIT_TYPES)} exhibit"
@@ -131,21 +153,13 @@ class EdgarExhibits:
         return response
 
 
-def _find_exhibit(index: Any) -> str | None:
+def find_exhibit(headers: str) -> str | None:
     """The exhibit filename, preferring EX-99.1 over a bare EX-99."""
-    if not isinstance(index, dict):
-        return None
-    items = index.get("directory", {}).get("item", [])
-    if not isinstance(items, list):
-        return None
     by_type: dict[str, str] = {}
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        kind = str(item.get("type", "")).upper()
-        name = item.get("name")
-        if kind in EXHIBIT_TYPES and isinstance(name, str) and kind not in by_type:
-            by_type[kind] = name
+    for match in _DOCUMENT_RE.finditer(unescape(headers)):
+        kind = match.group("type").strip().upper()
+        if kind in EXHIBIT_TYPES:
+            by_type.setdefault(kind, match.group("name").strip())
     for kind in EXHIBIT_TYPES:
         if kind in by_type:
             return by_type[kind]
