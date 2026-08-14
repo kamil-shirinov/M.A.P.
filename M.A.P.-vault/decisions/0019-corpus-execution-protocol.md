@@ -70,6 +70,58 @@ itself as a risk. It will present itself as a small sensible improvement to a
 prompt at 1am. Restarting a twelve-night run must be a deliberate decision with a
 stated cost, never a side effect of editing a file.
 
+### 5. Chart rendering is off, and asserted rather than defaulted
+
+`write_chart` inlines the whole Plotly bundle so a chart is a single self-contained
+file. At ~4.5 MB per run that is **3.3 GB of byte-identical JavaScript across 727
+forecasts**, for a picture nothing in Phase 2 reads.
+
+Rendering therefore becomes opt-in, and the runner **asserts it is off** rather than
+relying on a default. A default is a property of a call site someone can change; an
+assertion fails the run. Scoring reads `forecast.json`, never the chart.
+
+### 6. A failure threshold, fixed now rather than on night eight
+
+Per-item retry, then `status=failed` and continue, is right for one item. It is
+wrong for fifty: **a corpus with items missing is no longer the corpus frozen at
+`36e08a3`**, and the pre-registration claim weakens without anyone deciding that it
+should. So the runner halts instead of completing a degraded corpus.
+
+Two thresholds, because scattered bad luck and systematic failure look different:
+
+| trigger | limit | what it catches |
+| --- | --- | --- |
+| **consecutive failures** | **5** | the inference server down, a provider revoked, disk full — a state that will not fix itself |
+| **cumulative failures in a band** | **2%** (≈7 of 365) | slow attrition that would still leave the corpus materially incomplete |
+
+Five consecutive is a strong systematic signal: at any plausible per-item failure
+rate, an unbroken run of five is far more likely to be one cause than five
+coincidences. The 2% cap keeps any completed band at least 98% of what was frozen.
+
+**Failures are recorded by reason**, so the ledger distinguishes one provider
+failing, one band failing, or one ticker failing from genuinely scattered noise.
+On halt the runner reports the breakdown and stops; resuming is a deliberate act
+after the cause is understood, not a retry loop.
+
+### 7. Health metrics are visible during the run; scores are not
+
+Waiting twelve nights to discover that transcription fidelity collapsed on night two
+would waste the run. The runner therefore reports continuously:
+
+- transcription fidelity (unparseable and divergent counts)
+- ungrounded-numeral warnings
+- degenerate-spread flags
+- budget exhaustion and reasoning-token totals
+- failures by reason, and the two threshold counters
+
+**None of these is a score**, so none of them touches the two-pass continuation rule
+in §1. They describe whether the machine is working, not whether the forecasts are
+good. CRPS and everything derived from it stay behind the separate scoring command,
+which still refuses to run until every declared pass is complete.
+
+The distinction is the operative one: **"is the pipeline healthy" is an engineering
+question and may be watched; "is the forecast any good" is the result and may not.**
+
 ## Consequences
 
 - Total: **692 forecasts, 96 hours, twelve nights** — clean 346 (6.0 nights), then

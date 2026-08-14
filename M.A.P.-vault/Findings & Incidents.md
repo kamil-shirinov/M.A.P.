@@ -99,6 +99,19 @@ A bare `news/` pattern isn't anchored, so it matched *any* directory named `news
 
 Failure mode if missed: CI passes with no fixtures, silently, for weeks.
 
+**Addendum — the same rule failing the other way.** During the vault migration, `.obsidian/workspace.json`
+was added to ignore Obsidian's per-session UI state. It silently did nothing: a pattern *containing a slash*
+is anchored to the directory holding the `.gitignore`, so it matched `./.obsidian/workspace.json` and never
+`M.A.P.-vault/.obsidian/workspace.json`. Fixed with a `**/` prefix.
+
+So the same gitignore rule produced both failure modes: **unanchored matched too much, anchored matched too
+little.** Only the first was visible by reading the pattern — the second looked exactly like a working rule
+and had to be proven with `git check-ignore -v`.
+
+**The generalisation:** a pattern that silently matches nothing is indistinguishable from one that works,
+because both produce no error. Any ignore rule that matters should be verified against a real path rather
+than read.
+
 ---
 
 ## 7 · The test that was testing Plotly
@@ -230,3 +243,23 @@ to reach 80%.
 
 The question changed to calibration, which is detectable at the corpus already planned, and which has a complete
 arc: measure the failure, correct it, measure the correction.
+
+
+---
+
+## 17 · A log and an instruction are not the same sentence
+
+The vault migration required updating every `docs/` reference in the repo. One occurrence was left alone
+deliberately: a dated `STATE.md` entry recording that, back in August, `CLAUDE.md` *"landed in `docs/` and
+needs moving back to the root."*
+
+That sentence describes what was true on a particular day. Rewriting the path inside it would have produced
+a tidier grep result and a false record — the file's entire value is being an accurate log.
+
+**The principle:** *a log records what was true then; an instruction must be true now.* A migration updates
+only the second kind. The two are easy to confuse because they sit in the same file, use the same path
+syntax, and both match the grep — the difference is whether the sentence is describing or directing.
+
+The instruction that mattered most in the same pass was in `CLAUDE.md`: it names where ADRs get written, so
+leaving it stale would have recreated the old folder next session and split the decision record across two
+locations, with nothing failing to signal it.
