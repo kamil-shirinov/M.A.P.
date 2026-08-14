@@ -468,3 +468,13 @@ def _v2_or_later(name: str, version: str) -> str:
             untrusted={"material_facts": quarantine("- A fact.")},
         ).messages
     )
+
+
+def test_digest_exposes_the_template_content_hash() -> None:
+    """The corpus runner checks live templates against the frozen hashes before
+    spending a night on them (ADR 0019); a re-versioned prompt invalidates every
+    cache key, so this is the difference between a replay and twelve nights."""
+    store = FilePromptStore()
+    digest = store.digest("intake", "v2")
+    assert len(digest) == 64
+    assert digest == store.digest("intake", "v2")

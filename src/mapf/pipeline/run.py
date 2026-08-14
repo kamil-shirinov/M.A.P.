@@ -109,11 +109,17 @@ def execute(
     runs_dir: Path,
     allow_nondeterministic: bool = False,
     today: date | None = None,
+    render_chart: bool = True,
 ) -> RunResult:
     """Run the pipeline once and write every artifact.
 
     `trace` must be the same `CountingTrace` the agents were constructed with, or
     the manifest's attempt and cache-hit counts will all be zero.
+
+    `render_chart` exists for the corpus runner (ADR 0019). A chart inlines the
+    whole Plotly bundle so it is self-contained, which is right for one run and
+    ruinous for 727 — about 3.3 GB of byte-identical JavaScript for a picture
+    nothing in Phase 2 reads. Scoring reads `forecast.json`.
     """
     run_id = request.run_id or new_run_id()
     as_of = request.as_of or datetime.now(UTC)
@@ -238,7 +244,8 @@ def execute(
     run_dir.mkdir(parents=True, exist_ok=True)
     (run_dir / FORECAST_FILE).write_text(forecast.model_dump_json(indent=2), encoding="utf-8")
     (run_dir / MANIFEST_FILE).write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
-    write_chart(window, forecast, run_dir / CHART_FILE)
+    if render_chart:
+        write_chart(window, forecast, run_dir / CHART_FILE)
 
     return RunResult(
         forecast=forecast,

@@ -79,6 +79,16 @@ class FilePromptStore:
             sorted(entry.name for entry in self._root().iterdir() if entry.name.endswith(".md"))
         )
 
+    def digest(self, name: str, version: str) -> str:
+        """The template's content hash.
+
+        Public because the corpus runner checks live templates against the hashes
+        frozen with the corpus before spending a night on them (ADR 0019 §4). A
+        re-versioned prompt invalidates every cache key, so the check is the
+        difference between a 35-minute replay and twelve nights.
+        """
+        return self._load(name, version)[0]
+
     def _load(self, name: str, version: str) -> tuple[str, tuple[tuple[str, str], ...]]:
         key = (name, version)
         if key in self._cache:
