@@ -125,7 +125,7 @@ def _realised_returns(
     )
 
 
-def _moving_block_bootstrap(
+def moving_block_bootstrap(
     differences: NDArray[np.float64],
     starts: NDArray[np.int64],
     rng: np.random.Generator,
@@ -211,7 +211,7 @@ def evaluate_calibration(
             crps_normal(zeros, sigma * sigma_ratio, y) - crps_normal(zeros, sigma, y),
             dtype=np.float64,
         )
-        means = _moving_block_bootstrap(
+        means = moving_block_bootstrap(
             differences,
             window_starts,
             rng,
@@ -312,7 +312,7 @@ def evaluate_skill(
         rw_crps = crps_normal(np.zeros_like(realised), sigma, realised)
         differences = np.asarray(map_crps - rw_crps, dtype=np.float64)
 
-        means = _moving_block_bootstrap(
+        means = moving_block_bootstrap(
             differences,
             window_starts,
             rng,
@@ -334,3 +334,8 @@ def evaluate_skill(
         relative_improvement=-difference / baseline,
         power=detections / trials,
     )
+
+
+# The corpus scorer needs exactly this resampler, and a second implementation is a
+# second place for the empty-block defect to come back.
+_moving_block_bootstrap = moving_block_bootstrap

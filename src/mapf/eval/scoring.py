@@ -90,3 +90,47 @@ def brier(probability_up: float, realised_return: float) -> float:
         raise ValueError(f"probability must be in [0, 1], got {probability_up}")
     outcome = 1.0 if realised_return > 0 else 0.0
     return (probability_up - outcome) ** 2
+
+
+def pit(
+    mu: NDArray[np.float64] | float,
+    sigma: NDArray[np.float64] | float,
+    y: NDArray[np.float64] | float,
+) -> NDArray[np.float64]:
+    """Probability integral transform: where the outcome fell in the forecast.
+
+        PIT = Phi((y - mu) / sigma)
+
+    Under a correctly calibrated forecaster these are uniform on [0, 1]. The shape
+    of the departure is the diagnostic, and it says *what* is wrong rather than
+    merely that something is:
+
+    - **U-shaped** — outcomes land in the tails too often: intervals too narrow.
+    - **Humped in the middle** — outcomes cluster centrally: intervals too wide.
+    - **Tilted** — the mean is biased in the direction of the lean.
+
+    CRPS says a forecaster is worse; this says which way to move.
+    """
+    sigma_a = np.asarray(sigma, dtype=np.float64)
+    if np.any(sigma_a <= 0.0):
+        raise ValueError("sigma must be positive")
+    return np.asarray(
+        norm.cdf((np.asarray(y, dtype=np.float64) - np.asarray(mu, dtype=np.float64)) / sigma_a),
+        dtype=np.float64,
+    )
+
+
+def pit_deviation(values: NDArray[np.float64]) -> float:
+    """Kolmogorov-Smirnov distance of PIT values from uniform.
+
+    One number for "how far from calibrated", to sit beside the histogram. Zero is
+    perfect; it does not say in which direction, which is why the histogram stays
+    the primary artifact and this is only its summary.
+    """
+    ordered = np.sort(np.asarray(values, dtype=np.float64))
+    if ordered.size == 0:
+        raise ValueError("PIT deviation needs at least one value")
+    n = ordered.size
+    upper = np.arange(1, n + 1, dtype=np.float64) / n
+    lower = np.arange(0, n, dtype=np.float64) / n
+    return float(max(np.max(upper - ordered), np.max(ordered - lower)))
