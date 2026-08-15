@@ -1,0 +1,270 @@
+"""`map corpus` — execute the frozen corpus, or pre-flight it without inference.
+
+Twelve nights of compute rest on things that are cheap to check and expensive to
+discover: that the live prompts still match the frozen hashes, that the server has
+the right models, that every exhibit still fetches to the byte it did when the
+corpus was frozen. `--check` runs all of it and exits.
+
+Resume is automatic rather than a flag. A job restarted at 2am must not depend on
+remembering an argument — but what it skips is reported explicitly, so an
+unintended resume is visible rather than silent.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+
+import typer
+
+from mapf.bootstrap import build_http_client, build_llm_provider, build_run
+from mapf.cli.app import app, fail, handle
+from mapf.core.errors import ExhibitError, MapError
+from mapf.core.hashing import new_run_id
+from mapf.core.models import Document, EarningsFiling
+from mapf.corpus.ledger import Ledger, LedgerEntry, is_terminal
+from mapf.corpus.runner import (
+    CorpusHaltedError,
+    CorpusItem,
+    Health,
+    RunnerConfig,
+    plan,
+    run_band,
+    verify_freeze,
+)
+from mapf.corpus.selection import Corpus
+from mapf.data.exhibits import EdgarExhibits
+from mapf.data.symbols import Throttle
+from mapf.prompts.loader import FilePromptStore
+from mapf.settings import ModelRegistry, load
+
+corpus_app = typer.Typer(help="Run or pre-flight the frozen corpus.")
+app.add_typer(corpus_app, name="corpus")
+
+FROZEN = Path("corpus/frozen.json")
+LEDGER = Path("var/corpus/ledger.jsonl")
+
+
+def _load_frozen(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        raise fail(
+            f"no frozen corpus at {path}",
+            5,
+            hint="The corpus is the pre-registration. Freeze and commit it first.",
+        )
+    parsed: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
+    return parsed
+
+
+def _accessions(corpus: Corpus, band: str) -> dict[tuple[str, date], tuple[str, int]]:
+    """Item key to (accession, cik). The frozen record is the only source."""
+    out: dict[tuple[str, date], tuple[str, int]] = {}
+    for plan_ in corpus.accepted:
+        for filings in plan_.filings:
+            if filings.band != band:
+                continue
+            for day, accession in zip(filings.dates, filings.accessions, strict=True):
+                out[(plan_.ticker, day)] = (accession, plan_.cik or 0)
+    return out
+
+
+@corpus_app.command("run")
+def corpus_run(
+    band: str = typer.Option("clean", help="Which band to execute. Clean runs first."),
+    check: bool = typer.Option(
+        False, "--check", help="Pre-flight only: verify everything, run no inference."
+    ),
+    frozen: Path = typer.Option(FROZEN, help="The frozen corpus to execute."),
+    ledger_path: Path = typer.Option(LEDGER, help="Where item outcomes are recorded."),
+    limit: int | None = typer.Option(None, help="Stop after this many items."),
+    config: Path | None = typer.Option(None, help="Config file to use instead of the default."),
+) -> None:
+    """Execute one band of the frozen corpus, resuming automatically."""
+    try:
+        settings = load([config] if config else None)
+        record = _load_frozen(frozen)
+        corpus = Corpus.model_validate(record["corpus"])
+        prompts = FilePromptStore()
+
+        if band not in {b.name for b in corpus.criteria.bands}:
+            raise fail(
+                f"unknown band {band!r}",
+                2,
+                hint=f"Bands in this corpus: {', '.join(b.name for b in corpus.criteria.bands)}",
+            )
+
+        items = plan(corpus, band)
+        if limit is not None:
+            items = items[:limit]
+
+        # 1. The prompts, before anything expensive. A drifted template invalidates
+        #    every cache key, which is the difference between a replay and twelve
+        #    nights, so this refuses rather than warns.
+        registry = ModelRegistry(settings.models)
+        verify_freeze(
+            record,
+            live_digest=prompts.digest,
+            live_models={
+                stage: registry.spec(stage).alias
+                for stage in ("intake", "analyst", "structuralist")
+            },
+        )
+        typer.secho("freeze     prompts and model aliases match", fg=typer.colors.GREEN)
+
+        # 2. The ledger, so a resume is announced rather than assumed.
+        ledger = Ledger(ledger_path)
+        resolved = ledger.resolved()
+        in_band = {k: v for k, v in resolved.items() if k[1] == band}
+        done = sum(1 for v in in_band.values() if v.status == "complete")
+        terminal = sum(1 for v in in_band.values() if is_terminal(v.reason))
+        remaining = [i for i in items if i.key not in resolved]
+        if in_band:
+            typer.secho(
+                f"resume     skipping {len(in_band)} of {len(items)} items "
+                f"({done} complete, {terminal} terminal failures) — "
+                f"{len(remaining)} to run",
+                fg=typer.colors.YELLOW,
+            )
+        else:
+            typer.echo(f"resume     nothing recorded; all {len(items)} items to run")
+
+        provider = build_llm_provider(settings, cached=True)
+        models = registry.resolve_all(provider.list_models())
+        typer.secho(
+            "models     " + ", ".join(f"{k}={v.id}" for k, v in models.items()),
+            fg=typer.colors.GREEN,
+        )
+
+        vintage = date.fromisoformat(str(record["price_vintage"]))
+        by_key = _accessions(corpus, band)
+
+        with build_http_client(settings) as client:
+            exhibits = EdgarExhibits(
+                user_agent=settings.data.sec.user_agent,
+                client=client,
+                throttle=Throttle(settings.data.sec.requests_per_second),
+            )
+
+            if check:
+                _preflight(record, band, items, exhibits, by_key, vintage)
+                return
+
+            def documents(item: CorpusItem) -> tuple[Document, ...]:
+                accession, cik = by_key[(item.ticker, item.filing_date)]
+                return (
+                    exhibits.fetch(
+                        EarningsFiling(accession=accession, cik=cik, filed=item.filing_date)
+                    ),
+                )
+
+            wiring = build_run(
+                settings,
+                provider=provider,
+                resolved={str(k): v for k, v in models.items()},
+                run_id=new_run_id(),
+            )
+            typer.echo(
+                f"start      band={band} items={len(remaining)} "
+                f"vintage={vintage} charts=off"
+            )
+            health = run_band(
+                items,
+                documents=documents,
+                agents=wiring.agents,
+                market=wiring.market,
+                dividends=wiring.dividends,
+                trace=wiring.trace,
+                ledger=ledger,
+                config=RunnerConfig(runs_dir=settings.paths.runs_dir, price_vintage=vintage),
+                on_progress=_progress,
+            )
+
+        typer.secho(
+            f"done       {health.completed} complete, {health.failed} failed, "
+            f"fidelity_ok={health.fidelity_ok}",
+            fg=typer.colors.GREEN,
+        )
+    except CorpusHaltedError as error:
+        typer.secho(f"HALTED     {error}", fg=typer.colors.RED, err=True)
+        typer.secho(
+            "           the corpus is incomplete by decision, not by accident. "
+            "Diagnose before resuming.",
+            err=True,
+        )
+        raise typer.Exit(7) from error
+    except MapError as error:
+        raise handle(error) from error
+
+
+def _progress(
+    index: int, total: int, item: CorpusItem, entry: LedgerEntry, health: Health
+) -> None:
+    """One line per item. This is what gets watched for twelve nights."""
+    ok = entry.status == "complete"
+    outcome = "ok" if ok else f"FAIL:{entry.reason}"
+    typer.secho(
+        f"[{index:>4}/{total}] {item.ticker:<6} {item.band:<9} {item.filing_date} "
+        f"{entry.elapsed_s:>6.1f}s  {outcome:<24}"
+        f"done={health.completed} fail={health.failed} "
+        f"unparse={health.unparseable} diverge={health.divergent} "
+        f"ungrounded={health.ungrounded_numerals} flat={health.degenerate_spread} "
+        f"exhausted={health.budget_exhausted}",
+        fg=typer.colors.GREEN if ok else typer.colors.RED,
+    )
+
+
+def _preflight(
+    record: dict[str, object],
+    band: str,
+    items: tuple[CorpusItem, ...],
+    exhibits: EdgarExhibits,
+    by_key: dict[tuple[str, date], tuple[str, int]],
+    vintage: date,
+) -> None:
+    """Re-hash every exhibit against the frozen record and report. No inference."""
+    frozen_hashes = record.get("exhibits")
+    known: dict[str, dict[str, object]] = {}
+    if isinstance(frozen_hashes, dict):
+        raw = frozen_hashes.get("by_accession")
+        if isinstance(raw, dict):
+            known = raw
+
+    typer.echo(f"exhibits   re-hashing {len(items)} items against the frozen record")
+    missing: list[str] = []
+    changed: list[str] = []
+    unrecorded: list[str] = []
+    for n, item in enumerate(items, 1):
+        accession, cik = by_key[(item.ticker, item.filing_date)]
+        try:
+            document = exhibits.fetch(
+                EarningsFiling(accession=accession, cik=cik, filed=item.filing_date)
+            )
+        except ExhibitError:
+            missing.append(f"{item.ticker} {item.filing_date} {accession}")
+            continue
+        expected = known.get(accession, {}).get("document_id")
+        if expected is None:
+            unrecorded.append(accession)
+        elif expected != document.id:
+            changed.append(f"{item.ticker} {item.filing_date} {accession}")
+        if n % 50 == 0:
+            typer.echo(f"           {n}/{len(items)}")
+
+    typer.echo(f"vintage    {vintage} (pinned)")
+    for label, rows, colour in (
+        ("unfetchable", missing, typer.colors.RED),
+        ("content changed", changed, typer.colors.RED),
+        ("not in frozen record", unrecorded, typer.colors.YELLOW),
+    ):
+        if rows:
+            typer.secho(f"{label:<11}{len(rows)}", fg=colour)
+            for row in rows[:10]:
+                typer.echo(f"           {row}")
+    if not missing and not changed and not unrecorded:
+        typer.secho(
+            f"exhibits   all {len(items)} match the frozen hashes", fg=typer.colors.GREEN
+        )
+    typer.secho("check      pre-flight complete; no inference ran", fg=typer.colors.GREEN)
+    if missing or changed:
+        raise typer.Exit(6)

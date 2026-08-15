@@ -658,3 +658,25 @@ def test_resolved_reports_terminal_outcomes(tmp_path: Path) -> None:
     resolved = ledger.resolved()
     assert {k[0] for k in resolved} == {"A", "B"}
     assert resolved[("B", "clean", VINTAGE)].reason == "missing_exhibit"
+
+
+def test_the_progress_hook_sees_every_item(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The runner is a library; the CLI supplies the line that gets watched."""
+    seen: list[tuple[int, int, str]] = []
+    recorder = Recorder([])
+    monkeypatch.setattr("mapf.corpus.runner.execute", recorder)
+    run_band(
+        plan(_corpus(), "clean"),
+        documents=lambda i: (),
+        agents=object(),  # type: ignore[arg-type]
+        market=object(),  # type: ignore[arg-type]
+        dividends=object(),  # type: ignore[arg-type]
+        trace=object(),  # type: ignore[arg-type]
+        ledger=Ledger(tmp_path / "l.jsonl"),
+        config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
+        sleep=lambda _: None,
+        on_progress=lambda i, t, item, e, h: seen.append((i, t, item.ticker)),
+    )
+    assert [(i, t) for i, t, _ in seen] == [(1, 3), (2, 3), (3, 3)]

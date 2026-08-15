@@ -105,4 +105,10 @@ def main() -> None:
 
 
 # Sub-commands are registered by importing their modules for their side effects.
-from mapf.cli.commands import health, run, search, symbols  # noqa: E402,F401
+from mapf.cli.commands import (  # noqa: E402,F401
+    corpus,
+    health,
+    run,
+    search,
+    symbols,
+)

@@ -6,6 +6,35 @@ Append every new one. Never delete.
 
 ---
 
+## The lesson that generalises furthest
+
+**A bug that crashes gets investigated. A bug that produces a plausible result gets published.**
+
+Most entries below were found because something broke loudly. The expensive ones are the entries where
+nothing broke at all:
+
+- a schema-valid forecast containing an invented gross margin, which passed every validator (#1)
+- forecasts converging on ±0.1% because no agent owned the magnitudes — a rounding error presented as a
+  bull case (#2)
+- a manifest reporting `1.0.0` beside a forecast reading `2.0.0`, perfectly consistent across every run
+  and consistently wrong (#5)
+- a chart test passing on strings inside the vendored Plotly bundle rather than on anything the code did (#7)
+- 50% recall accuracy that was a model answering NO to everything (#10)
+- an exhibit lookup matching a field that holds an icon filename, failing for **100% of filings** — a
+  number that reads as a finding about the corpus rather than as a defect (#18)
+
+Every one of those produced output that could be read aloud in a meeting without anyone objecting. That
+is the property that makes them dangerous, and it is why this project spends so much of its effort on
+things that make wrongness *loud*: typed errors instead of sentinels, `null` rather than `0` for an
+undefined ratio, assertions that refuse rather than warn, controls in every probe, and a pre-flight dry
+run before a twelve-night job.
+
+**The habit that catches this class:** when a result is uniform, clean, or exactly what you expected,
+print the raw value instead of reasoning about it. Both #5 and #18 were found that way, and neither
+would have been found by thinking harder.
+
+---
+
 ## 1 · The fabricated gross margin
 
 **Related:** [[0002-constrained-decode-surface]] — what the grammar does and does not guarantee.

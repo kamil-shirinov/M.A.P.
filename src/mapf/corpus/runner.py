@@ -211,6 +211,7 @@ def run_band(
     ledger: Ledger,
     config: RunnerConfig,
     sleep: Callable[[float], None] = time.sleep,
+    on_progress: Callable[[int, int, CorpusItem, LedgerEntry, Health], None] | None = None,
 ) -> Health:
     """Execute one band, resuming from the ledger and halting on threshold.
 
@@ -267,6 +268,8 @@ def run_band(
                 cause=type(error).__name__ if error else None,
             )
 
+        if on_progress is not None:
+            on_progress(index, total, item, entry, health)
         _logger.info(
             "corpus_progress",
             band=item.band,
