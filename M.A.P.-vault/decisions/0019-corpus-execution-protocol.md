@@ -134,3 +134,69 @@ question and may be watched; "is the forecast any good" is the result and may no
   after every artifact for an item has landed, so an interrupted run resumes at the
   failed item rather than from zero and a half-written run directory is never
   mistaken for a complete one.
+
+
+## Amendment, 2026-08-15 — the pass boundary, and what the manifest was missing
+
+### Passes interleave; a contiguous half would confound stopping with seasonality
+
+The two-pass split was pre-committed above and enforced nowhere, which is how a
+pre-registered rule quietly stops being one. Enforcing it surfaced a flaw in the
+design *as originally conceived*, and it is worth stating rather than silently
+fixing.
+
+The obvious implementation is to take the first half of the plan as pass one. The
+plan is ordered by date, so that half is **calendar-contiguous** — roughly the first
+half of the band's year. Stopping after it would then mean the leakage estimate was
+computed on H1 alone, and "we stopped early" would be inseparable from "we only
+measured spring". Reporting season, earnings seasonality and whatever regime
+happened to prevail in those months would all be baked into the headline, with
+nothing in the record showing it.
+
+**Passes are therefore assigned by position modulo the pass count**, so each is a
+spread sample of the whole band. An early stop costs precision and nothing else,
+which is the only thing the continuation rule was ever meant to trade away.
+
+The assignment is a pure function of the frozen plan order — no seed, no stored
+mapping, same answer on any machine. `require_finished` takes a `declared` argument
+so a deliberate stop after the first half stays distinguishable in the record from a
+run that never finished; those are different claims and the ledger must not blur
+them. `elapsed_report` exposes wall-clock time and nothing else, which is the only
+quantity §1 permits the decision to read.
+
+### The manifest recorded every input except the program
+
+It pinned model fingerprints, prompt hashes, sampling parameters, the price vintage
+and the adjustment basis — and said nothing about which code produced the run.
+
+For a twelve-night corpus that is a real gap. A job that dies at item 200 and
+resumes executes its second half under whatever commit is checked out then, and a
+corpus spanning two commits is an ordinary thing to happen and an indefensible thing
+to be unable to see afterwards. Manifests now carry the **commit SHA and a
+dirty-tree flag**, and `map evaluate` refuses to score a band produced by more than
+one version unless `--allow-mixed-code` is passed, printing the split either way.
+
+A dirty tree is recorded rather than forbidden. Refusing to run on uncommitted
+changes would make every experiment need a commit first; saying so honestly is the
+better trade.
+
+The lookup is cached for the life of the process, deliberately: committing while a
+run is in flight changes what `git rev-parse` answers but not the code already
+imported and executing, so the cached first answer is the accurate one.
+
+### What this does not fix, stated rather than left silent
+
+**The clean-band run currently in flight began before this field existed.** Its
+manifests carry no commit, and `map evaluate` reports them as
+`unknown (predates the field)` rather than inferring one.
+
+That inference would be easy and wrong. The commit could be guessed from the run's
+timestamp against the git log, and the guess would be right most of the time and
+unfalsifiable when it was not — a plausible number in place of a missing one, which
+is the failure mode this project spends most of its effort on. The same principle
+applies here as to the `STATE.md` entry left unrewritten during the vault migration:
+**a record says what was true, and is not retrofitted to what we wish had been
+recorded.**
+
+The field is therefore fully populated only from the ambiguous band onward, and any
+report covering the clean band must say so.

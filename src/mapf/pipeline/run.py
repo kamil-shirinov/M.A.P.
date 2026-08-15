@@ -37,6 +37,7 @@ from mapf.core.models import (
     ScenarioSet,
 )
 from mapf.core.ports import DividendSource, MarketDataProvider
+from mapf.core.provenance import code_version
 from mapf.core.quality import check as check_quality
 from mapf.pipeline.manifest import AgentRecord, PriceProvenance, RunManifest
 from mapf.pipeline.trace import CountingTrace
@@ -235,6 +236,7 @@ def execute(
         dividends=dividend_window,
         quality=quality,
         fidelity=fidelity,
+        code_version=code_version(),
         allow_nondeterministic=allow_nondeterministic,
         package_version=PACKAGE_VERSION,
         python_version=platform.python_version(),
