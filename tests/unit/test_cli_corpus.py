@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from typer.testing import CliRunner
@@ -104,14 +106,16 @@ def _frozen(tmp_path: Path, **overrides: object) -> Path:
     return path
 
 
-def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ignore[no-untyped-def]
+def _invoke(  # type: ignore[no-untyped-def]
+    tmp_path: Path, *args: str, frozen: Path | None = None, config: Path | None = None
+):
     return runner.invoke(
         app,
         [
             "corpus",
             "run",
             "--config",
-            str(_config(tmp_path)),
+            str(config or _config(tmp_path)),
             "--frozen",
             str(frozen or _frozen(tmp_path)),
             "--ledger-path",
@@ -500,21 +504,23 @@ def test_check_reports_each_agents_context(
         assert f"{agent}: configured" in result.output
 
 
-def test_check_refuses_when_an_exhibit_cannot_fit(
+def test_check_reports_truncation_rather_than_refusing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A pre-flight result, not an hour-one failure."""
+    """An oversized exhibit is runnable under the frozen rule, so the gate reports
+    what will be elided instead of refusing what the pipeline handles."""
     frozen = _frozen(tmp_path)
     record = json.loads(frozen.read_text())
     for spec in record["exhibits"]["by_accession"].values():
         spec["document_id"] = "sha256:" + "d" * 64
-        spec["chars"] = 220_000          # BXP-sized: over any 32k context
+        spec["chars"] = 220_000          # BXP-sized
     frozen.write_text(json.dumps(record), encoding="utf-8")
     _check_with(monkeypatch, "sha256:" + "d" * 64)
     result = _invoke(tmp_path, "--check", frozen=frozen)
-    assert result.exit_code == 6
-    assert "exceed the budget" in result.output
-    assert "over by" in result.output
+    assert result.exit_code == 0
+    assert "will be truncated by the frozen rule" in result.output
+    assert "chars elided" in result.output
+    assert "2 truncated" in result.output
 
 
 def test_check_passes_when_every_exhibit_fits(
@@ -531,3 +537,119 @@ def test_check_passes_when_every_exhibit_fits(
     assert result.exit_code == 0
     assert "exhibits fit" in result.output
     assert "binding agent" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Truncation on the run path
+# ---------------------------------------------------------------------------
+def test_an_oversized_exhibit_is_truncated_before_the_pipeline_sees_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The rule is applied where documents are built, so the pipeline receives
+    something that fits and the run cannot fail on context."""
+    from mapf.core.tokens import AgentBudget, estimate_tokens
+    from mapf.corpus.runner import TRUNCATION_NOTES
+
+    TRUNCATION_NOTES.clear()
+    _stub_infra(monkeypatch)
+    huge = "Revenue rose to $124.3 billion. " * 8000     # ~250,000 chars
+
+    def fake_fetch(self, filing):  # type: ignore[no-untyped-def]
+        return Document(
+            id="sha256:" + "c" * 64,
+            source="x",
+            text=UntrustedText(huge),
+            fetched_at=datetime(2026, 8, 14, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(EdgarExhibits, "fetch", fake_fetch)
+    seen: dict[str, object] = {}
+
+    def fake_run_band(items, **kwargs):  # type: ignore[no-untyped-def]
+        seen["docs"] = kwargs["documents"](items[0])
+        return Health(completed=1)
+
+    monkeypatch.setattr("mapf.cli.commands.corpus.run_band", fake_run_band)
+    result = _invoke(tmp_path)
+
+    docs = cast(tuple[Document, ...], seen["docs"])
+    document = docs[0]
+    budget = AgentBudget(agent="intake", context_tokens=32768, max_tokens=None).document_budget
+    assert estimate_tokens(document.text) <= budget
+    assert "elided" in document.text
+    # The id still hashes what EDGAR served, not our rendering of it (ADR 0005).
+    assert document.id == "sha256:" + "c" * 64
+    assert "truncated" in result.output
+    assert TRUNCATION_NOTES
+
+
+def test_a_document_that_fits_passes_through_untouched(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mapf.corpus.runner import TRUNCATION_NOTES
+
+    TRUNCATION_NOTES.clear()
+    _stub_infra(monkeypatch)
+    body = "Revenue rose to $124.3 billion. " * 200
+
+    def fake_fetch(self, filing):  # type: ignore[no-untyped-def]
+        return Document(
+            id="sha256:" + "c" * 64,
+            source="x",
+            text=UntrustedText(body),
+            fetched_at=datetime(2026, 8, 14, tzinfo=UTC),
+        )
+
+    monkeypatch.setattr(EdgarExhibits, "fetch", fake_fetch)
+    seen: dict[str, object] = {}
+
+    def fake_run_band(items, **kwargs):  # type: ignore[no-untyped-def]
+        seen["docs"] = kwargs["documents"](items[0])
+        return Health(completed=1)
+
+    monkeypatch.setattr("mapf.cli.commands.corpus.run_band", fake_run_band)
+    _invoke(tmp_path)
+    document = cast(tuple[Document, ...], seen["docs"])[0]
+    assert document.text == body
+    assert TRUNCATION_NOTES == {}
+
+
+def test_an_exhibit_absent_from_the_frozen_sizes_is_skipped_by_the_gate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sizes come from the frozen record; an item without one cannot be gated on."""
+    frozen = _frozen(tmp_path)
+    record = json.loads(frozen.read_text())
+    record["exhibits"]["by_accession"] = {
+        a: {"document_id": "sha256:" + "d" * 64} for a in record["exhibits"]["by_accession"]
+    }
+    frozen.write_text(json.dumps(record), encoding="utf-8")
+    _check_with(monkeypatch, "sha256:" + "d" * 64)
+    result = _invoke(tmp_path, "--check", frozen=frozen)
+    assert result.exit_code == 0
+
+
+def test_an_exhibit_no_truncation_can_rescue_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The floor of the rule still has to fit. When even that cannot, --check
+    refuses rather than starting a run that would die on context."""
+    config = _config(tmp_path)
+    # Every agent, or the probe (which reports one value) disagrees with the ones
+    # left high and refuses before the token gate is reached.
+    config.write_text(
+        re.sub(r"context_tokens = \d+", "context_tokens = 512", config.read_text()),
+        encoding="utf-8",
+    )
+    frozen = _frozen(tmp_path)
+    record = json.loads(frozen.read_text())
+    for spec in record["exhibits"]["by_accession"].values():
+        spec["document_id"] = "sha256:" + "d" * 64
+        spec["chars"] = 220_000
+    frozen.write_text(json.dumps(record), encoding="utf-8")
+    _check_with(monkeypatch, "sha256:" + "d" * 64)
+    _stub_infra(monkeypatch, reports=512)
+    result = _invoke(tmp_path, "--check", frozen=frozen, config=config)
+    assert result.exit_code == 6
+    assert "exceed the budget" in result.output
+    assert "cannot fit the configured context" in result.output

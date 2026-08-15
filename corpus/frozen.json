@@ -1,9 +1,9 @@
 {
-  "freeze_version": "2.0.0",
+  "freeze_version": "2.1.0",
   "frozen_on": "2026-08-14",
   "amended_on": "2026-08-15",
-  "amends": "36e08a3",
-  "amendment_reason": "Applies the pre-registered replacement rule to tickers failing a selection criterion that should have been screened at selection: availability of the earnings release as Exhibit 99.1, and CIK uniqueness so a dual-class listing cannot contribute the same document twice. THIS AMENDMENT PRECEDES ALL INFERENCE -- no forecast has been produced, so no result could have influenced it. Commit 36e08a3 is retained in history; the pair is more auditable than a single clean freeze.",
+  "amends": "96ad926",
+  "amendment_reason": "Records the context windows the corpus is run at and the truncation rule for exhibits that exceed them (ADR 0020). PRECEDES ALL INFERENCE: the first clean-band attempt halted in its first hour on a context defect, its four completed items were discarded, and no forecast has been scored. Head and tail token counts are fixed here so they cannot become a parameter tuned after seeing a result.",
   "changes": {
     "dropped": [
       "BRK-A",
@@ -44590,5 +44590,72 @@
         "detail": ""
       }
     ]
+  },
+  "context_tokens": {
+    "intake": 32768,
+    "analyst": 32768,
+    "structuralist": 16384
+  },
+  "kv_cache": "fp16 (unquantised) \u2014 a server-side setting invisible to the cache key, recorded here",
+  "truncation": {
+    "rule": "head_tail_v1",
+    "head_tokens": 24000,
+    "tail_tokens": 4000,
+    "chars_per_token_estimate": 3.5,
+    "template_reserve_tokens": 800,
+    "document_budget_tokens": 29968,
+    "invariant": "result is re-estimated and shrunk until it is under budget",
+    "source_hash_semantics": "exhibits.by_accession hashes the FULL document EDGAR served; truncation is recorded here, never folded into the hash",
+    "sensitivity_check": "primary result reported with and without BXP, FCX and PRU regardless of outcome (ADR 0020, pre-registered)",
+    "applies_to": {
+      "0001037540-26-000003": {
+        "elided_chars": 121441,
+        "kept_chars": 98121
+      },
+      "0001037540-26-000015": {
+        "elided_chars": 113903,
+        "kept_chars": 98121
+      },
+      "0001037540-26-000031": {
+        "elided_chars": 113431,
+        "kept_chars": 98121
+      },
+      "0001656423-25-000006": {
+        "elided_chars": 117621,
+        "kept_chars": 98121
+      },
+      "0001656423-25-000030": {
+        "elided_chars": 115886,
+        "kept_chars": 98121
+      },
+      "0001656423-25-000043": {
+        "elided_chars": 113329,
+        "kept_chars": 98121
+      },
+      "0000831259-26-000006": {
+        "elided_chars": 33879,
+        "kept_chars": 98120
+      },
+      "0000831259-26-000033": {
+        "elided_chars": 24367,
+        "kept_chars": 98120
+      },
+      "0000831259-25-000028": {
+        "elided_chars": 26175,
+        "kept_chars": 98120
+      },
+      "0000831259-25-000048": {
+        "elided_chars": 29532,
+        "kept_chars": 98120
+      },
+      "0001137774-26-000087": {
+        "elided_chars": 7272,
+        "kept_chars": 98119
+      },
+      "0001137774-25-000013": {
+        "elided_chars": 17196,
+        "kept_chars": 98120
+      }
+    }
   }
 }

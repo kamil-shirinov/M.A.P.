@@ -90,6 +90,12 @@ class LedgerEntry(DomainModel):
     reasoning_tokens: int = Field(default=0, ge=0)
     cache_hits: int = Field(default=0, ge=0)
 
+    # Whether the ADR 0020 truncation rule bit on this item, and by how much. The
+    # exhibit's frozen hash still covers the FULL document EDGAR served; this is
+    # the processing step recorded beside it, never folded into it.
+    truncated: bool = False
+    elided_chars: int = Field(default=0, ge=0)
+
     @property
     def key(self) -> tuple[str, str, date]:
         return (self.ticker, self.band, self.filing_date)

@@ -67,6 +67,10 @@ UNTRUSTED_TEXT_SITES = {
     # company said, which is not the same as being safe to interpolate: it is
     # attacker-influenced prose that reaches a model, so it is tainted like any feed.
     "mapf/data/exhibits.py",
+    # Where taint propagates: a truncated exhibit is still filed text, and
+    # returning a bare str here would push re-labelling onto every caller —
+    # one that forgot would silently launder untrusted text into trusted.
+    "mapf/core/truncation.py",
     # Where taint propagates: model output derived from feed text, which is
     # interpolated into the next agent's prompt (ADR 0005).
     "mapf/agents/intake.py",

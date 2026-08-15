@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from mapf.eval.tokens import (
+from mapf.core.tokens import (
     CHARS_PER_TOKEN,
     TEMPLATE_RESERVE,
     AgentBudget,

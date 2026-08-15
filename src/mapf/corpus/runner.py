@@ -74,6 +74,11 @@ MAX_CONSECUTIVE_FAILURES = 5
 MAX_BAND_FAILURE_RATE = 0.02
 
 
+# Set by the document callback when the truncation rule bites, so the runner can
+# record it without knowing how documents are built.
+TRUNCATION_NOTES: dict[tuple[str, str, date], int] = {}
+
+
 @dataclass(frozen=True)
 class CorpusItem:
     ticker: str
@@ -384,6 +389,8 @@ def _attempt(
                     degenerate_spread=manifest.quality.degenerate_spread,
                     reasoning_tokens=sum(a.reasoning_tokens for a in manifest.agents),
                     cache_hits=sum(a.cache_hits for a in manifest.agents),
+                    truncated=item.key in TRUNCATION_NOTES,
+                    elided_chars=TRUNCATION_NOTES.get(item.key, 0),
                 ),
                 None,
             )

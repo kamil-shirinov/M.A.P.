@@ -23,8 +23,11 @@ from mapf.cli.app import app, fail, handle
 from mapf.core.errors import ExhibitError, MapError
 from mapf.core.hashing import new_run_id
 from mapf.core.models import Document, EarningsFiling
+from mapf.core.tokens import AgentBudget, check_fit, estimate_tokens
+from mapf.core.truncation import plan_truncation, truncate
 from mapf.corpus.ledger import Ledger, LedgerEntry, is_terminal
 from mapf.corpus.runner import (
+    TRUNCATION_NOTES,
     CorpusHaltedError,
     CorpusItem,
     Health,
@@ -36,7 +39,6 @@ from mapf.corpus.runner import (
 from mapf.corpus.selection import Corpus
 from mapf.data.exhibits import EdgarExhibits
 from mapf.data.symbols import Throttle
-from mapf.eval.tokens import AgentBudget, check_fit, estimate_tokens
 from mapf.pipeline.context_probe import probe_context
 from mapf.prompts.loader import FilePromptStore
 from mapf.settings import ModelRegistry, load
@@ -161,13 +163,29 @@ def corpus_run(
                 _preflight(record, band, items, exhibits, by_key, vintage, budgets)
                 return
 
+            intake_budget = AgentBudget(
+                agent="intake",
+                context_tokens=registry.spec("intake").context_tokens,
+                max_tokens=registry.spec("intake").sampling.max_tokens,
+            ).document_budget
+
             def documents(item: CorpusItem) -> tuple[Document, ...]:
                 accession, cik = by_key[(item.ticker, item.filing_date)]
-                return (
-                    exhibits.fetch(
-                        EarningsFiling(accession=accession, cik=cik, filed=item.filing_date)
-                    ),
+                document = exhibits.fetch(
+                    EarningsFiling(accession=accession, cik=cik, filed=item.filing_date)
                 )
+                text, record = truncate(document.text, budget_tokens=intake_budget)
+                if not record.applied:
+                    return (document,)
+                TRUNCATION_NOTES[item.key] = record.removed_chars
+                typer.secho(
+                    f"           truncated {item.ticker} {item.filing_date}: "
+                    f"{record.describe()}",
+                    fg=typer.colors.YELLOW,
+                )
+                # The id still hashes the bytes EDGAR served (ADR 0005); truncation
+                # is a processing step recorded beside the hash, not inside it.
+                return (document.model_copy(update={"text": text}),)
 
             wiring = build_run(
                 settings,
@@ -341,17 +359,39 @@ def _report_fit(
         f"(binding agent: {min(budgets, key=lambda b: b.document_budget).agent})"
     )
     over: list[tuple[str, int, int]] = []
+    truncated: list[tuple[str, int]] = []
     for item in items:
         accession, _ = by_key[(item.ticker, item.filing_date)]
         chars = sizes.get(accession)
         if not chars:
             continue
         result = check_fit(estimate_tokens(chars), budgets)
-        if not result.fits:
-            over.append((f"{item.ticker} {item.filing_date}", result.tokens, -result.headroom))
+        if result.fits:
+            continue
+        # The rule is what makes an oversized exhibit runnable, so the gate asks
+        # whether it fits AFTER truncation. Refusing here would refuse items the
+        # pipeline handles.
+        cut = plan_truncation(chars, budget_tokens=tight)
+        if cut.applied and cut.estimated_tokens <= tight:
+            truncated.append((f"{item.ticker} {item.filing_date}", cut.removed_chars))
+            continue
+        over.append((f"{item.ticker} {item.filing_date}", result.tokens, -result.headroom))
+
+    if truncated:
+        typer.secho(
+            f"tokens     {len(truncated)} exhibits will be truncated by the frozen "
+            f"rule (ADR 0020)",
+            fg=typer.colors.YELLOW,
+        )
+        for label, removed in sorted(truncated, key=lambda r: -r[1])[:15]:
+            typer.echo(f"           {label:<22}{removed:,} chars elided")
 
     if not over:
-        typer.secho(f"tokens     all {len(items)} exhibits fit", fg=typer.colors.GREEN)
+        typer.secho(
+            f"tokens     all {len(items)} exhibits fit "
+            f"({len(items) - len(truncated)} whole, {len(truncated)} truncated)",
+            fg=typer.colors.GREEN,
+        )
         return
     typer.secho(
         f"tokens     {len(over)} of {len(items)} exhibits exceed the budget",

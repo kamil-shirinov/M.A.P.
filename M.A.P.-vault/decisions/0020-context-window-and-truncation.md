@@ -72,8 +72,13 @@ load one at a time, so that is the whole footprint.
 
 ### The truncation rule, with its parameters fixed here
 
-At 32,768, eleven exhibits overflow. They belong to **three tickers**: BXP (6
-items, 57–59k tokens each), FCX (4 items, 33–36k), PRU (1). Three of 120 tickers.
+At 32,768, **twelve** exhibits overflow. They belong to **three tickers**: BXP (6
+items, 57–59k tokens each), FCX (4 items, 33–36k), PRU (2). Three of 120 tickers.
+
+The count is twelve rather than the eleven quoted while this was being decided,
+because the gate estimates at 3.5 characters per token while that survey used 3.7.
+The conservative estimator catches one more PRU filing, which is the direction a
+refusal gate should err in.
 
 > **Head-and-tail retention.** Keep the first **24,000 tokens** and the last
 > **4,000 tokens** of the exhibit, drop the middle, and insert an explicit elision
@@ -86,9 +91,33 @@ chosen with a score in view is a researcher degree of freedom rather than a
 preprocessing step. They are frozen with the corpus alongside the context lengths.
 
 **Why 24,000 and 4,000.** The budget is 32,768 less an 800-token template reserve
-and a 2,000-token output reserve, leaving 29,968; 28,000 uses it with ~1,900 tokens
-of margin, which matters because the token estimate carries roughly ±10%
-uncertainty and the estimate must never be the thing that overflows.
+and a 2,000-token output reserve, leaving 29,968. A 28,000-token target uses it with
+**1,968 tokens of margin — 7.0% of the target**, not the 10% an earlier draft of
+this document claimed. The arithmetic:
+
+| true chars/token | 28,000 tokens estimated at 3.5 → 98,000 chars | actual tokens | fits 29,968? |
+| --- | --- | --- | --- |
+| 4.0 | 98,000 | 24,500 | yes |
+| 3.7 | 98,000 | 26,486 | yes |
+| 3.5 | 98,000 | 28,000 | yes |
+| **3.3** | 98,000 | **29,697** | yes, by 271 |
+| 3.0 | 98,000 | 32,667 | **no** |
+
+The margin covers ratio error down to about 3.3 characters per token, which is
+already below anything observed (3.7 and 4.0 from real rejections). So the margin
+holds — but it holds by less than the earlier draft asserted, and a claim the
+numbers do not support has no business in an ADR.
+
+**The margin is nevertheless not what guarantees correctness.** Trusting it would
+mean a bad ratio produces a *run-time* failure, which is the class of failure this
+whole document exists to eliminate. So the rule **enforces the invariant instead**:
+after cutting, the result is re-estimated, and if it is still over budget the head
+and tail are shrunk together and it is re-checked, until it genuinely fits. Ratio
+error can then cost a slightly shorter document. It cannot cost a night.
+
+Head and tail shrink *together*, preserving the 6:1 shape. Shrinking the head alone
+would never converge at a small budget, where the fixed tail can exceed the whole
+allowance by itself.
 
 The 6:1 split follows the shape of an earnings release. The head carries what the
 document is *for*: headline results, the metrics table, management commentary, and
@@ -109,7 +138,8 @@ size. At three named tickers that objection fails on its own terms:
 - Every affected item is **identifiable in advance** and flagged per item.
 - BXP and FCX are truncated **in both bands equally**, so the leakage difference —
   the number the ambiguous band exists to produce — is protected by the same-ticker
-  constraint that has already paid for itself twice.
+  constraint that has already paid for itself twice. PRU is truncated once in each
+  band, so the same holds for it.
 - The affected set is small, named, and reportable.
 
 ### Pre-registered sensitivity check
@@ -119,6 +149,23 @@ regardless of what the comparison shows.** Declared here, before any score exist
 because a robustness check run afterwards and mentioned only when favourable is a
 different claim from one committed to in advance. If the two differ materially,
 that difference is a finding and is reported as one.
+
+### What the record holds, and what it means
+
+**The frozen exhibit hash stays the hash of the full document EDGAR served.**
+Truncation is recorded beside it as a processing step — rule name, parameters, and
+a per-item flag with the number of characters elided — never folded into it.
+
+This follows ADR 0005 rather than departing from it: `Document.id` hashes the bytes
+exactly as they arrived, so it is "an honest record of the source rather than of our
+rendering", and quarantine was already a rendering step that does not disturb it.
+Truncation is another. Hashing the truncated text would make the hash mean "what we
+chose to show the model", and the record would lose its only claim to reproducibility
+against EDGAR.
+
+The truncated text stays `UntrustedText` through the transformation. Returning a bare
+string would push re-labelling onto every caller, and a caller that forgot would
+silently launder filed text into trusted text.
 
 ## Consequences
 
