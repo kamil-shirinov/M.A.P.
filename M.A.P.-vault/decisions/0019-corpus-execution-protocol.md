@@ -200,3 +200,59 @@ recorded.**
 
 The field is therefore fully populated only from the ambiguous band onward, and any
 report covering the clean band must say so.
+
+
+## Pre-commitment, 2026-08-15 — the ambiguous band runs at full parity
+
+**Decided now, and recorded now, specifically because no score exists anywhere yet.**
+The clean band is still executing, nothing has been evaluated, and the scoring pass
+had not been written when this was written. There is therefore no number that could
+have influenced this decision, and the commit ordering in this repository is the
+evidence for that rather than an assurance.
+
+**The ambiguous band will run both passes at full parity. It is not a decision to be
+taken later on elapsed time.** §1 created a continuation option; this spends it, in
+advance, in the only direction that does not depend on data.
+
+### Why parity rather than stopping at half
+
+The sizing work in ADR 0018 put the knee at parity: moving from 0.5× to 1.0× buys
+11.8% off the standard error of the leakage difference, while 1.0× to 1.5× buys only
+4.1% for the same 2.2 nights. Parity is where the return stops being worth the time.
+
+More decisive is what the leakage estimate is *for*. **It is the entire justification
+for restricting the primary result to the clean band.** ADR 0018 chose Option 4 —
+clean band primary, ambiguous band as instrumentation — on the argument that leakage
+biases calibration in the flattering direction. If the leakage number is itself soft,
+that restriction is unsupported: we would have paid the cost of a narrow clean band
+without the measurement that justifies paying it. A weak leakage estimate is the one
+economy that undermines the design it was economising within.
+
+### The consequence, which is the point
+
+Because the ambiguous plan is now fixed and unconditional, **scoring the clean band
+the moment it finishes cannot contaminate anything.** There is no remaining decision
+for a clean-band score to influence: not which items run, not how many, not for how
+long. The sequence becomes:
+
+> clean band → **score the clean band** → ambiguous band runs regardless → leakage estimate
+
+That is roughly six days earlier for the primary result, at no methodological cost.
+The cost was avoided by giving up the option in advance rather than by reasoning
+carefully about it afterwards, which is the only reliable way to give up an option.
+
+The residual risk is not statistical but human: seeing a clean-band score and then
+adjusting the ambiguous run. The structural guards already cover it — the corpus is
+frozen and committed, and the runner refuses to start if a prompt template or model
+alias differs from the frozen record (§4). Changing the ambiguous run after seeing a
+score would require amending the freeze, which is a visible, dated, deliberate act.
+
+### In code
+
+`map evaluate --band ambiguous` is run with both passes declared:
+
+    --declared ambiguous_half_1,ambiguous_half_2
+
+which is also the default `require_finished` behaviour when `declared` is omitted.
+It is passed explicitly all the same, so the record shows a declaration that was
+made rather than a default that happened to apply.
