@@ -36,6 +36,8 @@ from mapf.corpus.runner import (
 from mapf.corpus.selection import Corpus
 from mapf.data.exhibits import EdgarExhibits
 from mapf.data.symbols import Throttle
+from mapf.eval.tokens import AgentBudget, check_fit, estimate_tokens
+from mapf.pipeline.context_probe import probe_context
 from mapf.prompts.loader import FilePromptStore
 from mapf.settings import ModelRegistry, load
 
@@ -147,7 +149,16 @@ def corpus_run(
             )
 
             if check:
-                _preflight(record, band, items, exhibits, by_key, vintage)
+                budgets = [
+                    AgentBudget(
+                        agent=stage,
+                        context_tokens=registry.spec(stage).context_tokens,
+                        max_tokens=registry.spec(stage).sampling.max_tokens,
+                    )
+                    for stage in ("intake",)
+                ]
+                _probe_contexts(provider, models, registry)
+                _preflight(record, band, items, exhibits, by_key, vintage, budgets)
                 return
 
             def documents(item: CorpusItem) -> tuple[Document, ...]:
@@ -214,6 +225,38 @@ def _progress(
     )
 
 
+def _probe_contexts(provider: object, models: object, registry: object) -> None:
+    """Ask the server for its real context window, per agent.
+
+    A configured number the server does not honour is exactly how the first run
+    failed, so this compares against reality rather than against `config`.
+    """
+    disagreements: list[str] = []
+    for stage in ("intake", "analyst", "structuralist"):
+        spec = registry.spec(stage)  # type: ignore[attr-defined]
+        report = probe_context(
+            provider,  # type: ignore[arg-type]
+            models[stage],  # type: ignore[index]
+            agent=stage,
+            configured=spec.context_tokens,
+        )
+        colour = typer.colors.GREEN if report.agrees else typer.colors.RED
+        typer.secho(f"context    {report.describe()}", fg=colour)
+        if not report.agrees:
+            disagreements.append(report.describe())
+    if disagreements:
+        raise fail(
+            "the server's context windows do not match the configuration",
+            2,
+            hint=(
+                "config/default.toml is what the corpus was sized against; the "
+                "inference server is what will actually run it. Raise the context "
+                "where the model is loaded, or lower it in config and re-check "
+                "which exhibits still fit."
+            ),
+        )
+
+
 def _preflight(
     record: dict[str, object],
     band: str,
@@ -221,6 +264,7 @@ def _preflight(
     exhibits: EdgarExhibits,
     by_key: dict[tuple[str, date], tuple[str, int]],
     vintage: date,
+    budgets: list[AgentBudget] | None = None,
 ) -> None:
     """Re-hash every exhibit against the frozen record and report. No inference."""
     frozen_hashes = record.get("exhibits")
@@ -251,6 +295,8 @@ def _preflight(
         if n % 50 == 0:
             typer.echo(f"           {n}/{len(items)}")
 
+    if budgets:
+        _report_fit(record, items, by_key, budgets)
     typer.echo(f"vintage    {vintage} (pinned)")
     for label, rows, colour in (
         ("unfetchable", missing, typer.colors.RED),
@@ -268,3 +314,58 @@ def _preflight(
     typer.secho("check      pre-flight complete; no inference ran", fg=typer.colors.GREEN)
     if missing or changed:
         raise typer.Exit(6)
+
+
+def _report_fit(
+    record: dict[str, object],
+    items: tuple[CorpusItem, ...],
+    by_key: dict[tuple[str, date], tuple[str, int]],
+    budgets: list[AgentBudget],
+) -> None:
+    """Whether every exhibit fits, and which agent binds when one does not.
+
+    Sizes come from the frozen record, so this costs nothing and can run before the
+    exhibits are fetched at all. Reporting the binding agent turns "it will not
+    fit" into "raise this one number".
+    """
+    frozen = record.get("exhibits")
+    sizes: dict[str, int] = {}
+    if isinstance(frozen, dict):
+        raw = frozen.get("by_accession")
+        if isinstance(raw, dict):
+            sizes = {a: int(v.get("chars", 0)) for a, v in raw.items()}
+
+    tight = max(b.document_budget for b in budgets)
+    typer.echo(
+        f"tokens     budget {tight:,} tokens per document "
+        f"(binding agent: {min(budgets, key=lambda b: b.document_budget).agent})"
+    )
+    over: list[tuple[str, int, int]] = []
+    for item in items:
+        accession, _ = by_key[(item.ticker, item.filing_date)]
+        chars = sizes.get(accession)
+        if not chars:
+            continue
+        result = check_fit(estimate_tokens(chars), budgets)
+        if not result.fits:
+            over.append((f"{item.ticker} {item.filing_date}", result.tokens, -result.headroom))
+
+    if not over:
+        typer.secho(f"tokens     all {len(items)} exhibits fit", fg=typer.colors.GREEN)
+        return
+    typer.secho(
+        f"tokens     {len(over)} of {len(items)} exhibits exceed the budget",
+        fg=typer.colors.RED,
+    )
+    for label, tokens, excess in sorted(over, key=lambda r: -r[1])[:15]:
+        typer.echo(f"           {label:<22}~{tokens:>7,} tokens, over by {excess:,}")
+    raise fail(
+        f"{len(over)} exhibits cannot fit the configured context",
+        6,
+        hint=(
+            "Raise the binding agent's context_tokens and reload the model on the "
+            "inference server, "
+            "or apply the frozen truncation rule (ADR 0020). This is a pre-flight "
+            "result, not a run-time failure."
+        ),
+    )

@@ -19,6 +19,7 @@ import pytest
 
 from mapf.core.errors import (
     ForecastRepairExhausted,
+    InferenceStatusError,
     InferenceTimeoutError,
     InferenceUnreachableError,
     MapError,
@@ -680,3 +681,48 @@ def test_the_progress_hook_sees_every_item(
         on_progress=lambda i, t, item, e, h: seen.append((i, t, item.ticker)),
     )
     assert [(i, t) for i, t, _ in seen] == [(1, 3), (2, 3), (3, 3)]
+
+
+# ---------------------------------------------------------------------------
+# Status classification — finer than the exception type
+# ---------------------------------------------------------------------------
+REAL_400 = (
+    '{"error":"Engine protocol predict request received: the request (13830 tokens) '
+    'exceeds the available context size (8192 tokens)"}'
+)
+
+
+def test_a_context_overflow_is_terminal_not_transient() -> None:
+    """The first corpus run recorded eight of these as transient `other`. Retrying
+    them consumes the failure allowance each pass until the run halts again on
+    items that can never succeed."""
+    reason = _reason_for(InferenceStatusError(400, REAL_400))
+    assert reason == "context_overflow"
+    assert is_terminal(reason) is True
+
+
+def test_a_server_error_stays_transient() -> None:
+    """HTTP 500 from a loaded server is exactly what a retry exists for."""
+    reason = _reason_for(InferenceStatusError(500, "internal server error"))
+    assert reason == "other"
+    assert is_terminal(reason) is False
+
+
+def test_a_non_context_400_stays_transient() -> None:
+    """400 covers more than one thing; only the context case is deterministic."""
+    assert _reason_for(InferenceStatusError(400, "malformed json")) == "other"
+
+
+def test_budget_exhaustion_remains_transient_because_the_analyst_samples() -> None:
+    """At temperature 0.7 a second attempt explores a different reasoning path and
+    may finish inside the budget. The same reason would be terminal at temperature 0,
+    so the distinction is about the sampling rather than the exception."""
+    assert is_terminal("budget_exhausted") is False
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["exceeds the available context size (8192 tokens)", "context length exceeded (4096 tokens)"],
+)
+def test_context_phrasings_are_recognised(body: str) -> None:
+    assert _reason_for(InferenceStatusError(400, body)) == "context_overflow"

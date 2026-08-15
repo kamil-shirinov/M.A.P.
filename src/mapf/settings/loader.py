@@ -32,6 +32,7 @@ from mapf.core.errors import (
     ConfigurationError,
     DeterminismPolicyError,
     PlaceholderConfigError,
+    UnreachableContextBudgetError,
     UnreachableTokenBudgetError,
 )
 
@@ -57,6 +58,11 @@ _SEC_USER_AGENT_HINT = (
 
 class _Section(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+# No prompt is empty; a budget that leaves less than this is unreachable in
+# practice even when the arithmetic technically permits it.
+_MIN_PROMPT_TOKENS = 512
 
 
 class InferenceSettings(_Section):
@@ -92,6 +98,11 @@ class ModelSettings(_Section):
     alias: str = Field(min_length=1)
     temperature: float = Field(ge=0.0, le=2.0)
     seed: int | None = None
+    # The server's context window for this agent. Configured here so it can be
+    # frozen with a corpus and checked before a run, but never trusted: it is a
+    # server-side setting this file cannot enforce, so the pre-flight probes the
+    # server for the real value and refuses on disagreement (ADR 0020 §4).
+    context_tokens: int = Field(default=8192, ge=512)
     top_p: float | None = Field(default=None, gt=0.0, le=1.0)
     max_tokens: int | None = Field(default=None, ge=1)
 
@@ -210,6 +221,28 @@ class Settings(BaseSettings):
     data: DataSettings
     news: NewsSettings
     paths: PathsSettings
+
+    @model_validator(mode="after")
+    def _budgets_fit_their_context(self) -> Self:
+        """Generation shares the context window with the prompt.
+
+        A `max_tokens` at or above `context_tokens` leaves no room for a prompt, so
+        the budget can never be spent. The model stops at the context ceiling and
+        reports exhaustion, which is indistinguishable from a genuinely long
+        reasoning chain unless you happen to know both numbers. Checked here so
+        they cannot be set independently into contradiction again.
+        """
+        for agent in ("intake", "analyst", "structuralist"):
+            spec = getattr(self.models, agent)
+            if spec.max_tokens is None:
+                continue
+            # A prompt of at least a few hundred tokens always exists; requiring
+            # strict headroom rather than mere inequality keeps the check honest.
+            if spec.max_tokens + _MIN_PROMPT_TOKENS > spec.context_tokens:
+                raise UnreachableContextBudgetError(
+                    agent, spec.max_tokens, spec.context_tokens
+                )
+        return self
 
     @model_validator(mode="after")
     def _token_budgets_are_reachable(self) -> Self:

@@ -46,14 +46,17 @@ max_repair_attempts = 3
 [models.intake]
 alias = "llama-3.2-3b"
 temperature = 0.0
+context_tokens = 32768
 
 [models.analyst]
 alias = "gemma4-12b"
 temperature = 0.7
+context_tokens = 32768
 
 [models.structuralist]
 alias = "qwen3-4b"
 temperature = 0.0
+context_tokens = 16384
 
 [cache]
 llm_dir = "{tmp_path / "llm"}"

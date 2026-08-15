@@ -38,12 +38,17 @@ class ModelSpec(BaseModel):
     agent: AgentName
     alias: str
     sampling: SamplingParams
+    # The window the prompt and the generation share. Carried here so the
+    # pre-flight can size documents against it without reaching back into
+    # settings, and so it can be frozen with a corpus.
+    context_tokens: int
 
 
 def _to_spec(agent: AgentName, configured: ModelSettings) -> ModelSpec:
     return ModelSpec(
         agent=agent,
         alias=configured.alias,
+        context_tokens=configured.context_tokens,
         sampling=SamplingParams(
             temperature=configured.temperature,
             seed=configured.seed,

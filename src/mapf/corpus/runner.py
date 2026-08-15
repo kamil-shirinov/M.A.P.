@@ -31,6 +31,7 @@ import structlog
 
 from mapf.core.errors import (
     ForecastRepairExhausted,
+    InferenceStatusError,
     InferenceTimeoutError,
     InferenceUnreachableError,
     MapError,
@@ -168,7 +169,15 @@ def verify_freeze(
         )
 
 
+# A server rejecting an over-long request says so in the body. Matching on the
+# message is unlovely, but the alternative is treating every HTTP 400 as one thing
+# when 400 covers both "this prompt can never fit" and "malformed request".
+_CONTEXT_MARKERS = ("context size", "context length", "context window", "exceeds the available")
+
+
 def _reason_for(error: MapError) -> FailureReason:
+    if isinstance(error, InferenceStatusError):
+        return _classify_status(error)
     if isinstance(error, MissingExhibitError):
         return "missing_exhibit"
     if isinstance(error, InferenceUnreachableError):
@@ -183,6 +192,22 @@ def _reason_for(error: MapError) -> FailureReason:
         return "repair_exhausted"
     if isinstance(error, NoMaterialFactsError):
         return "no_material_facts"
+    return "other"
+
+
+def _classify_status(error: InferenceStatusError) -> FailureReason:
+    """Split HTTP status into transient and terminal.
+
+    The exception type alone is too coarse: `InferenceStatusError` covers a 500
+    from a server under load, which a retry may well survive, and a 400 rejecting a
+    prompt longer than the context, which will fail identically on every attempt
+    forever. Retrying the latter consumes the failure allowance each pass until the
+    run halts on items that can never succeed — the first corpus run recorded eight
+    of them as transient `other`.
+    """
+    body = error.body.lower()
+    if error.status_code == 400 and any(m in body for m in _CONTEXT_MARKERS):
+        return "context_overflow"
     return "other"
 
 

@@ -18,7 +18,7 @@ from typer.testing import CliRunner
 
 from mapf.cli.app import app
 from mapf.cli.commands.corpus import _progress
-from mapf.core.errors import MissingExhibitError
+from mapf.core.errors import InferenceStatusError, MissingExhibitError
 from mapf.core.models import Document, UntrustedText
 from mapf.corpus.ledger import Ledger, LedgerEntry
 from mapf.corpus.runner import CorpusHaltedError, CorpusItem, Health
@@ -252,16 +252,30 @@ class _Model:
 
 
 class _Provider:
+    """Answers the context probe the way a correctly-loaded server would.
+
+    The probe deliberately overshoots, so a healthy server rejects it and names its
+    real window. Reporting a window at least as large as the configured one is what
+    "agrees" means.
+    """
+
+    def __init__(self, reports: int = 32768) -> None:
+        self.reports = reports
+
     def list_models(self):  # type: ignore[no-untyped-def]
         return [_Model(a) for a in ("llama-3.2-3b", "gemma4-12b", "qwen3-4b")]
 
-    def complete(self, **kwargs):  # type: ignore[no-untyped-def]  # pragma: no cover
-        raise AssertionError("no inference should happen in these tests")
+    def complete(self, **kwargs):  # type: ignore[no-untyped-def]
+        raise InferenceStatusError(
+            400,
+            f'{{"error":"the request (99999 tokens) exceeds the available '
+            f'context size ({self.reports} tokens)"}}',
+        )
 
 
-def _stub_infra(monkeypatch: pytest.MonkeyPatch) -> None:
+def _stub_infra(monkeypatch: pytest.MonkeyPatch, reports: int = 32768) -> None:
     monkeypatch.setattr(
-        "mapf.cli.commands.corpus.build_llm_provider", lambda *a, **k: _Provider()
+        "mapf.cli.commands.corpus.build_llm_provider", lambda *a, **k: _Provider(reports)
     )
     monkeypatch.setattr(
         "mapf.cli.commands.corpus.build_run",
@@ -460,3 +474,60 @@ def test_check_prints_progress_on_a_long_corpus(
     _check_with(monkeypatch, "sha256:" + "d" * 64)
     result = _invoke(tmp_path, "--check", frozen=frozen)
     assert "50/52" in result.output
+
+
+# ---------------------------------------------------------------------------
+# The context probe, wired into --check
+# ---------------------------------------------------------------------------
+def test_check_refuses_when_the_server_context_is_smaller_than_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The exact failure of the first corpus run, now caught before it starts."""
+    _check_with(monkeypatch, "sha256:" + "d" * 64)   # re-stubs the provider
+    _stub_infra(monkeypatch, reports=8192)           # so this must come after
+    result = _invoke(tmp_path, "--check")
+    assert result.exit_code != 0
+    assert "TOO SMALL" in result.output
+    assert "do not match the configuration" in result.output
+
+
+def test_check_reports_each_agents_context(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _check_with(monkeypatch, "sha256:" + "d" * 64)
+    result = _invoke(tmp_path, "--check")
+    for agent in ("intake", "analyst", "structuralist"):
+        assert f"{agent}: configured" in result.output
+
+
+def test_check_refuses_when_an_exhibit_cannot_fit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pre-flight result, not an hour-one failure."""
+    frozen = _frozen(tmp_path)
+    record = json.loads(frozen.read_text())
+    for spec in record["exhibits"]["by_accession"].values():
+        spec["document_id"] = "sha256:" + "d" * 64
+        spec["chars"] = 220_000          # BXP-sized: over any 32k context
+    frozen.write_text(json.dumps(record), encoding="utf-8")
+    _check_with(monkeypatch, "sha256:" + "d" * 64)
+    result = _invoke(tmp_path, "--check", frozen=frozen)
+    assert result.exit_code == 6
+    assert "exceed the budget" in result.output
+    assert "over by" in result.output
+
+
+def test_check_passes_when_every_exhibit_fits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    frozen = _frozen(tmp_path)
+    record = json.loads(frozen.read_text())
+    for spec in record["exhibits"]["by_accession"].values():
+        spec["document_id"] = "sha256:" + "d" * 64
+        spec["chars"] = 30_000
+    frozen.write_text(json.dumps(record), encoding="utf-8")
+    _check_with(monkeypatch, "sha256:" + "d" * 64)
+    result = _invoke(tmp_path, "--check", frozen=frozen)
+    assert result.exit_code == 0
+    assert "exhibits fit" in result.output
+    assert "binding agent" in result.output

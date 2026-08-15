@@ -40,6 +40,7 @@ FailureReason = Literal[
     "repair_exhausted",
     "no_material_facts",
     "missing_exhibit",
+    "context_overflow",
     "other",
 ]
 
@@ -55,8 +56,14 @@ FailureReason = Literal[
 # on an item that can never succeed — so it is recorded as done, with its failure
 # preserved, and never attempted again.
 TERMINAL_REASONS: frozenset[str] = frozenset(
-    {"missing_exhibit", "repair_exhausted", "no_material_facts"}
+    {"missing_exhibit", "repair_exhausted", "no_material_facts", "context_overflow"}
 )
+
+# `budget_exhausted` is deliberately NOT terminal. The analyst samples at
+# temperature 0.7, so a second attempt genuinely explores a different reasoning
+# path and may finish inside the budget. The same reason would be terminal for a
+# temperature-0 agent, which is why the distinction is about the sampling rather
+# than about the exception.
 
 
 def is_terminal(reason: FailureReason | None) -> bool:

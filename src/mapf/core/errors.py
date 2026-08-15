@@ -91,6 +91,30 @@ class UnreachableTokenBudgetError(ConfigurationError):
         )
 
 
+class UnreachableContextBudgetError(ConfigurationError):
+    """`max_tokens` does not fit inside the agent's context window.
+
+    Generation shares the window with the prompt, so a budget at or above the
+    context can never be spent: the model stops at the context ceiling and reports
+    exhaustion, which reads as "the prompt was too long for the model to answer"
+    when the truth is "these two numbers were set independently and contradict".
+    That is exactly how the first corpus run failed on TSLA — 6,699 reasoning
+    tokens against a 12,000 budget in an 8,192 window.
+    """
+
+    def __init__(self, agent: str, max_tokens: int, context_tokens: int) -> None:
+        self.agent = agent
+        self.max_tokens = max_tokens
+        self.context_tokens = context_tokens
+        super().__init__(
+            f"{agent}: max_tokens={max_tokens:,} does not fit in context_tokens="
+            f"{context_tokens:,}. Generation shares the window with the prompt, so "
+            f"the budget is unreachable and the model will stop at the context "
+            f"ceiling while reporting budget exhaustion. Raise the context or lower "
+            f"the budget."
+        )
+
+
 class DeterminismPolicyError(ConfigurationError):
     """An agent required to be deterministic was configured with sampling.
 

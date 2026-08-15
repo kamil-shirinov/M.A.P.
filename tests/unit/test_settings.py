@@ -406,7 +406,10 @@ def test_an_unreachable_token_budget_is_rejected(tmp_path: Path) -> None:
 
     content = VALID_TOML.replace(
         "read_timeout_s = 600.0", "read_timeout_s = 600.0\nmin_tokens_per_second = 10.0"
-    ).replace('alias = "gemma4:12b"', 'alias = "gemma4:12b"\nmax_tokens = 12000')
+    ).replace(
+        'alias = "gemma4:12b"',
+        'alias = "gemma4:12b"\nmax_tokens = 12000\ncontext_tokens = 32768',
+    )
     with pytest.raises(UnreachableTokenBudgetError) as caught:
         load([_write(tmp_path, content)])
     assert caught.value.agent == "analyst"
@@ -427,7 +430,10 @@ def test_faster_hardware_can_be_declared(tmp_path: Path) -> None:
     rather than discovered."""
     content = VALID_TOML.replace(
         "read_timeout_s = 600.0", "read_timeout_s = 600.0\nmin_tokens_per_second = 40.0"
-    ).replace('alias = "gemma4:12b"', 'alias = "gemma4:12b"\nmax_tokens = 12000')
+    ).replace(
+        'alias = "gemma4:12b"',
+        'alias = "gemma4:12b"\nmax_tokens = 12000\ncontext_tokens = 32768',
+    )
     assert load([_write(tmp_path, content)]).models.analyst.max_tokens == 12000
 
 
@@ -450,3 +456,21 @@ def test_the_committed_config_has_a_reachable_budget() -> None:
     assert budget is not None
     needed = budget / settings.inference.min_tokens_per_second
     assert needed <= settings.inference.read_timeout_s * settings.inference.budget_margin
+
+
+def test_a_budget_that_cannot_fit_its_context_is_rejected(tmp_path: Path) -> None:
+    """Generation shares the window with the prompt, so max_tokens at or above
+    context_tokens is a budget that can never be spent — the model stops at the
+    context ceiling and reports exhaustion. Exactly how the first corpus run failed
+    on TSLA: 6,699 reasoning tokens against a 12,000 budget in an 8,192 window."""
+    from mapf.core.errors import UnreachableContextBudgetError
+
+    content = VALID_TOML.replace(
+        'alias = "gemma4:12b"',
+        'alias = "gemma4:12b"\nmax_tokens = 12000\ncontext_tokens = 8192',
+    )
+    with pytest.raises(UnreachableContextBudgetError) as caught:
+        load([_write(tmp_path, content)])
+    assert caught.value.agent == "analyst"
+    assert caught.value.context_tokens == 8192
+    assert "unreachable" in str(caught.value)

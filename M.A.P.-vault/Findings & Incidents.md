@@ -318,3 +318,41 @@ the raw value instead of reasoning about it.
 
 **What made it survivable:** the dry run existed at all. Fetching 727 exhibits with zero LLM calls is
 about thirty minutes; discovering this on night three of a twelve-night run is not.
+
+
+---
+
+## 19 · The context window nobody measured against the documents
+
+Nine failures in the first hour of a twelve-night run, all one defect: an 8,192-token context window
+against exhibits with a **median of ~9,070 tokens**. The run was not unlucky — it was going to fail on
+**54% of the corpus**.
+
+**How it got there.** Every test ran against a 470-character synthetic news file. Real Item 2.02
+exhibits run 652 to 219,441 characters. Nothing anywhere compared document size to context capacity,
+because at 470 characters the question never arises. The fixture was three orders of magnitude smaller
+than the thing it stood in for, and being small is exactly what made it pass.
+
+**The ninth failure hid inside a different name.** TSLA reported *budget exhaustion* after 6,699
+reasoning tokens against a 12,000-token budget. It was the same bug: generation shares the window with
+the prompt, so a 12,000 budget in an 8,192 window is unreachable, and the model stops at the context
+ceiling while reporting that it ran out of budget. Two numbers set independently in different config
+sections, contradicting each other, with the symptom naming the wrong one.
+
+**Eight of the nine were classified transient.** They were HTTP 400s, and `InferenceStatusError` was
+mapped to `other`. A context overflow is deterministic — it fails identically on every resume — so a
+restart would have retried all eight, consumed the failure allowance again, and halted again. The
+classification now reads the status *and* the message.
+
+**The deeper lesson, which is the reusable one.** The fix was nearly a pre-flight comparing the
+configured context to the estimated document size. That check would have **passed the failing run**:
+config said 32,768, the estimate said 9,000, and the server was loaded at 8,192. Both numbers were
+internally consistent and neither of them was the server. Context length is a server-side setting, in
+exactly the sense KV-cache quantisation is — invisible to the cache key, invisible to the model
+fingerprint, able to change behaviour without changing anything the repository can see.
+
+So the pre-flight now **probes**: one deliberately oversized request per agent, rejected before any
+generation, and the rejection states the real window. Same move as the grammar probe.
+
+**Verify the thing, not your description of the thing.** A check between two of your own numbers
+confirms your bookkeeping, not the world.
