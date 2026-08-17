@@ -22,6 +22,8 @@ nothing broke at all:
 - 50% recall accuracy that was a model answering NO to everything (#10)
 - an exhibit lookup matching a field that holds an icon filename, failing for **100% of filings** — a
   number that reads as a finding about the corpus rather than as a defect (#18)
+- a KV-cache figure computed from what the architecture permits, reported as what the runtime does,
+  wrong by 12.6× (#20)
 
 Every one of those produced output that could be read aloud in a meeting without anyone objecting. That
 is the property that makes them dangerous, and it is why this project spends so much of its effort on
@@ -356,3 +358,43 @@ generation, and the rejection states the real window. Same move as the grammar p
 
 **Verify the thing, not your description of the thing.** A check between two of your own numbers
 confirms your bookkeeping, not the world.
+
+
+---
+
+## 20 · The same mistake as #19, in the same session, with #19 already written down
+
+Choosing context windows needed the memory cost of a KV cache. Rather than estimate it, I read the
+architecture straight out of the GGUF: Gemma 4 keeps 40 of its 48 layers on a 1,024-token sliding
+window and gives its 8 global layers a single KV head each. From those numbers the cache at 32,768
+tokens is **0.87 GB**, which is what I reported and what the option was chosen on.
+
+The server then refused to load the model at 32,768.
+
+The runtime allocates full-length KV for **every** layer, ignoring the sliding-window bound the model
+supports: about **336 KB/token**, so 11.0 GB at 32,768, against 7.0 GB of weights on a 16 GB machine.
+My figure was wrong by **12.6×**, and wrong in the direction that made an unaffordable option look
+comfortable.
+
+**The architecture told me what is *possible*. It could not tell me what the runtime *does*.**
+
+### The part worth recording
+
+That is exactly incident #19 — *verify the thing, not your description of the thing* — and **#19 was
+written up earlier in the same working session.** The lesson was in this file, freshly typed, while I
+made the mistake it describes.
+
+So the honest conclusion is not "now it is documented". It is:
+
+> **A lesson written down is not a control.** Documentation records what was learned; it does not
+> intercept the next instance. Only a mechanism does.
+
+What actually caught this was not the note. It was the server refusing to load, and then a probe that
+**measures the running system** — the bracket in ADR 0020 §4, which asks whether a prompt of a given
+size is accepted rather than reasoning about whether it should be.
+
+The pattern is consistent across #5, #18, #19 and this one: every time, the fix that worked was
+replacing a derivation with an observation. The write-ups are useful for explaining *why* the
+mechanisms exist. They are not a substitute for them, and treating a documented lesson as though it
+were a guardrail is its own version of the same error — trusting a description of the system instead
+of the system.

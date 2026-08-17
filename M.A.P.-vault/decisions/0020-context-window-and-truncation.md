@@ -70,6 +70,26 @@ trap in a new place.
 **Option 3 peaks at 7.85 GB**, and that peak is the *analyst*, not intake. Models
 load one at a time, so that is the whole footprint.
 
+**Correction, 2026-08-17.** The 0.87 GB figure for Gemma at 32,768 was derived from
+the architecture and is wrong about the runtime, which allocates full-length KV for
+every layer regardless of the sliding-window bound the model supports — about
+336 KB/token, so 11.0 GB at 32,768. The server refused to load it. Final windows,
+each **verified by bracketing** rather than computed:
+
+| agent | window | requirement (server-reported) | margin |
+| --- | --- | --- | --- |
+| intake | **32,768** | documents; budget 29,968 | — |
+| analyst | **16,384** | 1,598 prompt + 12,000 budget = 13,598 | 17% |
+| structuralist | **8,192** | 1,064 prompt + 386 completion = 1,450 | 5.6× |
+
+**The reasoning budget was not lowered.** Observed reasoning runs to 5,329 tokens
+with wide variance, and a budget sized to that would produce exhaustion failures
+rather than occasionally risking them. 16,384 holds the full 12,000.
+
+**Truncation is unaffected.** The document budget derives from *intake's* window,
+which is unchanged and verified at 32,768, so the rule still bites on the same
+twelve exhibits with the same parameters.
+
 ### The truncation rule, with its parameters fixed here
 
 At 32,768, **twelve** exhibits overflow. They belong to **three tickers**: BXP (6

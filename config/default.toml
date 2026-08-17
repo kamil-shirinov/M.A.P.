@@ -84,9 +84,13 @@ temperature = 0.7            # the one agent where sampling diversity is wanted
 # Must exceed max_tokens below, or the budget is unreachable and the model stops at
 # the context ceiling while reporting budget exhaustion. That is exactly how the
 # first corpus run failed on TSLA. A startup validator now rejects the pair.
-# Gemma 4 keeps 40 of 48 layers on a 1024 window and gives its 8 global layers a
-# single KV head, so 32768 costs only 0.87 GB of cache.
-context_tokens = 32768
+#
+# 16384, not the 32768 the architecture suggests. Gemma 4 keeps 40 of 48 layers on a
+# 1024 window, which WOULD make 32768 cost 0.87 GB — but the runtime allocates full
+# KV for every layer regardless, about 336 KB/token, and refused to load at 32768.
+# Verified by bracketing rather than assumed (ADR 0020 §4). The analyst needs ~13,600
+# tokens (1,598 max observed prompt + a 12,000 budget); 16384 leaves 17% margin.
+context_tokens = 16384
 seed = 20260809              # recorded as *requested*; many local backends ignore it
 # Explicit, because the server default is invisible and this build reasons before
 # it answers: on 2026-08-12 it spent an entire ~7000-token default budget thinking
@@ -106,9 +110,10 @@ max_tokens = 12000
 [models.structuralist]
 alias = "qwen/qwen3-4b-2507"
 temperature = 0.0
-# Sees only the analyst's narrative, never an exhibit, so it needs the least. No
-# sliding-window attention: 144 KB/token, 2.42 GB at 16384.
-context_tokens = 16384
+# Sees only the analyst's narrative, never an exhibit, so it needs the least.
+# Measured requirement is ~1,450 tokens (1,064 max prompt + 386 completion), so 8192
+# leaves 5.6x headroom even allowing for repair attempts. Verified by bracketing.
+context_tokens = 8192
 # Constrained decoding is applied here only, against the JSON Schema generated
 # from the ScenarioSet model (ADR 0002).
 #
