@@ -1,9 +1,9 @@
 {
-  "freeze_version": "2.1.0",
+  "freeze_version": "2.2.0",
   "frozen_on": "2026-08-14",
-  "amended_on": "2026-08-15",
-  "amends": "96ad926",
-  "amendment_reason": "Records the context windows the corpus is run at and the truncation rule for exhibits that exceed them (ADR 0020). PRECEDES ALL INFERENCE: the first clean-band attempt halted in its first hour on a context defect, its four completed items were discarded, and no forecast has been scored. Head and tail token counts are fixed here so they cannot become a parameter tuned after seeing a result.",
+  "amended_on": "2026-08-17",
+  "amends": "cb40af8",
+  "amendment_reason": "Records the context windows the run will actually execute at, each verified by bracketing the server rather than computed. The analyst and structuralist could not be allocated at the previously recorded sizes: the runtime allocates full-length KV for every layer regardless of the sliding-window bound Gemma supports (~336 KB/token, 11.0 GB at 32768), so the server refused to load them. PRECEDES ALL INFERENCE -- no forecast has been scored, and the four items from the halted first attempt are being discarded. The analyst reasoning budget is unchanged at 12,000: its measured requirement is 13,598 tokens against 16,384, a 17% margin. Truncation is unaffected because the document budget derives from intake, whose window is unchanged at 32,768.",
   "changes": {
     "dropped": [
       "BRK-A",
@@ -44593,8 +44593,8 @@
   },
   "context_tokens": {
     "intake": 32768,
-    "analyst": 32768,
-    "structuralist": 16384
+    "analyst": 16384,
+    "structuralist": 8192
   },
   "kv_cache": "fp16 (unquantised) \u2014 a server-side setting invisible to the cache key, recorded here",
   "truncation": {
@@ -44657,5 +44657,6 @@
         "kept_chars": 98120
       }
     }
-  }
+  },
+  "context_verification": "bracketed against the running server (ADR 0020 section 4); configured values are checked, never trusted"
 }
