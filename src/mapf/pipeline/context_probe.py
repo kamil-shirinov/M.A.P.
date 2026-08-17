@@ -28,7 +28,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from mapf.core.errors import InferenceError, InferenceStatusError
+from mapf.core.errors import (
+    InferenceError,
+    InferenceStatusError,
+    ModelBudgetExhaustedError,
+)
 from mapf.core.ports import (
     LLMProvider,
     Message,
@@ -141,11 +145,19 @@ def _accepts(
             prompt=prompt,
             sampling=SamplingParams(temperature=0.0, max_tokens=1),
         )
+    except ModelBudgetExhaustedError:
+        # ACCEPTED. A reasoning model asked for one token emits reasoning and no
+        # answer, which the provider reports as budget exhaustion — but reaching
+        # generation at all proves the prompt fitted the window. Reading this as a
+        # rejection made the probe report TOO SMALL for a server that was fine.
+        return True, None
     except InferenceStatusError as error:
         return False, error.body
     except InferenceError:
-        # A timeout or a dropped socket is not a verdict about the window.
-        return False, None
+        # A timeout or a dropped socket is not a verdict about the window, and
+        # returning one would be worse than failing: it would read as TOO SMALL and
+        # send someone to change a setting that was never wrong.
+        raise
     return True, None
 
 
