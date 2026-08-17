@@ -256,30 +256,29 @@ class _Model:
 
 
 class _Provider:
-    """Answers the context probe the way a correctly-loaded server would.
+    """A server with a real window, which the probe brackets.
 
-    The probe deliberately overshoots, so a healthy server rejects it and names its
-    real window. Reporting a window at least as large as the configured one is what
-    "agrees" means.
+    Accepts prompts up to `window` tokens and rejects anything larger, which is what
+    the bracket measures. It deliberately does NOT name a size in its rejection, so
+    these tests also prove the verdict does not depend on error prose.
     """
 
-    def __init__(self, reports: int = 32768) -> None:
-        self.reports = reports
+    def __init__(self, window: int = 32768) -> None:
+        self.window = window
 
     def list_models(self):  # type: ignore[no-untyped-def]
         return [_Model(a) for a in ("llama-3.2-3b", "gemma4-12b", "qwen3-4b")]
 
     def complete(self, **kwargs):  # type: ignore[no-untyped-def]
-        raise InferenceStatusError(
-            400,
-            f'{{"error":"the request (99999 tokens) exceeds the available '
-            f'context size ({self.reports} tokens)"}}',
-        )
+        tokens = kwargs["prompt"].messages[0].content.count(" the")
+        if tokens > self.window:
+            raise InferenceStatusError(400, "request too large")
+        return
 
 
-def _stub_infra(monkeypatch: pytest.MonkeyPatch, reports: int = 32768) -> None:
+def _stub_infra(monkeypatch: pytest.MonkeyPatch, window: int = 32768) -> None:
     monkeypatch.setattr(
-        "mapf.cli.commands.corpus.build_llm_provider", lambda *a, **k: _Provider(reports)
+        "mapf.cli.commands.corpus.build_llm_provider", lambda *a, **k: _Provider(window)
     )
     monkeypatch.setattr(
         "mapf.cli.commands.corpus.build_run",
@@ -488,7 +487,7 @@ def test_check_refuses_when_the_server_context_is_smaller_than_configured(
 ) -> None:
     """The exact failure of the first corpus run, now caught before it starts."""
     _check_with(monkeypatch, "sha256:" + "d" * 64)   # re-stubs the provider
-    _stub_infra(monkeypatch, reports=8192)           # so this must come after
+    _stub_infra(monkeypatch, window=8192)           # so this must come after
     result = _invoke(tmp_path, "--check")
     assert result.exit_code != 0
     assert "TOO SMALL" in result.output
@@ -501,7 +500,7 @@ def test_check_reports_each_agents_context(
     _check_with(monkeypatch, "sha256:" + "d" * 64)
     result = _invoke(tmp_path, "--check")
     for agent in ("intake", "analyst", "structuralist"):
-        assert f"{agent}: configured" in result.output
+        assert f"{agent}: accepted" in result.output
 
 
 def test_check_reports_truncation_rather_than_refusing(
@@ -648,7 +647,7 @@ def test_an_exhibit_no_truncation_can_rescue_is_refused(
         spec["chars"] = 220_000
     frozen.write_text(json.dumps(record), encoding="utf-8")
     _check_with(monkeypatch, "sha256:" + "d" * 64)
-    _stub_infra(monkeypatch, reports=512)
+    _stub_infra(monkeypatch, window=512)
     result = _invoke(tmp_path, "--check", frozen=frozen, config=config)
     assert result.exit_code == 6
     assert "exceed the budget" in result.output

@@ -193,14 +193,34 @@ setting**, and the same reasoning applies one step further: a pre-flight that
 compared `config` to a computed document size would have passed the halted run
 happily, because both numbers were internally consistent and neither was the server.
 
-So the probe asks. One deliberately oversized request per agent, rejected before
-any generation, and the rejection names the real window:
+So the probe asks — and it asks by **bracketing**, not by reading the server's
+error prose.
 
-    the request (13830 tokens) exceeds the available context size (8192 tokens)
+The first version sent one oversized request and parsed the reported window out of
+the rejection. That worked for one agent and failed for two: they rejected the probe
+without naming a context at all, so their windows could not be verified. It was also
+vendor coupling in application code — a dependency on how one particular server
+phrases an error, which `CLAUDE.md` §3 forbids for exactly this reason.
 
-If the server reports less than the configuration promised, the run refuses to
-start and says which is which. A server with *more* context than configured is not
-a failure — the run stays inside its configured budget, so the guarantee holds.
+The bracket needs no number. Two requests per agent:
+
+- one sized **just under** the configured window, which must be **accepted**
+- one **comfortably over**, which must be **rejected**
+
+Together those pin the window relative to the configuration on any backend,
+including one that says nothing at all or simply drops the connection. The filler is
+a repeated common word, so the prompt's token count tracks the repeat count on any
+byte-pair vocabulary — which is what lets the probe target a size directly instead
+of through a characters-per-token ratio it would otherwise have to assume.
+
+A parsed number is retained **only as a presentation refinement**: shown beside the
+bracket when it happens to be there, never branched on. A test asserts a verbose
+server and a terse one reach the same verdict.
+
+If the under-probe is rejected, the server's window is smaller than configured and
+the run refuses to start. A server with *more* context than configured is not a
+failure — the run stays inside its configured budget, so the guarantee holds — and
+the report says so rather than silently passing.
 
 This is the same move as the grammar probe, and for the same reason: **measure the
 backend's behaviour rather than assume it.**

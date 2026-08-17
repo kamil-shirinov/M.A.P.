@@ -2,7 +2,8 @@
 
 The first corpus run failed because config and the server disagreed and nothing
 compared them. A pre-flight that checked a configured number against a computed one
-would have passed it happily, so this measures the server instead.
+would have passed it happily, so this measures the server — by bracketing, not by
+reading its error prose, which would be vendor coupling in application code.
 """
 
 from __future__ import annotations
@@ -22,7 +23,8 @@ from mapf.pipeline.context_probe import (
 
 MODEL = ModelInfo(id="m", fingerprint="tag:m", fingerprint_source="tag")
 
-# The body the server actually returned during the halted run.
+# The body one particular server returned during the halted run. Used only to show
+# the optional refinement works — nothing branches on it.
 REAL_BODY = (
     '{"error":"Engine protocol predict request received: the request (13830 tokens) '
     'exceeds the available context size (8192 tokens)"}'
@@ -30,125 +32,159 @@ REAL_BODY = (
 
 
 class _Server:
-    def __init__(self, error: Exception | None) -> None:
-        self.error = error
-        self.calls = 0
+    """Accepts any prompt up to `window` tokens, rejects anything larger.
+
+    Token count is approximated by the repeat count of the filler word, which is
+    exactly what the probe relies on.
+    """
+
+    def __init__(self, window: int, body: str = "too long", silent: bool = False) -> None:
+        self.window = window
+        self.body = body
+        self.silent = silent
+        self.sizes: list[int] = []
+        self.budget: int | None = None
 
     def list_models(self) -> Sequence[ModelInfo]:  # pragma: no cover
         return ()
 
     def complete(self, **kwargs: Any) -> Any:
-        self.calls += 1
-        self.last = kwargs
-        if self.error is not None:
-            raise self.error
+        tokens = kwargs["prompt"].messages[0].content.count(" the")
+        self.sizes.append(tokens)
+        self.budget = kwargs["sampling"].max_tokens
+        if tokens > self.window:
+            if self.silent:
+                raise InferenceTimeoutError("m", 1.0)
+            raise InferenceStatusError(400, self.body)
         return None
 
 
 # ---------------------------------------------------------------------------
-# Reading the server's answer out of its rejection
+# The bracket
 # ---------------------------------------------------------------------------
-def test_the_real_rejection_from_the_halted_run_is_parsed() -> None:
-    assert parse_reported_context(REAL_BODY) == 8192
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        "the request (99999 tokens) exceeds the available context size (32768 tokens)",
-        "context length (16384 tokens) exceeded",
-        "Context Window (4096 tokens) too small",
-    ],
-)
-def test_common_phrasings_are_parsed(body: str) -> None:
-    assert parse_reported_context(body) in (32768, 16384, 4096)
-
-
-def test_a_body_that_names_no_context_yields_none() -> None:
-    assert parse_reported_context('{"error":"malformed request"}') is None
-
-
-# ---------------------------------------------------------------------------
-# The verdict
-# ---------------------------------------------------------------------------
-def test_a_server_matching_the_configuration_agrees() -> None:
-    server = _Server(InferenceStatusError(400, "available context size (32768 tokens)"))
-    report = probe_context(server, MODEL, agent="intake", configured=32768)
-    assert report.reported == 32768
+def test_a_server_at_the_configured_window_is_verified() -> None:
+    report = probe_context(_Server(32768), MODEL, agent="intake", configured=32768)
     assert report.agrees is True
-    assert "ok" in report.describe()
+    assert report.accepts_under is True
+    assert report.rejects_over is True
+    assert "bracketing" in report.describe()
 
 
-def test_a_server_smaller_than_configured_disagrees() -> None:
+def test_a_server_smaller_than_configured_is_caught() -> None:
     """The failure that actually happened: config said what the run needed, the
     server was loaded at 8,192, and nothing compared them."""
-    server = _Server(InferenceStatusError(400, REAL_BODY))
-    report = probe_context(server, MODEL, agent="intake", configured=32768)
+    report = probe_context(_Server(8192), MODEL, agent="intake", configured=32768)
     assert report.agrees is False
     assert "TOO SMALL" in report.describe()
-    assert "8,192" in report.describe()
 
 
-def test_a_server_larger_than_configured_agrees() -> None:
+def test_a_server_larger_than_configured_agrees_and_says_so() -> None:
     """More context than promised is not a failure — the run stays inside its
-    configured budget, so the guarantee still holds."""
-    server = _Server(InferenceStatusError(400, "available context size (131072 tokens)"))
-    report = probe_context(server, MODEL, agent="intake", configured=32768)
+    configured budget, so the guarantee holds."""
+    report = probe_context(_Server(262144), MODEL, agent="intake", configured=32768)
     assert report.agrees is True
+    assert report.larger_than_configured is True
+    assert "larger" in report.describe()
 
 
-def test_a_server_that_accepts_the_oversized_probe_agrees() -> None:
-    """Acceptance is informative: the window is at least as large as the probe."""
-    server = _Server(None)
-    report = probe_context(server, MODEL, agent="intake", configured=16384)
-    assert report.accepted_oversize is True
+def test_the_under_probe_sits_below_the_configured_window() -> None:
+    """Scaffolding must not push it over and produce a false 'too small'."""
+    server = _Server(32768)
+    probe_context(server, MODEL, agent="intake", configured=32768)
+    assert server.sizes[0] < 32768
+
+
+def test_the_over_probe_sits_comfortably_above() -> None:
+    server = _Server(32768)
+    probe_context(server, MODEL, agent="intake", configured=32768)
+    assert server.sizes[1] > 32768 * 2
+
+
+def test_a_rejected_under_probe_skips_the_over_probe() -> None:
+    """Once the window is known too small, the second request tells us nothing and
+    costs a prefill."""
+    server = _Server(1000)
+    probe_context(server, MODEL, agent="intake", configured=32768)
+    assert len(server.sizes) == 1
+
+
+def test_two_requests_when_the_window_is_adequate() -> None:
+    server = _Server(32768)
+    probe_context(server, MODEL, agent="intake", configured=32768)
+    assert len(server.sizes) == 2
+
+
+def test_each_probe_generates_at_most_one_token() -> None:
+    server = _Server(32768)
+    probe_context(server, MODEL, agent="intake", configured=32768)
+    assert server.budget == 1
+
+
+# ---------------------------------------------------------------------------
+# Backend independence — the point of bracketing
+# ---------------------------------------------------------------------------
+def test_a_server_that_names_no_number_is_still_verified() -> None:
+    """Two of three agents rejected the earlier probe without naming a context.
+    The bracket does not need one."""
+    report = probe_context(
+        _Server(16384, body="request too large"), MODEL, agent="structuralist", configured=16384
+    )
     assert report.agrees is True
-    assert "accepted" in report.describe()
-
-
-def test_a_rejection_without_a_number_does_not_agree() -> None:
-    """Unknown is not the same as fine; inventing a verdict would be worse."""
-    server = _Server(InferenceStatusError(400, "request too large"))
-    report = probe_context(server, MODEL, agent="intake", configured=32768)
     assert report.reported is None
-    assert report.agrees is False
-    assert "without naming" in report.describe()
+    assert "bracketing" in report.describe()
 
 
-def test_a_timeout_says_nothing_about_the_window() -> None:
-    server = _Server(InferenceTimeoutError("m", 5.0))
-    report = probe_context(server, MODEL, agent="intake", configured=32768)
-    assert report.reported is None
+def test_a_server_that_rejects_without_a_status_error_is_still_bracketed() -> None:
+    """Some backends drop the connection rather than answering 400."""
+    report = probe_context(
+        _Server(16384, silent=True), MODEL, agent="structuralist", configured=16384
+    )
+    assert report.agrees is True
+    assert report.rejects_over is True
+
+
+def test_a_silent_server_below_the_window_still_reads_as_too_small() -> None:
+    report = probe_context(_Server(1000, silent=True), MODEL, agent="intake", configured=32768)
     assert report.agrees is False
 
 
 # ---------------------------------------------------------------------------
-# The probe itself
+# The optional refinement
 # ---------------------------------------------------------------------------
-def test_the_probe_overshoots_the_configured_window() -> None:
-    server = _Server(InferenceStatusError(400, REAL_BODY))
-    probe_context(server, MODEL, agent="intake", configured=8192)
-    sent = server.last["prompt"].messages[0].content
-    # Comfortably over 8,192 tokens' worth of characters, so a healthy server
-    # cannot quietly accept it.
-    assert len(sent) > 8192 * 4
+def test_a_named_number_is_shown_when_present() -> None:
+    report = probe_context(
+        _Server(8192, body=REAL_BODY), MODEL, agent="intake", configured=32768
+    )
+    assert report.reported == 8192
+    assert "names 8,192" in report.describe()
 
 
-def test_the_probe_generates_at_most_one_token() -> None:
-    """If the server does accept it, the cost must be a token rather than a run."""
-    server = _Server(None)
-    probe_context(server, MODEL, agent="intake", configured=8192)
-    assert server.last["sampling"].max_tokens == 1
+def test_the_verdict_does_not_depend_on_the_named_number() -> None:
+    """Same window, one server verbose and one terse: the same verdict."""
+    verbose = probe_context(_Server(8192, body=REAL_BODY), MODEL, agent="a", configured=32768)
+    terse = probe_context(_Server(8192, body="nope"), MODEL, agent="a", configured=32768)
+    assert verbose.agrees is False
+    assert terse.agrees is False
 
 
-def test_one_request_per_probe() -> None:
-    server = _Server(InferenceStatusError(400, REAL_BODY))
-    probe_context(server, MODEL, agent="intake", configured=8192)
-    assert server.calls == 1
+def test_the_parser_is_tolerant_but_optional() -> None:
+    assert parse_reported_context(REAL_BODY) == 8192
+    assert parse_reported_context("context length (16384 tokens) exceeded") == 16384
+    assert parse_reported_context('{"error":"malformed request"}') is None
 
 
 def test_the_report_names_the_agent() -> None:
     report = ContextReport(
-        agent="analyst", configured=32768, reported=8192, accepted_oversize=False
+        agent="analyst", configured=32768, accepts_under=False, rejects_over=True
     )
     assert report.describe().startswith("analyst:")
+
+
+@pytest.mark.parametrize("configured", [512, 8192, 16384, 32768, 65536])
+def test_the_bracket_holds_at_any_configured_size(configured: int) -> None:
+    assert probe_context(
+        _Server(configured), MODEL, agent="a", configured=configured
+    ).agrees
+    assert not probe_context(
+        _Server(configured // 2), MODEL, agent="a", configured=configured
+    ).agrees
