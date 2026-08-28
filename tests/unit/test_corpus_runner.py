@@ -12,6 +12,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID, uuid4
 
@@ -241,6 +242,14 @@ class Recorder:
         return outcome
 
 
+def _wiring(run_id: UUID) -> Any:
+    """Fresh per item, mirroring production: a shared CountingTrace would report
+    band-cumulative counters in every manifest."""
+    return SimpleNamespace(
+        agents=object(), market=object(), dividends=object(), trace=SimpleNamespace()
+    )
+
+
 def _run(
     monkeypatch: pytest.MonkeyPatch,
     outcomes: list[object],
@@ -255,10 +264,7 @@ def _run(
     health = run_band(
         items if items is not None else plan(_corpus(), "clean"),
         documents=lambda item: (),
-        agents=object(),  # type: ignore[arg-type]
-        market=object(),  # type: ignore[arg-type]
-        dividends=object(),  # type: ignore[arg-type]
-        trace=object(),  # type: ignore[arg-type]
+        wiring=_wiring,
         ledger=ledger,
         config=config,
         sleep=lambda _: None,
@@ -320,10 +326,7 @@ def test_a_resume_skips_completed_items_only(
     run_band(
         plan(_corpus(), "clean"),
         documents=lambda item: (),
-        agents=object(),  # type: ignore[arg-type]
-        market=object(),  # type: ignore[arg-type]
-        dividends=object(),  # type: ignore[arg-type]
-        trace=object(),  # type: ignore[arg-type]
+        wiring=_wiring,
         ledger=Ledger(tmp_path / "ledger.jsonl"),
         config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
         sleep=lambda _: None,
@@ -602,10 +605,7 @@ def test_a_terminal_failure_is_not_retried_on_the_next_pass(
     run_band(
         item,
         documents=lambda i: (),
-        agents=object(),  # type: ignore[arg-type]
-        market=object(),  # type: ignore[arg-type]
-        dividends=object(),  # type: ignore[arg-type]
-        trace=object(),  # type: ignore[arg-type]
+        wiring=_wiring,
         ledger=Ledger(tmp_path / "ledger.jsonl"),
         config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
         sleep=lambda _: None,
@@ -629,10 +629,7 @@ def test_a_transient_failure_is_retried_on_the_next_pass(
     run_band(
         item,
         documents=lambda i: (),
-        agents=object(),  # type: ignore[arg-type]
-        market=object(),  # type: ignore[arg-type]
-        dividends=object(),  # type: ignore[arg-type]
-        trace=object(),  # type: ignore[arg-type]
+        wiring=_wiring,
         ledger=Ledger(tmp_path / "ledger.jsonl"),
         config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
         sleep=lambda _: None,
@@ -678,10 +675,7 @@ def test_the_progress_hook_sees_every_item(
     run_band(
         plan(_corpus(), "clean"),
         documents=lambda i: (),
-        agents=object(),  # type: ignore[arg-type]
-        market=object(),  # type: ignore[arg-type]
-        dividends=object(),  # type: ignore[arg-type]
-        trace=object(),  # type: ignore[arg-type]
+        wiring=_wiring,
         ledger=Ledger(tmp_path / "l.jsonl"),
         config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
         sleep=lambda _: None,

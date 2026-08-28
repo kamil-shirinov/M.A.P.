@@ -168,3 +168,51 @@ def test_document_truncation_and_output_truncation_are_separate_flags() -> None:
     )
     assert entry.truncated is True
     assert entry.output_truncated is False
+
+
+# ---------------------------------------------------------------------------
+# A runaway is failed, not flagged
+# ---------------------------------------------------------------------------
+def test_a_runaway_is_terminal() -> None:
+    """Deterministic at temperature 0: the same document runs away identically on
+    every attempt, so retrying only consumes the failure allowance."""
+    from mapf.core.errors import OutputTruncatedError
+    from mapf.corpus.ledger import is_terminal
+    from mapf.corpus.runner import _reason_for
+
+    reason = _reason_for(OutputTruncatedError("intake", 2048))
+    assert reason == "output_truncated"
+    assert is_terminal(reason) is True
+
+
+def test_the_error_says_why_a_bigger_cap_is_not_the_answer() -> None:
+    """Intake emits 252-543 tokens across documents from 2k to 51k characters, then
+    on two documents runs past 18,000. A cap sized to 'what it wants' is meaningless
+    when what it wants is unbounded."""
+    from mapf.core.errors import OutputTruncatedError
+
+    message = str(OutputTruncatedError("intake", 2048))
+    assert "runaway" in message
+    assert "few hundred tokens" in message
+
+
+# ---------------------------------------------------------------------------
+# One trace per item, not one per band
+# ---------------------------------------------------------------------------
+def test_counters_are_per_item_not_cumulative() -> None:
+    """A CountingTrace shared across a band reports band-cumulative reasoning in
+    every manifest — one run recorded 272,033 analyst reasoning tokens for a single
+    item — and every item after the first truncation inherits its flag."""
+    first, second = _trace(), _trace()
+    first.record(stage="analyst", data={"reasoning_tokens": 4000, "finish_reason": "stop"})
+    second.record(stage="analyst", data={"reasoning_tokens": 3000, "finish_reason": "stop"})
+    assert first.reasoning_tokens["analyst"] == 4000
+    assert second.reasoning_tokens["analyst"] == 3000
+
+
+def test_a_truncation_does_not_leak_into_the_next_item() -> None:
+    first, second = _trace(), _trace()
+    _emit(first, "intake", "length")
+    _emit(second, "intake", "stop")
+    assert first.truncated_output == {"intake"}
+    assert second.truncated_output == set()

@@ -26,6 +26,7 @@ from mapf.agents.analyst import AnalystAgent, AnalystRequest
 from mapf.agents.base import LLMAgent
 from mapf.agents.intake import IntakeAgent, IntakeRequest
 from mapf.agents.structuralist import StructuralistAgent, StructuralistRequest
+from mapf.core.errors import OutputTruncatedError
 from mapf.core.fidelity import measure as measure_fidelity
 from mapf.core.hashing import new_run_id
 from mapf.core.models import (
@@ -102,6 +103,13 @@ def _record(agent: LLMAgent, trace: CountingTrace) -> AgentRecord:
     )
 
 
+def _cap_of(agents: Agents, stage: str) -> int:
+    spec = {"intake": agents.intake, "analyst": agents.analyst}.get(
+        stage, agents.structuralist
+    )
+    return spec.sampling.max_tokens or 0
+
+
 def execute(
     request: RunRequest,
     *,
@@ -147,6 +155,12 @@ def execute(
         )
     )
     scenarios = agents.structuralist.run(StructuralistRequest(narrative=narrative))
+
+    # A fragment presented as a whole is worse than a missing item: it produces a
+    # schema-valid forecast scored beside forecasts built on complete summaries.
+    if trace.truncated_output:
+        agent = sorted(trace.truncated_output)[0]
+        raise OutputTruncatedError(agent, _cap_of(agents, agent))
 
     # 3. Assemble. The model authored `scenarios` and nothing else (ADR 0002) —
     #    every other field here is something the pipeline already knew.
@@ -194,17 +208,6 @@ def execute(
             ticker=request.ticker,
             values=list(quality.ungrounded_numerals),
             note="figures in a justification that trace to no material fact",
-        )
-
-    if trace.truncated_output:
-        _logger.warning(
-            "output_truncated",
-            ticker=request.ticker,
-            agents=sorted(trace.truncated_output),
-            note=(
-                "an agent stopped at its token cap rather than finishing, so what it "
-                "handed downstream is a fragment presented as a whole"
-            ),
         )
 
     fidelity = measure_fidelity(narrative.text, scenarios)

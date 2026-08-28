@@ -671,11 +671,17 @@ class _CutOffProvider(CountingProvider):
         return response.model_copy(update={"finish_reason": "length"})
 
 
-def test_a_truncated_agent_output_is_recorded_in_the_manifest(tmp_path: Path) -> None:
-    result = _run(tmp_path, _CutOffProvider())
-    records = {a.alias: a for a in result.manifest.agents}
-    assert all(r.finish_reason == "length" for r in records.values())
-    assert all(r.output_truncated for r in records.values())
+def test_a_truncated_agent_output_fails_the_run_rather_than_scoring_it(
+    tmp_path: Path,
+) -> None:
+    """A fragment presented as a whole is worse than a missing item: it produces a
+    schema-valid forecast scored beside forecasts built on complete summaries."""
+    from mapf.core.errors import OutputTruncatedError
+
+    with pytest.raises(OutputTruncatedError) as caught:
+        _run(tmp_path, _CutOffProvider())
+    assert "runaway" in str(caught.value)
+    assert caught.value.agent in {"intake", "analyst", "structuralist"}
 
 
 def test_a_completed_run_is_not_flagged_as_truncated(baseline: Any) -> None:

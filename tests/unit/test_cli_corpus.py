@@ -14,6 +14,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
+from uuid import uuid4
 
 import pytest
 from typer.testing import CliRunner
@@ -321,6 +322,9 @@ def test_the_documents_callback_fetches_the_frozen_accession(
     captured: dict[str, object] = {}
 
     def fake_run_band(items, **kwargs):  # type: ignore[no-untyped-def]
+        # Exercise the per-item wiring factory too: it is built fresh per item so
+        # a shared trace cannot report band-cumulative counters.
+        kwargs["wiring"](uuid4())
         captured["docs"] = kwargs["documents"](items[0])
         return Health(completed=1)
 

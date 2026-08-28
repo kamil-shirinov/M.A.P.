@@ -26,6 +26,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from math import ceil
 from pathlib import Path
+from typing import Protocol
+from uuid import UUID
 
 import structlog
 
@@ -39,8 +41,10 @@ from mapf.core.errors import (
     MissingExhibitError,
     ModelBudgetExhaustedError,
     NoMaterialFactsError,
+    OutputTruncatedError,
     PromptTooLargeError,
 )
+from mapf.core.hashing import new_run_id
 from mapf.core.models import Document
 from mapf.core.ports import DividendSource, MarketDataProvider
 from mapf.corpus.ledger import FailureReason, Ledger, LedgerEntry
@@ -78,6 +82,19 @@ MAX_BAND_FAILURE_RATE = 0.02
 # Set by the document callback when the truncation rule bites, so the runner can
 # record it without knowing how documents are built.
 TRUNCATION_NOTES: dict[tuple[str, str, date], int] = {}
+
+
+class Wiring(Protocol):
+    """One item's agents and its own trace.
+
+    Structural rather than imported: `bootstrap` builds the concrete object, and
+    `import-linter` forbids this layer from reaching up to it (ADR 0004).
+    """
+
+    agents: Agents
+    market: MarketDataProvider
+    dividends: DividendSource
+    trace: CountingTrace
 
 
 @dataclass(frozen=True)
@@ -183,6 +200,10 @@ _CONTEXT_MARKERS = ("context size", "context length", "context window", "exceeds
 
 
 def _reason_for(error: MapError) -> FailureReason:
+    if isinstance(error, OutputTruncatedError):
+        # Deterministic at temperature 0: the same document runs away identically
+        # on every attempt, so retrying only consumes the failure allowance.
+        return "output_truncated"
     if isinstance(error, PromptTooLargeError):
         # Deterministic: the same document produces the same oversized prompt on
         # every attempt, so retrying only consumes the failure allowance.
@@ -240,10 +261,7 @@ def run_band(
     items: Sequence[CorpusItem],
     *,
     documents: Callable[[CorpusItem], tuple[Document, ...]],
-    agents: Agents,
-    market: MarketDataProvider,
-    dividends: DividendSource,
-    trace: CountingTrace,
+    wiring: Callable[[UUID], Wiring],
     ledger: Ledger,
     config: RunnerConfig,
     sleep: Callable[[float], None] = time.sleep,
@@ -254,6 +272,14 @@ def run_band(
     Raises `CorpusHaltedError` when a threshold is crossed. Everything completed
     up to that point is already durable — the ledger is appended per item — so a
     halt costs the diagnosis, never the work.
+
+    `wiring` is a **factory**, called once per item with that item's run id. It has
+    to be: `CountingTrace` accumulates per stage, and one instance shared across a
+    band reports band-cumulative attempts, cache hits and reasoning tokens in every
+    manifest, while every item after the first truncation inherits its truncation
+    flag. The `JsonlTrace` path is fixed at construction too, so a shared trace
+    writes every item's events into the first item's directory and leaves the rest
+    with no trace at all — the audit trail `CLAUDE.md` §6 requires.
     """
     if config.render_chart:
         raise FreezeMismatchError(
@@ -278,10 +304,7 @@ def run_band(
         entry, error = _attempt(
             item,
             documents=documents,
-            agents=agents,
-            market=market,
-            dividends=dividends,
-            trace=trace,
+            wiring=wiring,
             config=config,
             sleep=sleep,
         )
@@ -338,20 +361,23 @@ def _attempt(
     item: CorpusItem,
     *,
     documents: Callable[[CorpusItem], tuple[Document, ...]],
-    agents: Agents,
-    market: MarketDataProvider,
-    dividends: DividendSource,
-    trace: CountingTrace,
+    wiring: Callable[[UUID], Wiring],
     config: RunnerConfig,
     sleep: Callable[[float], None],
 ) -> tuple[LedgerEntry, MapError | None]:
-    """One item, retried. Returns a terminal ledger entry either way."""
+    """One item, retried. Returns a terminal ledger entry either way.
+
+    Fresh wiring per attempt, so the trace counts this item and nothing else.
+    """
     last: MapError | None = None
 
     for attempt in range(config.attempts):
         try:
+            run_id = new_run_id()
+            built = wiring(run_id)
             result = execute(
                 RunRequest(
+                    run_id=run_id,
                     ticker=item.ticker,
                     horizon_days=config.horizon_days,
                     documents=documents(item),
@@ -361,10 +387,10 @@ def _attempt(
                     as_of=datetime.combine(item.filing_date, datetime.min.time(), tzinfo=UTC)
                     + timedelta(days=1),
                 ),
-                agents=agents,
-                market=market,
-                dividends=dividends,
-                trace=trace,
+                agents=built.agents,
+                market=built.market,
+                dividends=built.dividends,
+                trace=built.trace,
                 runs_dir=config.runs_dir,
                 # Pinned so a multi-night run cannot silently refetch a new
                 # vintage and mix adjustment bases mid-corpus (ADR 0012).

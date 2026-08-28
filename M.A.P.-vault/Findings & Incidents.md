@@ -470,3 +470,68 @@ was responsible for and no check covered.
 **Validating each component against its own constraints does not validate the pipeline.** The
 interfaces between them need owners too, and the cheapest owner is an assertion at the point where
 the payload changes hands.
+
+
+---
+
+## 22 · The flag that cried wolf, and the runaway it was pointing at
+
+The `finish_reason` check added the day before reported **54 of 55 completed items truncated at
+intake**. The reading was that every forecast in the run had been built on a fact list stopping
+mid-sentence.
+
+**Two of fifty-seven were.** The flag was wrong.
+
+### Why the flag was wrong
+
+The corpus runner built **one** `CountingTrace` for the whole band. `CountingTrace` accumulates per
+stage and is never reset, so:
+
+- `truncated_output` is a set. Once item 2 truncated, **every subsequent item inherited the flag** —
+  including items whose own `finish_reason` was recorded, in the same manifest, as `stop`. A record
+  contradicting itself, which is what should have been noticed first.
+- `reasoning_tokens` sums. One manifest reported **272,033** analyst reasoning tokens for a single
+  item — the band's running total.
+- `JsonlTrace` fixes its path at construction, so **every item's events were written into the first
+  item's directory** and the other 56 run directories had no `trace.jsonl` at all. That is the audit
+  trail `CLAUDE.md` §6 requires, absent for 98% of the run.
+
+Wiring is now built per item.
+
+### What was actually happening
+
+With the cap lifted, intake's output is remarkably flat:
+
+| document | chars | intake output |
+| --- | --- | --- |
+| TSLA | 1,973 | 252 |
+| AZO | 16,770 | 434 |
+| HUM | 23,689 | 451 |
+| SWKS | 27,255 | 434 |
+| INTC | 42,980 | 451 |
+| ALLY | 51,188 | 543 |
+| **STZ** | 46,331 | **18,330, still going** |
+| **FCX** | 131,879 | **3,533, still going** |
+
+252–543 tokens across a 26× range of document sizes — and then two documents where it **runs away**.
+ALLY is *larger* than STZ and produces 543 tokens; STZ produces 18,330 and has not finished. Size
+does not predict it.
+
+So the cap was never starving intake. Its job is to bound a runaway, and **a cap sized to "what it
+wants" is meaningless when what it wants is unbounded.** The right response to a runaway is not more
+room; it is to fail the item, because a fact list truncated at *any* cap is a fragment.
+
+### The lesson
+
+The instinct on seeing "54 of 55 truncated" is to fix the cap. The number was an artefact, and the
+real defect — shared mutable state across items — was one level below it, corrupting three other
+fields at the same time and silently deleting the audit trail.
+
+**A measurement that surprises you is a claim about your instrument as much as about the world.**
+The tell was already in the artifacts: a manifest saying `finish_reason=stop` and
+`output_truncated=True` about the same call. Contradictory fields in one record beat any amount of
+reasoning about what the model might be doing.
+
+**The check still earned its place.** Without it, the two genuine runaways would have produced
+schema-valid forecasts from fragments and been scored beside the rest. Making degradation visible
+found a real defect *and* a false alarm — and the false alarm was itself a real defect.

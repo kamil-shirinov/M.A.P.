@@ -15,13 +15,13 @@ from __future__ import annotations
 import json
 from datetime import date
 from pathlib import Path
+from uuid import UUID
 
 import typer
 
 from mapf.bootstrap import build_http_client, build_llm_provider, build_run
 from mapf.cli.app import app, fail, handle
 from mapf.core.errors import ExhibitError, MapError
-from mapf.core.hashing import new_run_id
 from mapf.core.models import Document, EarningsFiling
 from mapf.core.tokens import AgentBudget, check_fit, estimate_tokens
 from mapf.core.truncation import plan_truncation, truncate
@@ -187,12 +187,16 @@ def corpus_run(
                 # is a processing step recorded beside the hash, not inside it.
                 return (document.model_copy(update={"text": text}),)
 
-            wiring = build_run(
-                settings,
-                provider=provider,
-                resolved={str(k): v for k, v in models.items()},
-                run_id=new_run_id(),
-            )
+            def wiring(run_id: UUID) -> object:
+                # Per item, not per band: a shared CountingTrace reports
+                # band-cumulative counters in every manifest and writes every
+                # item's events into the first item's directory.
+                return build_run(
+                    settings,
+                    provider=provider,
+                    resolved={str(k): v for k, v in models.items()},
+                    run_id=run_id,
+                )
             typer.echo(
                 f"start      band={band} items={len(remaining)} "
                 f"vintage={vintage} charts=off"
@@ -200,10 +204,7 @@ def corpus_run(
             health = run_band(
                 items,
                 documents=documents,
-                agents=wiring.agents,
-                market=wiring.market,
-                dividends=wiring.dividends,
-                trace=wiring.trace,
+                wiring=wiring,  # type: ignore[arg-type]
                 ledger=ledger,
                 config=RunnerConfig(runs_dir=settings.paths.runs_dir, price_vintage=vintage),
                 on_progress=_progress,

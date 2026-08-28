@@ -469,6 +469,30 @@ class AgentError(MapError):
     """An agent could not meet its contract."""
 
 
+class OutputTruncatedError(AgentError):
+    """An agent stopped at its token cap instead of finishing.
+
+    Raised rather than warned, because what it hands downstream is a fragment
+    presented as a whole: a fact list ending mid-sentence still produces a
+    schema-valid forecast, scored beside forecasts built on complete summaries.
+
+    Measured, this is not a sizing problem. Intake emits 252–543 tokens across
+    documents from 2k to 51k characters — remarkably flat — and then on two
+    documents runs away past 18,000 with no sign of stopping. A cap sized to
+    "what it wants" is meaningless when what it wants is unbounded, so the cap
+    bounds the runaway and this makes the runaway visible.
+    """
+
+    def __init__(self, agent: str, tokens: int) -> None:
+        self.agent, self.tokens = agent, tokens
+        super().__init__(
+            f"{agent} stopped at its {tokens:,}-token cap rather than finishing, so "
+            f"what it produced is a fragment. Typical output is a few hundred "
+            f"tokens; this is a runaway, and the item is failed rather than scored "
+            f"on a partial summary."
+        )
+
+
 class NoMaterialFactsError(AgentError):
     """Agent 1 found nothing material in the documents.
 

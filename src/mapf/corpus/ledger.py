@@ -41,6 +41,7 @@ FailureReason = Literal[
     "no_material_facts",
     "missing_exhibit",
     "context_overflow",
+    "output_truncated",
     "other",
 ]
 
@@ -56,7 +57,13 @@ FailureReason = Literal[
 # on an item that can never succeed — so it is recorded as done, with its failure
 # preserved, and never attempted again.
 TERMINAL_REASONS: frozenset[str] = frozenset(
-    {"missing_exhibit", "repair_exhausted", "no_material_facts", "context_overflow"}
+    {
+        "missing_exhibit",
+        "repair_exhausted",
+        "no_material_facts",
+        "context_overflow",
+        "output_truncated",
+    }
 )
 
 # `budget_exhausted` is deliberately NOT terminal. The analyst samples at
