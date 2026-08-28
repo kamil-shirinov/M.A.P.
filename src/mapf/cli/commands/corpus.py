@@ -232,13 +232,20 @@ def _progress(
     """One line per item. This is what gets watched for twelve nights."""
     ok = entry.status == "complete"
     outcome = "ok" if ok else f"FAIL:{entry.reason}"
+    if entry.output_truncated:
+        typer.secho(
+            f"           WARNING {item.ticker} {item.filing_date}: "
+            f"{entry.truncated_agents} stopped at its token cap rather than "
+            f"finishing — downstream reasoned from a fragment",
+            fg=typer.colors.YELLOW,
+        )
     typer.secho(
         f"[{index:>4}/{total}] {item.ticker:<6} {item.band:<9} {item.filing_date} "
         f"{entry.elapsed_s:>6.1f}s  {outcome:<24}"
         f"done={health.completed} fail={health.failed} "
         f"unparse={health.unparseable} diverge={health.divergent} "
         f"ungrounded={health.ungrounded_numerals} flat={health.degenerate_spread} "
-        f"exhausted={health.budget_exhausted}",
+        f"exhausted={health.budget_exhausted} cutoff={health.output_truncated}",
         fg=typer.colors.GREEN if ok else typer.colors.RED,
     )
 

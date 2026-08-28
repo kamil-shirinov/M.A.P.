@@ -102,6 +102,7 @@ class Health:
     ungrounded_numerals: int = 0
     degenerate_spread: int = 0
     budget_exhausted: int = 0
+    output_truncated: int = 0
     reasoning_tokens: int = 0
     cache_hits: int = 0
     by_reason: dict[str, int] = field(default_factory=dict)
@@ -396,6 +397,10 @@ def _attempt(
                     cache_hits=sum(a.cache_hits for a in manifest.agents),
                     truncated=item.key in TRUNCATION_NOTES,
                     elided_chars=TRUNCATION_NOTES.get(item.key, 0),
+                    output_truncated=any(a.output_truncated for a in manifest.agents),
+                    truncated_agents=",".join(
+                        a.alias for a in manifest.agents if a.output_truncated
+                    ),
                 ),
                 None,
             )
@@ -421,6 +426,7 @@ def _absorb(health: Health, entry: LedgerEntry) -> None:
         health.divergent += entry.divergent
         health.ungrounded_numerals += entry.ungrounded_numerals
         health.degenerate_spread += int(entry.degenerate_spread)
+        health.output_truncated += int(entry.output_truncated)
         health.reasoning_tokens += entry.reasoning_tokens
         health.cache_hits += entry.cache_hits
         return

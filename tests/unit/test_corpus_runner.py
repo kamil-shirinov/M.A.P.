@@ -195,8 +195,15 @@ class _Quality:
 
 
 class _Agent:
-    def __init__(self, reasoning: int = 0, hits: int = 0):
+    def __init__(
+        self,
+        reasoning: int = 0,
+        hits: int = 0,
+        alias: str = "intake",
+        output_truncated: bool = False,
+    ):
         self.reasoning_tokens, self.cache_hits = reasoning, hits
+        self.alias, self.output_truncated = alias, output_truncated
 
 
 class _Forecast:

@@ -94,6 +94,8 @@ def _record(agent: LLMAgent, trace: CountingTrace) -> AgentRecord:
         template_name=name,
         template_version=version,
         template_sha256=digest,
+        finish_reason=trace.finish_reasons.get(stage),
+        output_truncated=stage in trace.truncated_output,
         attempts=trace.attempts.get(stage, 1),
         cache_hits=trace.cache_hits.get(stage, 0),
         reasoning_tokens=trace.reasoning_tokens.get(stage, 0),
@@ -192,6 +194,17 @@ def execute(
             ticker=request.ticker,
             values=list(quality.ungrounded_numerals),
             note="figures in a justification that trace to no material fact",
+        )
+
+    if trace.truncated_output:
+        _logger.warning(
+            "output_truncated",
+            ticker=request.ticker,
+            agents=sorted(trace.truncated_output),
+            note=(
+                "an agent stopped at its token cap rather than finishing, so what it "
+                "handed downstream is a fragment presented as a whole"
+            ),
         )
 
     fidelity = measure_fidelity(narrative.text, scenarios)

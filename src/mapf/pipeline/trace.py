@@ -82,6 +82,12 @@ class CountingTrace:
         # length varies run to run — that variance is worth measuring rather
         # than assuming, and it is invisible unless recorded.
         self.reasoning_tokens: dict[str, int] = {}
+        # Why each agent stopped. "length" means the model was cut off mid-output
+        # rather than finishing, which produces a truncated fact list or narrative
+        # that everything downstream then treats as complete. It has already
+        # happened twice unnoticed, so it is counted rather than assumed absent.
+        self.finish_reasons: dict[str, str] = {}
+        self.truncated_output: set[str] = set()
 
     def record(
         self,
@@ -101,6 +107,11 @@ class CountingTrace:
                 self.reasoning_tokens[stage] = self.reasoning_tokens.get(stage, 0) + int(
                     data["reasoning_tokens"]
                 )
+            if data and data.get("finish_reason"):
+                reason = str(data["finish_reason"])
+                self.finish_reasons[stage] = reason
+                if reason == "length":
+                    self.truncated_output.add(stage)
             if data and stage not in self.templates:
                 template = str(data.get("template", ""))
                 digest = str(data.get("template_sha256", ""))

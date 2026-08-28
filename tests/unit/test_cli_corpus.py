@@ -652,3 +652,30 @@ def test_an_exhibit_no_truncation_can_rescue_is_refused(
     assert result.exit_code == 6
     assert "exceed the budget" in result.output
     assert "cannot fit the configured context" in result.output
+
+
+def test_an_agent_cut_off_mid_output_is_warned_per_item(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Observed intake output is 368 tokens against a 2,048 cap, so this should
+    never fire — which is why it must be visible rather than assumed."""
+    from mapf.cli.commands.corpus import _progress
+
+    _progress(
+        1,
+        356,
+        CorpusItem("STZ", "clean", date(2026, 1, 7)),
+        LedgerEntry(
+            ticker="STZ",
+            band="clean",
+            filing_date=date(2026, 1, 7),
+            status="complete",
+            output_truncated=True,
+            truncated_agents="intake",
+        ),
+        Health(completed=1, output_truncated=1),
+    )
+    out = capsys.readouterr().out
+    assert "WARNING STZ" in out
+    assert "intake stopped at its token cap" in out
+    assert "cutoff=1" in out

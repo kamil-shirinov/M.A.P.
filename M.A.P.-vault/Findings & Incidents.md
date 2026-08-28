@@ -439,6 +439,27 @@ is the visible output, not the token budget, and for a reasoning model those dif
 magnitude. The chain is therefore checked against a declared visible bound, which the pre-dispatch
 assertion enforces at run time.
 
+### It had already happened twice, silently
+
+Adding a `finish_reason` check surfaced two runs where a model had been cut off
+mid-output and nothing said so:
+
+- **intake on the STZ document**: 18,938 tokens, `finish_reason="length"`, the fact
+  list ending mid-sentence on *"...for Corporate is not specified."* That truncated
+  summary is what the analyst was then handed.
+- **the analyst under the old 8,192 window**: 6,996 tokens, cut off, empty answer.
+
+So STZ was not one defect but two stacked: intake expanded *and* its expansion was
+silently truncated. The overflow that stopped the run was the second symptom; had
+the analyst's window been slightly larger, the run would have continued happily on a
+fact list that stopped halfway, and produced a schema-valid forecast from it.
+
+**A cap without a check is a silent corruption.** Every agent's stop reason is now
+recorded per call in the manifest and flagged per item in the ledger, in the same
+shape as the document-truncation flag — because it degrades a forecast the same
+way, and the observed 368-token maximum against a 2,048-token cap is exactly why it
+must be visible rather than assumed absent.
+
 ### The lesson
 
 Every previous context failure was about a *value* being wrong — a window smaller than configured, a

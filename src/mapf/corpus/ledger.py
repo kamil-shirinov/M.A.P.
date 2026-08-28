@@ -96,6 +96,13 @@ class LedgerEntry(DomainModel):
     truncated: bool = False
     elided_chars: int = Field(default=0, ge=0)
 
+    # The other truncation: an agent that stopped at its token cap rather than
+    # finishing, so the fact list or narrative it passed on is a fragment. Recorded
+    # in the same shape, because it degrades a forecast the same silent way — the
+    # result is schema-valid and built on half a summary.
+    output_truncated: bool = False
+    truncated_agents: str = ""
+
     @property
     def key(self) -> tuple[str, str, date]:
         return (self.ticker, self.band, self.filing_date)

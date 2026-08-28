@@ -49,6 +49,12 @@ class AgentRecord(DomainModel):
     template_name: str = Field(min_length=1)
     template_version: str = Field(min_length=1)
     template_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    # Why the model stopped. "stop" is a completed answer; "length" means it was
+    # cut off, so whatever this agent handed downstream is a fragment presented as
+    # a whole. Recorded per agent because only the agent knows.
+    finish_reason: str | None = None
+    output_truncated: bool = False
+
     attempts: int = Field(default=1, ge=1)
     # A reasoning build can spend most of its budget here and emit nothing.
     # Recorded so the distribution over runs is measurable rather than assumed.
@@ -71,7 +77,7 @@ class PriceProvenance(DomainModel):
 class RunManifest(DomainModel):
     # This manifest's own format version. Distinct from, and easily confused with,
     # the forecast's.
-    manifest_version: Literal["1.2.0"] = "1.2.0"
+    manifest_version: Literal["1.3.0"] = "1.3.0"
     # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
     # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
     # to decide. With only `schema_version` here it read the manifest's own version

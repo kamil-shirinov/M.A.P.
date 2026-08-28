@@ -653,3 +653,33 @@ def test_the_manifest_records_the_forecast_schema_version(baseline: Any) -> None
     assert baseline.manifest.forecast_schema_version == baseline.forecast.schema_version
     assert baseline.manifest.forecast_schema_version == "2.0.0"
     assert baseline.manifest.manifest_version != baseline.forecast.schema_version
+
+
+# ---------------------------------------------------------------------------
+# An agent cut off mid-output must be visible in the artifacts
+# ---------------------------------------------------------------------------
+class _CutOffProvider(CountingProvider):
+    """Every answer arrives complete but flagged as having hit the token cap.
+
+    Intake is capped at 2,048 tokens and has never exceeded 368, so this should
+    never happen in practice. It has happened twice already — once at 18,938 tokens
+    on the STZ document — and nothing surfaced it, which is why the flag exists.
+    """
+
+    def complete(self, **kwargs: Any) -> Any:
+        response = super().complete(**kwargs)
+        return response.model_copy(update={"finish_reason": "length"})
+
+
+def test_a_truncated_agent_output_is_recorded_in_the_manifest(tmp_path: Path) -> None:
+    result = _run(tmp_path, _CutOffProvider())
+    records = {a.alias: a for a in result.manifest.agents}
+    assert all(r.finish_reason == "length" for r in records.values())
+    assert all(r.output_truncated for r in records.values())
+
+
+def test_a_completed_run_is_not_flagged_as_truncated(baseline: Any) -> None:
+    """Absent evidence is not a truncation claim."""
+    records = {a.alias: a for a in baseline.manifest.agents}
+    assert all(not r.output_truncated for r in records.values())
+    assert all(r.finish_reason in (None, "stop") for r in records.values())
