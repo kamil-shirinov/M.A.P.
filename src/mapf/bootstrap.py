@@ -128,6 +128,10 @@ def build_run(
             "trace": trace,
             "stage": stage,
             "version": getattr(settings.prompts, stage),
+            # So an oversized prompt is refused before dispatch, naming the agent
+            # that produced it rather than arriving as an anonymous HTTP 400.
+            "context_tokens": registry.spec(stage).context_tokens,  # type: ignore[arg-type]
+            "upstream": registry.spec(stage).upstream,  # type: ignore[arg-type]
         }
 
     agents = Agents(

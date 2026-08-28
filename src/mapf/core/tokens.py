@@ -89,3 +89,31 @@ def check_fit(document_tokens: int, budgets: list[AgentBudget]) -> FitResult:
         binding_agent=tightest.agent,
         headroom=tightest.document_budget - document_tokens,
     )
+
+
+# Measured from real runs rather than assumed: the analyst's rendered template runs
+# to 1,229 tokens and the structuralist's to 464, so these are those maxima with
+# margin. They are the part of an agent's window that its own prompt scaffolding
+# occupies before any upstream payload arrives.
+PROMPT_OVERHEAD: dict[str, int] = {
+    "intake": 800,
+    "analyst": 1_536,
+    "structuralist": 768,
+}
+
+# Generation room for an agent that declares no `max_tokens`; the server's own
+# default is invisible here, so a reserve is assumed rather than pretended away.
+DEFAULT_GENERATION_RESERVE = 2_000
+
+
+def generation_reserve(max_tokens: int | None) -> int:
+    return max_tokens if max_tokens is not None else DEFAULT_GENERATION_RESERVE
+
+
+def prompt_allowance(context_tokens: int, max_tokens: int | None) -> int:
+    """How large a prompt this agent can accept.
+
+    Generation shares the window with the prompt, so the allowance is the window
+    less whatever generation may consume.
+    """
+    return context_tokens - generation_reserve(max_tokens)

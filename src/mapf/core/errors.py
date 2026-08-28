@@ -115,6 +115,35 @@ class UnreachableContextBudgetError(ConfigurationError):
         )
 
 
+class ChainBudgetError(ConfigurationError):
+    """One agent's maximum output cannot fit the next agent's input window.
+
+    Agents were validated in isolation, each budget against its own context, and
+    the *chain* between them was never checked. Intake then emitted ~20,000 tokens
+    from a 12,500-token document — it expanded rather than compressed — and the
+    analyst rejected a 22,368-token prompt against its 16,384 window. Both agents
+    were individually valid; the pipeline they form was not.
+    """
+
+    def __init__(
+        self,
+        upstream: str,
+        downstream: str,
+        produced: int,
+        overhead: int,
+        reserved: int,
+        window: int,
+    ) -> None:
+        self.upstream, self.downstream = upstream, downstream
+        super().__init__(
+            f"{upstream} may emit {produced:,} tokens, but {downstream} can accept "
+            f"only {window - overhead - reserved:,} "
+            f"(window {window:,} less {overhead:,} template and {reserved:,} "
+            f"generation). Lower {upstream}'s max_tokens, raise {downstream}'s "
+            f"context_tokens, or lower {downstream}'s generation budget."
+        )
+
+
 class DeterminismPolicyError(ConfigurationError):
     """An agent required to be deterministic was configured with sampling.
 
@@ -313,6 +342,27 @@ class MissingExhibitError(ExhibitError):
     consume the run's failure threshold afresh every pass and eventually halt on
     an item that can never succeed (ADR 0019).
     """
+
+
+class PromptTooLargeError(ProviderError):
+    """A rendered prompt exceeds the receiving agent's verified window.
+
+    Raised before dispatch, so the failure names the agent that produced the
+    oversized payload and how large it was. A raw HTTP 400 from the server says
+    only that something did not fit, which is the least useful moment to learn it.
+    """
+
+    def __init__(
+        self, agent: str, upstream: str | None, tokens: int, allowance: int, window: int
+    ) -> None:
+        self.agent, self.upstream = agent, upstream
+        self.tokens, self.allowance = tokens, allowance
+        source = f" produced by {upstream}" if upstream else ""
+        super().__init__(
+            f"{agent} was handed a prompt of ~{tokens:,} tokens{source}, but can "
+            f"accept only {allowance:,} (window {window:,} less its generation "
+            f"budget). Refused before dispatch."
+        )
 
 
 class PromptError(MapError):

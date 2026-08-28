@@ -71,6 +71,13 @@ allow_nondeterministic = false
 [models.intake]
 alias = "llama-3.2-3b-instruct"
 temperature = 0.0            # CLAUDE.md §6 — deterministic where the backend honours it
+# Capped because intake's job is to COMPRESS and nothing made it. On STZ it emitted
+# ~20,000 tokens from a 12,500-token document and the analyst rejected the result.
+# The ceiling is derived from the next window, not chosen: the analyst can accept
+# 4,384 tokens (16,384 less its 12,000 budget), of which 1,536 is its own template,
+# leaving 2,848. 2,048 keeps 800 in hand and is still 5.5x the largest output ever
+# observed (368). A startup validator now checks the whole chain.
+max_tokens = 2048
 # The agent that reads exhibits, so the one that needs the room. Item 2.02 releases
 # run to a median ~8.6k tokens and a maximum ~59k; 32768 admits 698 of 709 whole
 # (ADR 0020). Llama 3.2 has no sliding-window attention, so every layer's KV cache
@@ -91,6 +98,12 @@ temperature = 0.7            # the one agent where sampling diversity is wanted
 # Verified by bracketing rather than assumed (ADR 0020 §4). The analyst needs ~13,600
 # tokens (1,598 max observed prompt + a 12,000 budget); 16384 leaves 17% margin.
 context_tokens = 16384
+# What reaches the structuralist is the narrative, not the reasoning: 565 visible
+# tokens against 5,329 of reasoning in one measured run, 1,623 visible at most.
+# Declared at 4096 — 2.5x the observed maximum, and inside the 5,424 the
+# structuralist can accept — so the chain check uses a bound that reflects what
+# actually crosses the boundary rather than the whole generation budget.
+max_visible_tokens = 4096
 seed = 20260809              # recorded as *requested*; many local backends ignore it
 # Explicit, because the server default is invisible and this build reasons before
 # it answers: on 2026-08-12 it spent an entire ~7000-token default budget thinking

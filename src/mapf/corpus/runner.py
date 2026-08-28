@@ -39,6 +39,7 @@ from mapf.core.errors import (
     MissingExhibitError,
     ModelBudgetExhaustedError,
     NoMaterialFactsError,
+    PromptTooLargeError,
 )
 from mapf.core.models import Document
 from mapf.core.ports import DividendSource, MarketDataProvider
@@ -181,6 +182,10 @@ _CONTEXT_MARKERS = ("context size", "context length", "context window", "exceeds
 
 
 def _reason_for(error: MapError) -> FailureReason:
+    if isinstance(error, PromptTooLargeError):
+        # Deterministic: the same document produces the same oversized prompt on
+        # every attempt, so retrying only consumes the failure allowance.
+        return "context_overflow"
     if isinstance(error, InferenceStatusError):
         return _classify_status(error)
     if isinstance(error, MissingExhibitError):

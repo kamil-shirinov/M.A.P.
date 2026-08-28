@@ -29,12 +29,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource, SettingsConfigDict
 
 from mapf.core.errors import (
+    ChainBudgetError,
     ConfigurationError,
     DeterminismPolicyError,
     PlaceholderConfigError,
     UnreachableContextBudgetError,
     UnreachableTokenBudgetError,
 )
+from mapf.core.tokens import PROMPT_OVERHEAD, generation_reserve
 
 _logger = structlog.get_logger(__name__)
 
@@ -103,6 +105,17 @@ class ModelSettings(_Section):
     # server-side setting this file cannot enforce, so the pre-flight probes the
     # server for the real value and refuses on disagreement (ADR 0020 §4).
     context_tokens: int = Field(default=8192, ge=512)
+    # What this agent can hand *downstream*, which for a reasoning model is far
+    # less than `max_tokens`: the analyst spends most of a 12,000-token budget on
+    # reasoning that never leaves the model — 5,329 reasoning against 565 of
+    # visible narrative in one measured run. Defaults to `max_tokens`, which is
+    # correct for an agent that emits everything it generates. It is a declared
+    # bound, and the pre-dispatch assertion in `agents.base` is what enforces it.
+    max_visible_tokens: int | None = Field(default=None, ge=1)
+
+    @property
+    def visible_budget(self) -> int | None:
+        return self.max_visible_tokens if self.max_visible_tokens is not None else self.max_tokens
     top_p: float | None = Field(default=None, gt=0.0, le=1.0)
     max_tokens: int | None = Field(default=None, ge=1)
 
@@ -241,6 +254,31 @@ class Settings(BaseSettings):
             if spec.max_tokens + _MIN_PROMPT_TOKENS > spec.context_tokens:
                 raise UnreachableContextBudgetError(
                     agent, spec.max_tokens, spec.context_tokens
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _each_output_fits_the_next_input(self) -> Self:
+        """Every agent's maximum output must fit the next agent's input window.
+
+        Each budget was previously checked against its own context and the chain
+        between them against nothing. Intake then emitted ~20,000 tokens from a
+        12,500-token document — it expanded rather than compressed — and the
+        analyst rejected the resulting 22,368-token prompt. Both agents were
+        individually valid; the pipeline they formed was not.
+        """
+        for upstream, downstream in (("intake", "analyst"), ("analyst", "structuralist")):
+            produced = getattr(self.models, upstream).visible_budget
+            if produced is None:
+                # Unbounded output cannot be checked here. The pre-dispatch
+                # assertion still catches it, but at run time rather than startup.
+                continue
+            spec = getattr(self.models, downstream)
+            overhead = PROMPT_OVERHEAD.get(downstream, 800)
+            reserved = generation_reserve(spec.max_tokens)
+            if produced + overhead + reserved > spec.context_tokens:
+                raise ChainBudgetError(
+                    upstream, downstream, produced, overhead, reserved, spec.context_tokens
                 )
         return self
 

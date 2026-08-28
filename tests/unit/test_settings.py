@@ -408,7 +408,8 @@ def test_an_unreachable_token_budget_is_rejected(tmp_path: Path) -> None:
         "read_timeout_s = 600.0", "read_timeout_s = 600.0\nmin_tokens_per_second = 10.0"
     ).replace(
         'alias = "gemma4:12b"',
-        'alias = "gemma4:12b"\nmax_tokens = 12000\ncontext_tokens = 32768',
+        'alias = "gemma4:12b"\nmax_tokens = 12000\n'
+        "context_tokens = 32768\nmax_visible_tokens = 2048",
     )
     with pytest.raises(UnreachableTokenBudgetError) as caught:
         load([_write(tmp_path, content)])
@@ -420,7 +421,10 @@ def test_an_unreachable_token_budget_is_rejected(tmp_path: Path) -> None:
 def test_a_reachable_budget_is_accepted(tmp_path: Path) -> None:
     content = VALID_TOML.replace(
         "read_timeout_s = 600.0", "read_timeout_s = 900.0\nmin_tokens_per_second = 10.0"
-    ).replace('alias = "gemma4:12b"', 'alias = "gemma4:12b"\nmax_tokens = 6000')
+    ).replace(
+        'alias = "gemma4:12b"',
+        'alias = "gemma4:12b"\nmax_tokens = 6000\nmax_visible_tokens = 2048',
+    )
     settings = load([_write(tmp_path, content)])
     assert settings.models.analyst.max_tokens == 6000
 
@@ -432,7 +436,8 @@ def test_faster_hardware_can_be_declared(tmp_path: Path) -> None:
         "read_timeout_s = 600.0", "read_timeout_s = 600.0\nmin_tokens_per_second = 40.0"
     ).replace(
         'alias = "gemma4:12b"',
-        'alias = "gemma4:12b"\nmax_tokens = 12000\ncontext_tokens = 32768',
+        'alias = "gemma4:12b"\nmax_tokens = 12000\n'
+        "context_tokens = 32768\nmax_visible_tokens = 2048",
     )
     assert load([_write(tmp_path, content)]).models.analyst.max_tokens == 12000
 

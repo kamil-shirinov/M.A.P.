@@ -42,6 +42,12 @@ class ModelSpec(BaseModel):
     # pre-flight can size documents against it without reaching back into
     # settings, and so it can be frozen with a corpus.
     context_tokens: int
+    upstream: str | None = None
+
+
+# Who hands this agent its payload. Named so a refusal can say where an oversized
+# prompt came from, which a raw HTTP 400 never could.
+_UPSTREAM: dict[str, str] = {"analyst": "intake", "structuralist": "analyst"}
 
 
 def _to_spec(agent: AgentName, configured: ModelSettings) -> ModelSpec:
@@ -49,6 +55,7 @@ def _to_spec(agent: AgentName, configured: ModelSettings) -> ModelSpec:
         agent=agent,
         alias=configured.alias,
         context_tokens=configured.context_tokens,
+        upstream=_UPSTREAM.get(agent),
         sampling=SamplingParams(
             temperature=configured.temperature,
             seed=configured.seed,

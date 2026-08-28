@@ -726,3 +726,13 @@ def test_budget_exhaustion_remains_transient_because_the_analyst_samples() -> No
 )
 def test_context_phrasings_are_recognised(body: str) -> None:
     assert _reason_for(InferenceStatusError(400, body)) == "context_overflow"
+
+
+def test_a_refused_oversized_prompt_is_terminal() -> None:
+    """Deterministic: the same document renders the same oversized prompt on every
+    attempt, so retrying only consumes the failure allowance."""
+    from mapf.core.errors import PromptTooLargeError
+
+    reason = _reason_for(PromptTooLargeError("analyst", "intake", 22368, 4384, 16384))
+    assert reason == "context_overflow"
+    assert is_terminal(reason) is True

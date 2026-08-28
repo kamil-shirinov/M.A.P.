@@ -24,6 +24,8 @@ nothing broke at all:
   number that reads as a finding about the corpus rather than as a defect (#18)
 - a KV-cache figure computed from what the architecture permits, reported as what the runtime does,
   wrong by 12.6× (#20)
+- an agent that expanded a document instead of compressing it, uncapped, because each agent was
+  checked against its own limits and the boundary between them belonged to nobody (#21)
 
 Every one of those produced output that could be read aloud in a meeting without anyone objecting. That
 is the property that makes them dangerous, and it is why this project spends so much of its effort on
@@ -398,3 +400,52 @@ replacing a derivation with an observation. The write-ups are useful for explain
 mechanisms exist. They are not a substitute for them, and treating a documented lesson as though it
 were a guardrail is its own version of the same error — trusting a description of the system instead
 of the system.
+
+
+---
+
+## 21 · The agent that expanded instead of compressing
+
+Item 2 of the restarted clean band. STZ failed with a context overflow — on the **analyst's** 16,384
+window, not intake's 32,768. The analyst's prompt was **22,368 tokens**.
+
+The analyst never sees an exhibit. It reads intake's *compressed facts*, which had run 1,300–1,600
+tokens across every previous run. Intake had been handed a 12,500-token document and emitted roughly
+**20,000 tokens** from it. Intake's whole job is to compress, and **nothing capped what it could
+emit** — `max_tokens` was unset, so its ceiling was its own 32,768 window.
+
+### What the pre-flight actually checked
+
+It verified every document against **intake's** window and stopped there. Each agent's budget had
+been validated against its own context, and the *chain* between them against nothing. Both agents
+were individually valid; the pipeline they form was not.
+
+Two guards now exist:
+
+- a startup validator that walks the chain — every agent's maximum output plus the next agent's
+  template overhead plus its generation budget must fit its window. Numbers measured from real runs,
+  not assumed: analyst template 1,229 tokens, structuralist 464.
+- a **pre-dispatch assertion**: a rendered prompt larger than the receiving agent's allowance is
+  refused before the request leaves, naming the agent that produced the payload and its size. The
+  server's HTTP 400 says only that something did not fit, at the point where its origin is already
+  lost.
+
+### The subtlety that nearly broke the fix
+
+The naive chain rule — *upstream `max_tokens` must fit downstream's window* — **rejects a working
+configuration**. The analyst's 12,000-token budget is mostly reasoning that never leaves the model:
+5,329 reasoning against 565 of visible narrative in one measured run. What crosses an agent boundary
+is the visible output, not the token budget, and for a reasoning model those differ by an order of
+magnitude. The chain is therefore checked against a declared visible bound, which the pre-dispatch
+assertion enforces at run time.
+
+### The lesson
+
+Every previous context failure was about a *value* being wrong — a window smaller than configured, a
+document larger than a window. This one was about a **boundary nobody owned**. Intake was correct in
+isolation. The analyst was correct in isolation. The defect lived in the handoff, which no component
+was responsible for and no check covered.
+
+**Validating each component against its own constraints does not validate the pipeline.** The
+interfaces between them need owners too, and the cheapest owner is an assertion at the point where
+the payload changes hands.

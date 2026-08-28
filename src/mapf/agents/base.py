@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, ClassVar, Protocol, TypeVar
 
+from mapf.core.errors import PromptTooLargeError
 from mapf.core.models import TrustedText
 from mapf.core.ports import (
     LLMProvider,
@@ -22,6 +23,7 @@ from mapf.core.ports import (
     Trace,
 )
 from mapf.core.quarantine import QuarantinedText
+from mapf.core.tokens import estimate_tokens, prompt_allowance
 
 InT_contra = TypeVar("InT_contra", contravariant=True)
 OutT_co = TypeVar("OutT_co", covariant=True)
@@ -61,6 +63,8 @@ class LLMAgent:
         stage: str,
         template: str | None = None,
         version: str | None = None,
+        context_tokens: int | None = None,
+        upstream: str | None = None,
     ) -> None:
         self._template = template or self.TEMPLATE
         self._version = version or self.VERSION
@@ -70,6 +74,8 @@ class LLMAgent:
         self._prompts = prompts
         self._trace = trace
         self._stage = stage
+        self._context_tokens = context_tokens
+        self._upstream = upstream
 
     @property
     def model(self) -> ModelInfo:
@@ -102,6 +108,22 @@ class LLMAgent:
     ) -> RenderedPrompt:
         return self._prompts.render(template, version, trusted=trusted, untrusted=untrusted)
 
+    def _assert_fits(self, prompt: RenderedPrompt) -> None:
+        """Refuse an oversized prompt here, where its origin is still known.
+
+        The server answers an over-long request with an HTTP 400 that says only
+        that something did not fit — not which agent produced the payload, nor how
+        large it was. Both are known at this point and unrecoverable afterwards.
+        """
+        if self._context_tokens is None:
+            return
+        tokens = estimate_tokens(sum(len(m.content) for m in prompt.messages))
+        allowance = prompt_allowance(self._context_tokens, self._sampling.max_tokens)
+        if tokens > allowance:
+            raise PromptTooLargeError(
+                self._stage, self._upstream, tokens, allowance, self._context_tokens
+            )
+
     def _complete(
         self,
         prompt: RenderedPrompt,
@@ -109,6 +131,7 @@ class LLMAgent:
         json_schema: Mapping[str, Any] | None = None,
         attempt: int = 0,
     ) -> LLMResponse:
+        self._assert_fits(prompt)
         response = self._provider.complete(
             model=self._model,
             prompt=prompt,

@@ -71,6 +71,8 @@ class StructuralistAgent(LLMAgent):
         template: str | None = None,
         version: str | None = None,
         repair_template: str | None = None,
+        context_tokens: int | None = None,
+        upstream: str | None = None,
     ) -> None:
         super().__init__(
             provider=provider,
@@ -81,6 +83,8 @@ class StructuralistAgent(LLMAgent):
             stage=stage,
             template=template,
             version=version,
+            context_tokens=context_tokens,
+            upstream=upstream,
         )
         self._repair_template = repair_template or self.REPAIR_TEMPLATE
         if max_attempts < 1:
