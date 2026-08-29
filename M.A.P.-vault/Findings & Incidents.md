@@ -535,3 +535,59 @@ reasoning about what the model might be doing.
 **The check still earned its place.** Without it, the two genuine runaways would have produced
 schema-valid forecasts from fragments and been scored beside the rest. Making degradation visible
 found a real defect *and* a false alarm — and the false alarm was itself a real defect.
+
+
+---
+
+## 23 · Not verbose — degenerate. And a determinism claim that did not hold
+
+Two items were failing intake at its cap. The question was whether the model was genuinely
+verbose on those documents, in which case a bigger cap would help, or looping, in which case it
+would not.
+
+**Looping, unambiguously.** The 18,938-token STZ output:
+
+| | |
+| --- | --- |
+| lines | 757 |
+| **unique lines** | **22** |
+| redundancy | **97.1%** |
+| last new content | line **27** |
+| most repeated line | **187×** |
+
+Twenty-eight real facts, then a four-line block repeated ~180 times until the cap stopped it. FCX
+is the same failure with a longer period: a ~22-line block repeating. Both are classic greedy-decoding
+degeneration, and **size does not predict it** — ALLY is a *larger* document than STZ and produces
+543 clean tokens.
+
+So a bigger cap was never the answer. **A cap sized to "what it wants" is meaningless when what it
+wants is unbounded.**
+
+### The known fix works, and it is not free
+
+Replaying the exact recorded prompts with a frequency penalty:
+
+| item | penalty 0.0 | 0.3 | 0.6 |
+| --- | --- | --- | --- |
+| **STZ** | 2,048, cut off | **350, completed** | 640, completed |
+| **FCX** | 2,048, cut off | **1,171, completed** | 492, completed |
+| normal A | 222 (9 lines) | 420 (18 lines) | 394 (17) |
+| normal B | 517 (27 lines) | 409 (21 lines) | 433 (19) |
+| normal C | 159 (7 lines) | 197 (9 lines) | 172 (8) |
+
+It breaks both loops cleanly. It also **changes every well-behaved item** — one nearly doubled in
+length, another shrank by a fifth, and no normal output survived unchanged. Rescuing 2 items by
+perturbing the inputs to the other 354 is the wrong trade; applying it only as a retry when
+degeneration is detected is not.
+
+### A determinism claim that did not hold
+
+The replay was run at temperature 0 against the recorded prompts, so every output should have
+reproduced byte for byte. **Two of five did.** STZ and one normal item matched exactly; FCX and two
+others came back close but not identical — FCX produced 53 lines both times, 21 unique then 22.
+
+`CLAUDE.md` §6 asks for "determinism where available" and the manifest deliberately records sampling
+as *requested* rather than as honoured. This is the first direct measurement of the gap: on this
+backend, **temperature 0 is near-deterministic, not deterministic**. Any claim of bit-identical
+reproducibility from a re-run is unsupported; the defensible claim is that the cache makes replay
+exact, and that a genuine re-run is only approximately so.
