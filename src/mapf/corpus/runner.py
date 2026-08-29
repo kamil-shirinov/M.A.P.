@@ -38,6 +38,7 @@ from mapf.core.errors import (
     InferenceUnreachableError,
     MapError,
     MarketDataError,
+    MissingArtifactError,
     MissingExhibitError,
     ModelBudgetExhaustedError,
     NoMaterialFactsError,
@@ -199,7 +200,30 @@ def verify_freeze(
 _CONTEXT_MARKERS = ("context size", "context length", "context window", "exceeds the available")
 
 
+# What a completed item must have left behind. Checked rather than assumed: the
+# ledger's "append only after every artifact lands" was enforced by ordering alone,
+# and ordering does not verify that a write happened.
+REQUIRED_ARTIFACTS = ("forecast.json", "manifest.json", "trace.jsonl")
+
+
+def _verify_artifacts(run_dir: Path, run_id: str) -> None:
+    """Every required artifact exists and is non-empty, or the item is not complete.
+
+    Empty counts as missing. A zero-byte `trace.jsonl` satisfies an existence check
+    and contains no audit trail, which is the failure this guards against.
+    """
+    missing = [
+        name
+        for name in REQUIRED_ARTIFACTS
+        if not (path := run_dir / name).is_file() or path.stat().st_size == 0
+    ]
+    if missing:
+        raise MissingArtifactError(run_id, missing)
+
+
 def _reason_for(error: MapError) -> FailureReason:
+    if isinstance(error, MissingArtifactError):
+        return "missing_artifact"
     if isinstance(error, OutputTruncatedError):
         # Deterministic at temperature 0: the same document runs away identically
         # on every attempt, so retrying only consumes the failure allowance.
@@ -397,6 +421,9 @@ def _attempt(
                 today=config.price_vintage,
                 render_chart=False,
             )
+            # Inside the try, so a missing artifact fails the item like any other
+            # error. In the `else` clause it would escape the handlers entirely.
+            _verify_artifacts(result.run_dir, str(result.forecast.run_id))
         except (InferenceUnreachableError, InferenceTimeoutError) as err:
             last = err
             if attempt < config.attempts - 1:

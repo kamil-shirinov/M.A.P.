@@ -32,6 +32,7 @@ from mapf.core.errors import (
 )
 from mapf.corpus.ledger import Ledger, LedgerEntry, is_terminal
 from mapf.corpus.runner import (
+    REQUIRED_ARTIFACTS,
     CorpusHaltedError,
     CorpusItem,
     FreezeMismatchError,
@@ -215,6 +216,7 @@ class _Forecast:
 class _Result:
     def __init__(self, manifest: FakeManifest) -> None:
         self.manifest, self.forecast = manifest, _Forecast()
+        self.run_dir = Path()
 
 
 def _healthy() -> _Result:
@@ -228,8 +230,11 @@ def _healthy() -> _Result:
 class Recorder:
     """Stands in for `execute`, scripted per call."""
 
-    def __init__(self, outcomes: list[object]) -> None:
+    def __init__(
+        self, outcomes: list[object], artifacts: tuple[str, ...] = REQUIRED_ARTIFACTS
+    ) -> None:
         self.outcomes = list(outcomes)
+        self.artifacts = artifacts
         self.calls: list[dict[str, object]] = []
 
     def __call__(self, request: Any, **kwargs: Any) -> object:
@@ -239,7 +244,16 @@ class Recorder:
         outcome = self.outcomes.pop(0) if self.outcomes else _healthy()
         if isinstance(outcome, BaseException):
             raise outcome
-        return outcome
+        result = cast(_Result, outcome)
+        # Write the artifacts a real run would, so the runner's verification is
+        # genuinely exercised rather than stubbed past.
+        run_dir = Path(kwargs["runs_dir"]) / str(result.forecast.run_id)
+        if self.artifacts:
+            run_dir.mkdir(parents=True, exist_ok=True)
+            for name in self.artifacts:
+                (run_dir / name).write_text("x", encoding="utf-8")
+        result.run_dir = run_dir
+        return result
 
 
 def _wiring(run_id: UUID) -> Any:
@@ -737,3 +751,64 @@ def test_a_refused_oversized_prompt_is_terminal() -> None:
     reason = _reason_for(PromptTooLargeError("analyst", "intake", 22368, 4384, 16384))
     assert reason == "context_overflow"
     assert is_terminal(reason) is True
+
+
+# ---------------------------------------------------------------------------
+# Artifacts are verified, not assumed
+# ---------------------------------------------------------------------------
+def test_an_item_without_a_trace_is_not_recorded_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """56 of 57 runs were once recorded complete with no trace.jsonl, because the
+    ledger append happened last and the writes were assumed. Ordering is not
+    verification."""
+    from mapf.core.errors import MissingArtifactError
+
+    recorder = Recorder([], artifacts=("forecast.json", "manifest.json"))
+    monkeypatch.setattr("mapf.corpus.runner.execute", recorder)
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    with pytest.raises(CorpusHaltedError):
+        run_band(
+            plan(_corpus(), "clean"),
+            documents=lambda item: (),
+            wiring=_wiring,
+            ledger=ledger,
+            config=RunnerConfig(runs_dir=tmp_path / "runs", price_vintage=VINTAGE),
+            sleep=lambda _: None,
+        )
+    entries = list(ledger.entries())
+    assert all(e.status == "failed" for e in entries)
+    assert all(e.reason == "missing_artifact" for e in entries)
+    assert _reason_for(MissingArtifactError("r", ["trace.jsonl"])) == "missing_artifact"
+
+
+def test_an_empty_artifact_counts_as_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A zero-byte trace satisfies an existence check and holds no audit trail."""
+    from mapf.corpus.runner import _verify_artifacts
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    for name in REQUIRED_ARTIFACTS:
+        (run_dir / name).write_text("x", encoding="utf-8")
+    _verify_artifacts(run_dir, "r")
+
+    (run_dir / "trace.jsonl").write_text("", encoding="utf-8")
+    with pytest.raises(Exception, match="trace.jsonl"):
+        _verify_artifacts(run_dir, "r")
+
+
+def test_a_missing_artifact_is_terminal() -> None:
+    """Re-running would reproduce it; the defect is in the run, not the moment."""
+    assert is_terminal("missing_artifact") is True
+
+
+def test_a_complete_item_writes_every_required_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    health, ledger, recorder = _run(monkeypatch, [], tmp_path)
+    assert health.completed == 3
+    run_dir = Path(recorder.calls[0]["runs_dir"])  # type: ignore[arg-type]
+    written = {p.name for d in run_dir.iterdir() for p in d.iterdir()}
+    assert set(REQUIRED_ARTIFACTS) <= written

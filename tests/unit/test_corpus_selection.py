@@ -374,6 +374,9 @@ class TaggedFilings(FakeFilings):
     def __init__(self) -> None:
         super().__init__()
         self.owner: dict[str, str] = {}
+        # Stable ids: hash() is randomised per process, so two tickers could collide
+        # onto one accession and the ownership assertion would fail intermittently.
+        self._ids: dict[str, int] = {}
 
     def earnings_filings(
         self, ticker: str, start: date, end: date
@@ -381,7 +384,8 @@ class TaggedFilings(FakeFilings):
         found = super().earnings_filings(ticker, start, end)
         out = []
         for i, f in enumerate(found):
-            accession = f"00000000{abs(hash(ticker)) % 100:02d}-26-{start.year * 10 + i:06d}"
+            ident = self._ids.setdefault(ticker, len(self._ids))
+            accession = f"{ident:010d}-26-{start.year * 10 + i:06d}"
             self.owner[accession] = ticker
             out.append(EarningsFiling(accession=accession, cik=f.cik, filed=f.filed))
         return tuple(out)

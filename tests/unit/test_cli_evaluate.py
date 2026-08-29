@@ -54,13 +54,29 @@ def _finish(tmp_path: Path, run_ids: list[UUID] | None = None) -> Ledger:
     return ledger
 
 
-def _manifest(tmp_path: Path, run_id: UUID, commit: str | None, dirty: bool = False) -> None:
+def _manifest(
+    tmp_path: Path,
+    run_id: UUID,
+    commit: str | None,
+    dirty: bool = False,
+    trace: bool = True,
+) -> None:
     directory = tmp_path / "runs" / str(run_id)
     directory.mkdir(parents=True, exist_ok=True)
     body: dict[str, object] = {}
     if commit is not None:
         body["code_version"] = {"commit": commit, "dirty": dirty}
     (directory / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
+    if trace:
+        (directory / "trace.jsonl").write_text('{"stage":"intake"}\n', encoding="utf-8")
+
+
+def _traces_for(tmp_path: Path, ids: list[UUID]) -> None:
+    """Every completed item needs one, or scoring refuses."""
+    for run_id in ids:
+        d = tmp_path / "runs" / str(run_id)
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "trace.jsonl").write_text('{"stage":"intake"}\n', encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -100,7 +116,9 @@ def test_a_declared_single_pass_is_accepted(tmp_path: Path) -> None:
 
 
 def test_a_finished_band_reports_every_pass(tmp_path: Path) -> None:
-    _finish(tmp_path)
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _traces_for(tmp_path, ids)
     result = _invoke(tmp_path)
     assert result.exit_code == 0
     assert "clean_half_1" in result.output
@@ -164,7 +182,9 @@ def test_runs_predating_the_field_report_unknown(tmp_path: Path) -> None:
 
 
 def test_missing_manifests_are_reported_rather_than_assumed(tmp_path: Path) -> None:
-    _finish(tmp_path)
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _traces_for(tmp_path, ids)
     result = _invoke(tmp_path)
     assert "no manifests found" in result.output
 
@@ -176,6 +196,7 @@ def test_an_unreadable_manifest_is_skipped(tmp_path: Path) -> None:
     broken = tmp_path / "runs" / str(ids[1])
     broken.mkdir(parents=True, exist_ok=True)
     (broken / "manifest.json").write_text("{not json", encoding="utf-8")
+    (broken / "trace.jsonl").write_text('{"stage":"intake"}\n', encoding="utf-8")
     result = _invoke(tmp_path)
     assert result.exit_code == 0
     assert "1 runs" in result.output
@@ -198,7 +219,9 @@ def test_an_unknown_band_lists_the_real_ones(tmp_path: Path) -> None:
 
 def test_scoring_is_declared_unimplemented_rather_than_faked(tmp_path: Path) -> None:
     """Better an explicit gap than a number nobody can trace to a computation."""
-    _finish(tmp_path)
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _traces_for(tmp_path, ids)
     result = _invoke(tmp_path)
     assert "not yet implemented" in result.output
 
@@ -244,3 +267,38 @@ def test_an_unexpected_map_error_arrives_as_a_sentence(
     result = _invoke(tmp_path)
     assert result.exit_code != 0
     assert "Traceback" not in result.output
+
+
+# ---------------------------------------------------------------------------
+# An unauditable forecast is not scoreable
+# ---------------------------------------------------------------------------
+def test_a_completed_item_without_a_trace_refuses_scoring(tmp_path: Path) -> None:
+    """56 of 57 runs once had no trace and were recorded complete anyway. Full
+    provenance is the claim the result rests on."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40)
+    _manifest(tmp_path, ids[1], "a" * 40, trace=False)
+    result = _invoke(tmp_path)
+    assert result.exit_code != 0
+    assert "no usable trace" in result.output
+    assert "cannot be audited" in result.output
+
+
+def test_an_empty_trace_counts_as_missing(tmp_path: Path) -> None:
+    """A zero-byte file satisfies an existence check and holds no audit trail."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _traces_for(tmp_path, ids)
+    (tmp_path / "runs" / str(ids[1]) / "trace.jsonl").write_text("", encoding="utf-8")
+    result = _invoke(tmp_path)
+    assert result.exit_code != 0
+    assert "no usable trace" in result.output
+
+
+def test_a_fully_traced_band_passes_the_check(tmp_path: Path) -> None:
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _traces_for(tmp_path, ids)
+    result = _invoke(tmp_path)
+    assert "every completed item has a trace" in result.output

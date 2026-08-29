@@ -42,6 +42,7 @@ FailureReason = Literal[
     "missing_exhibit",
     "context_overflow",
     "output_truncated",
+    "missing_artifact",
     "other",
 ]
 
@@ -63,6 +64,7 @@ TERMINAL_REASONS: frozenset[str] = frozenset(
         "no_material_facts",
         "context_overflow",
         "output_truncated",
+        "missing_artifact",
     }
 )
 

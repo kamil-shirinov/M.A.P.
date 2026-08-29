@@ -92,6 +92,25 @@ def evaluate(
                 f"{status.terminal:>2} terminal, {status.remaining:>4} outstanding  [{mark}]"
             )
 
+        unauditable = _unauditable(ledger, runs_dir, band)
+        if unauditable:
+            typer.secho(
+                f"trace      {len(unauditable)} completed items have no usable trace",
+                fg=typer.colors.RED,
+            )
+            for label in unauditable[:10]:
+                typer.echo(f"           {label}")
+            raise fail(
+                f"{len(unauditable)} items cannot be audited",
+                2,
+                hint=(
+                    "Full provenance is the claim the result rests on. Re-run the "
+                    "affected items; a forecast whose trace is missing or empty is "
+                    "not one this project can defend."
+                ),
+            )
+        typer.secho("trace      every completed item has a trace", fg=typer.colors.GREEN)
+
         versions = _code_versions(ledger, runs_dir)
         if not versions:
             typer.secho("code       no manifests found to read", fg=typer.colors.YELLOW)
@@ -127,6 +146,23 @@ def evaluate(
         raise typer.Exit(8) from error
     except MapError as error:
         raise handle(error) from error
+
+
+def _unauditable(ledger: Ledger, runs_dir: Path, band: str) -> list[str]:
+    """Completed items whose trace is missing or empty.
+
+    56 of 57 runs once had no `trace.jsonl` and were recorded complete regardless,
+    because a single shared trace wrote every item's events into the first item's
+    directory. Scoring those would put a number on a forecast nobody can inspect.
+    """
+    out: list[str] = []
+    for key, entry in sorted(ledger.resolved().items()):
+        if entry.status != "complete" or entry.band != band or entry.run_id is None:
+            continue
+        path = runs_dir / str(entry.run_id) / "trace.jsonl"
+        if not path.is_file() or path.stat().st_size == 0:
+            out.append(f"{key[0]} {key[2]} (run {entry.run_id})")
+    return out
 
 
 def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:

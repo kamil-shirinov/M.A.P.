@@ -365,6 +365,28 @@ class PromptTooLargeError(ProviderError):
         )
 
 
+class MissingArtifactError(MapError):
+    """A run reported success but did not leave the artifacts to prove it.
+
+    The rule was "append to the ledger only after every artifact has landed", and
+    it was enforced by *ordering* alone — the append happened last, so the writes
+    were assumed to have happened. A shared trace then wrote every item's events
+    into the first item's directory, and 56 of 57 runs were recorded complete with
+    no `trace.jsonl` at all. Full provenance is the project's central claim and it
+    was silently absent for 98% of a run.
+
+    Ordering is not verification. This checks.
+    """
+
+    def __init__(self, run_id: str, missing: Sequence[str]) -> None:
+        self.run_id, self.missing = run_id, tuple(missing)
+        super().__init__(
+            f"run {run_id} produced no usable {', '.join(missing)}. A forecast whose "
+            f"provenance is absent is not a forecast that can be audited, so the "
+            f"item is failed rather than recorded complete."
+        )
+
+
 class PromptError(MapError):
     """A prompt could not be loaded or rendered."""
 
