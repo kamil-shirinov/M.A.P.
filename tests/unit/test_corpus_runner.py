@@ -59,9 +59,9 @@ FROZEN = {
         "intake": {"template": "intake.v2.md", "version": "v2", "sha256": "a" * 64},
         "analyst": {"template": "scenario_analyst.v3.md", "version": "v3", "sha256": "b" * 64},
     },
-    "models": {"analyst": {"alias": "google/gemma-4-12b-qat"}},
+    "models": {"analyst": {"alias": "google/gemma-4-12b-qat", "max_tokens": 12000}},
 }
-LIVE_MODELS = {"analyst": "google/gemma-4-12b-qat"}
+LIVE_MODELS = {"analyst": {"alias": "google/gemma-4-12b-qat", "max_tokens": 12000}}
 
 
 def _digest(mapping: dict[tuple[str, str], str]) -> Callable[[str, str], str]:
@@ -104,8 +104,48 @@ def test_a_missing_template_refuses_rather_than_skipping() -> None:
 
 
 def test_a_swapped_model_alias_refuses_the_run() -> None:
-    with pytest.raises(FreezeMismatchError, match="model alias"):
-        verify_freeze(FROZEN, live_digest=MATCHING, live_models={"analyst": "other/model"})
+    with pytest.raises(FreezeMismatchError, match="alias is"):
+        verify_freeze(
+            FROZEN,
+            live_digest=MATCHING,
+            live_models={"analyst": {"alias": "other/model", "max_tokens": 12000}},
+        )
+
+
+def test_a_drifted_sampling_value_refuses_the_run() -> None:
+    """Comparing only the alias is how `intake.max_tokens` sat at null in the frozen
+    record while the run was configured for 2,048, undetected."""
+    with pytest.raises(FreezeMismatchError, match="max_tokens is 999"):
+        verify_freeze(
+            FROZEN,
+            live_digest=MATCHING,
+            live_models={"analyst": {"alias": "google/gemma-4-12b-qat", "max_tokens": 999}},
+        )
+
+
+def test_a_config_value_the_freeze_does_not_record_is_not_checked() -> None:
+    """An older freeze may say less than the config. It may never disagree."""
+    verify_freeze(
+        FROZEN,
+        live_digest=MATCHING,
+        live_models={"analyst": {"alias": "google/gemma-4-12b-qat", "max_tokens": 12000, "new": 1}},
+    )
+
+
+def test_a_frozen_field_the_config_no_longer_has_is_skipped_not_crashed() -> None:
+    """Reading a live value that is absent must not raise: the refusal has to report
+    every mismatch at once, and an exception here would report none of them."""
+    verify_freeze(
+        {**FROZEN, "models": {"analyst": {"alias": "google/gemma-4-12b-qat", "gone": 1}}},
+        live_digest=MATCHING,
+        live_models=LIVE_MODELS,
+    )
+
+
+def test_an_agent_absent_from_the_live_configuration_is_skipped() -> None:
+    """A missing model is `map health`'s job; this check is about drift in what is
+    configured, and it must not double as a second, weaker existence check."""
+    verify_freeze(FROZEN, live_digest=MATCHING, live_models={})
 
 
 def test_a_freeze_without_prompt_hashes_is_rejected() -> None:
@@ -124,10 +164,16 @@ def test_a_malformed_prompt_entry_is_rejected() -> None:
 
 
 def test_every_mismatch_is_reported_not_just_the_first() -> None:
+    """Two templates and two sampling fields drifted: the refusal names all four,
+    so one restart resolves them rather than four."""
     drifted = _digest({("intake", "v2"): "z" * 64, ("scenario_analyst", "v3"): "c" * 64})
     with pytest.raises(FreezeMismatchError) as caught:
-        verify_freeze(FROZEN, live_digest=drifted, live_models={"analyst": "other/model"})
-    assert str(caught.value).count("\n  ") == 3
+        verify_freeze(
+            FROZEN,
+            live_digest=drifted,
+            live_models={"analyst": {"alias": "other/model", "max_tokens": 999}},
+        )
+    assert str(caught.value).count("\n  ") == 4
 
 
 # ---------------------------------------------------------------------------

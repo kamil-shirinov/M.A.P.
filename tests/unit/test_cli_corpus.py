@@ -164,7 +164,7 @@ def test_a_swapped_model_alias_refuses(tmp_path: Path) -> None:
 
     result = _invoke(tmp_path, frozen=frozen)
     assert result.exit_code != 0
-    assert "model alias" in result.output
+    assert "alias is" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +234,7 @@ def test_check_runs_no_inference(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
 def test_check_verifies_the_prompt_freeze_first(tmp_path: Path) -> None:
     result = _invoke(tmp_path, "--check")
-    assert "prompts and model aliases match" in result.output
+    assert "prompts, aliases and sampling match" in result.output
 
 
 def test_check_reports_an_unreachable_server(tmp_path: Path) -> None:

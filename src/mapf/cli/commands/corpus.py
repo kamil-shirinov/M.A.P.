@@ -42,6 +42,7 @@ from mapf.data.symbols import Throttle
 from mapf.pipeline.context_probe import probe_context
 from mapf.prompts.loader import FilePromptStore
 from mapf.settings import ModelRegistry, load
+from mapf.settings.loader import Settings
 
 corpus_app = typer.Typer(help="Run or pre-flight the frozen corpus.")
 app.add_typer(corpus_app, name="corpus")
@@ -110,11 +111,14 @@ def corpus_run(
             record,
             live_digest=prompts.digest,
             live_models={
-                stage: registry.spec(stage).alias
+                stage: _live_spec(registry, settings, stage)
                 for stage in ("intake", "analyst", "structuralist")
             },
         )
-        typer.secho("freeze     prompts and model aliases match", fg=typer.colors.GREEN)
+        typer.secho(
+            "freeze     prompts, aliases and sampling match the frozen record",
+            fg=typer.colors.GREEN,
+        )
 
         # 2. The ledger, so a resume is announced rather than assumed.
         ledger = Ledger(ledger_path)
@@ -224,6 +228,24 @@ def corpus_run(
         raise typer.Exit(7) from error
     except MapError as error:
         raise handle(error) from error
+
+
+def _live_spec(registry: ModelRegistry, settings: Settings, stage: str) -> dict[str, object]:
+    """Every configured value the freeze might record, for comparison against it.
+
+    Assembled here rather than read from the frozen record so a field the freeze
+    names but the config no longer has is a mismatch rather than an omission.
+    """
+    spec = registry.spec(stage)  # type: ignore[arg-type]
+    configured = getattr(settings.models, stage)
+    return {
+        "alias": spec.alias,
+        "temperature": spec.sampling.temperature,
+        "max_tokens": spec.sampling.max_tokens,
+        "context_tokens": spec.context_tokens,
+        "max_visible_tokens": configured.max_visible_tokens,
+        "degeneration_penalty": spec.degeneration_penalty,
+    }
 
 
 def _progress(index: int, total: int, item: CorpusItem, entry: LedgerEntry, health: Health) -> None:

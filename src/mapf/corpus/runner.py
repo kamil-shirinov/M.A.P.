@@ -148,11 +148,21 @@ def verify_freeze(
     frozen: Mapping[str, object],
     *,
     live_digest: Callable[[str, str], str],
-    live_models: Mapping[str, str],
+    live_models: Mapping[str, Mapping[str, object]],
 ) -> None:
     """Check live templates and models against the frozen record, or refuse.
 
     `live_digest(name, version)` hashes the template as it exists now.
+
+    **Every field the freeze records is compared, not just the alias.** Comparing
+    only the alias is how `intake.max_tokens` came to sit at `null` in the frozen
+    record while the run was configured for 2,048: the freeze held a number, the
+    config held a different one, and nothing ever put them side by side. That is
+    the same defect as trusting a configured context window instead of probing the
+    server (ADR 0020 §4), one layer up.
+
+    Fields absent from the frozen record are not checked — an older freeze is
+    allowed to say less, but never to disagree.
     """
     prompts = frozen.get("prompts")
     if not isinstance(prompts, Mapping) or not prompts:
@@ -180,12 +190,16 @@ def verify_freeze(
         for agent, spec in models.items():
             if not isinstance(spec, Mapping):
                 continue
-            expected = str(spec.get("alias", ""))
-            actual_alias = live_models.get(agent)
-            if actual_alias is not None and actual_alias != expected:
-                mismatches.append(
-                    f"{agent}: model alias is {actual_alias!r}, frozen as {expected!r}"
-                )
+            live = live_models.get(agent)
+            if live is None:
+                continue
+            for field, frozen_value in spec.items():
+                if field not in live:
+                    continue
+                if live[field] != frozen_value:
+                    mismatches.append(
+                        f"{agent}: {field} is {live[field]!r}, frozen as {frozen_value!r}"
+                    )
 
     if mismatches:
         raise FreezeMismatchError(

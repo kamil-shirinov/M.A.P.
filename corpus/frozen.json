@@ -1,9 +1,9 @@
 {
-  "freeze_version": "2.2.0",
+  "freeze_version": "2.3.0",
   "frozen_on": "2026-08-14",
-  "amended_on": "2026-08-17",
-  "amends": "cb40af8",
-  "amendment_reason": "Records the context windows the run will actually execute at, each verified by bracketing the server rather than computed. The analyst and structuralist could not be allocated at the previously recorded sizes: the runtime allocates full-length KV for every layer regardless of the sliding-window bound Gemma supports (~336 KB/token, 11.0 GB at 32768), so the server refused to load them. PRECEDES ALL INFERENCE -- no forecast has been scored, and the four items from the halted first attempt are being discarded. The analyst reasoning budget is unchanged at 12,000: its measured requirement is 13,598 tokens against 16,384, a 17% margin. Truncation is unaffected because the document budget derives from intake, whose window is unchanged at 32,768.",
+  "amended_on": "2026-08-29",
+  "amends": "2a54331",
+  "amendment_reason": "Records the degeneration retry (ADR 0021) and corrects two sampling values that had drifted out of this record. PRECEDES ALL INFERENCE -- the clean band has not started, the ledger and the LLM cache are being cleared, and no forecast has been scored. (1) THE RETRY. Two items stopped intake at its cap; the tails are decoding loops, not long documents -- STZ was 757 lines of which 22 were unique, 97.1% redundant, one block repeated 187 times, last new content at line 27. A frequency penalty of 0.3 breaks both loops. It is applied ONLY as a retry after a truncated first attempt, and ONLY to intake, because at 0.3 it also changes every well-behaved item measured (one nearly doubled, one shrank a fifth) and perturbing 354 items to rescue 2 is the wrong trade. A first call carries no penalty and is byte-identical on the wire to one made before this existed. The deciding argument is band asymmetry, not the count: intake runs at temperature 0, so degeneration is a property of the document rather than the ticker, and failing these items would remove one clean item each from STZ and FCX while their ambiguous siblings survive -- unbalancing the panel on the same-ticker axis the band design exists to protect. The sensitivity check is pre-registered in ADR 0021: the primary result is reported with and without every retried item, declared before any item has run. (2) THE DRIFT. intake.max_tokens was recorded here as null but has been configured at 2048 since the cap was introduced, and analyst.max_visible_tokens was never recorded at all. Nothing detected either, because verify_freeze compared only the model alias. It now compares every field this record names, which is the same correction as probing the server instead of trusting a configured context window. Neither value is being CHANGED by this amendment -- the record is being corrected to state what the run will actually execute at. TRUNCATION IS UNTOUCHED: the head-and-tail rule, its 24,000/4,000 parameters and the twelve exhibits it applies to are all unchanged, and the document budget still derives from intake's window, which stays at 32,768.",
   "changes": {
     "dropped": [
       "BRK-A",
@@ -28,18 +28,22 @@
   "models": {
     "intake": {
       "alias": "llama-3.2-3b-instruct",
-      "max_tokens": null,
-      "temperature": 0.0
+      "max_tokens": 2048,
+      "temperature": 0.0,
+      "degeneration_penalty": 0.3
     },
     "analyst": {
       "alias": "google/gemma-4-12b-qat",
       "max_tokens": 12000,
-      "temperature": 0.7
+      "temperature": 0.7,
+      "max_visible_tokens": 4096,
+      "degeneration_penalty": null
     },
     "structuralist": {
       "alias": "qwen/qwen3-4b-2507",
       "max_tokens": null,
-      "temperature": 0.0
+      "temperature": 0.0,
+      "degeneration_penalty": null
     }
   },
   "prompts": {
@@ -44658,5 +44662,26 @@
       }
     }
   },
-  "context_verification": "bracketed against the running server (ADR 0020 section 4); configured values are checked, never trusted"
+  "context_verification": "bracketed against the running server (ADR 0020 section 4); configured values are checked, never trusted",
+  "degeneration_retry": {
+    "rule": "frequency_penalty_on_truncated_retry_v1",
+    "applies_to": [
+      "intake"
+    ],
+    "penalty": 0.3,
+    "max_retries": 1,
+    "trigger": "finish_reason == 'length' on the first attempt",
+    "first_attempt_penalty": null,
+    "on_second_failure": "output_truncated, terminal",
+    "recorded_per_item": [
+      "manifest.agents[].degeneration_retry",
+      "ledger.degeneration_retry",
+      "ledger.retried_agents"
+    ],
+    "sensitivity_check": "ADR 0021, pre-registered 2026-08-29 before any item ran: the primary result is reported with and without every item that took the retry, regardless of what the comparison shows. Reported separately from the truncation sensitivity check of ADR 0020, with which it overlaps on FCX.",
+    "observed_before_freeze": {
+      "STZ": "757 lines, 22 unique, 97.1% redundant, 187x most-repeated line",
+      "FCX": "53 lines, 21 unique, 60% redundant, ~22-line repeating block"
+    }
+  }
 }
