@@ -54,21 +54,33 @@ def _finish(tmp_path: Path, run_ids: list[UUID] | None = None) -> Ledger:
     return ledger
 
 
+def _one_run_trace() -> str:
+    """What one run leaves behind: three agents, each recording at least one call.
+
+    A single line is not a plausible trace and the guard now says so, so a fixture
+    that wrote one was asserting against a shape the pipeline never produces.
+    """
+    return "".join(f'{{"stage":"{stage}"}}\n' for stage in ("intake", "analyst", "structuralist"))
+
+
 def _manifest(
     tmp_path: Path,
     run_id: UUID,
     commit: str | None,
     dirty: bool = False,
     trace: bool = True,
+    freeze: str | None = None,
 ) -> None:
     directory = tmp_path / "runs" / str(run_id)
     directory.mkdir(parents=True, exist_ok=True)
     body: dict[str, object] = {}
     if commit is not None:
         body["code_version"] = {"commit": commit, "dirty": dirty}
+    if freeze is not None:
+        body["freeze_version"] = freeze
     (directory / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
     if trace:
-        (directory / "trace.jsonl").write_text('{"stage":"intake"}\n', encoding="utf-8")
+        (directory / "trace.jsonl").write_text(_one_run_trace(), encoding="utf-8")
 
 
 def _traces_for(tmp_path: Path, ids: list[UUID]) -> None:
@@ -76,7 +88,7 @@ def _traces_for(tmp_path: Path, ids: list[UUID]) -> None:
     for run_id in ids:
         d = tmp_path / "runs" / str(run_id)
         d.mkdir(parents=True, exist_ok=True)
-        (d / "trace.jsonl").write_text('{"stage":"intake"}\n', encoding="utf-8")
+        (d / "trace.jsonl").write_text(_one_run_trace(), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +204,7 @@ def test_an_unreadable_manifest_is_skipped(tmp_path: Path) -> None:
     broken = tmp_path / "runs" / str(ids[1])
     broken.mkdir(parents=True, exist_ok=True)
     (broken / "manifest.json").write_text("{not json", encoding="utf-8")
-    (broken / "trace.jsonl").write_text('{"stage":"intake"}\n', encoding="utf-8")
+    (broken / "trace.jsonl").write_text(_one_run_trace(), encoding="utf-8")
     result = _invoke(tmp_path)
     assert result.exit_code == 0
     assert "1 runs" in result.output
@@ -298,3 +310,65 @@ def test_a_fully_traced_band_passes_the_check(tmp_path: Path) -> None:
     _traces_for(tmp_path, ids)
     result = _invoke(tmp_path)
     assert "every completed item has a trace" in result.output
+
+
+# ---------------------------------------------------------------------------
+# The frozen record (ADR 0022)
+# ---------------------------------------------------------------------------
+def test_a_single_freeze_is_reported(tmp_path: Path) -> None:
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "freeze     2.3.0 (2 runs)" in result.output
+
+
+def test_a_band_spanning_two_freezes_refuses(tmp_path: Path) -> None:
+    """The freeze governs sampling, truncation and corpus membership, so two items
+    produced under different records were not asked the same question."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.2.0")
+    _manifest(tmp_path, ids[1], "a" * 40, freeze="2.3.0")
+    result = _invoke(tmp_path)
+    assert result.exit_code == 2
+    assert "2 distinct frozen records" in result.output
+    assert "2.2.0" in result.output and "2.3.0" in result.output
+
+
+def test_a_mixed_freeze_has_no_override(tmp_path: Path) -> None:
+    """Deliberately unlike --allow-mixed-code. A refactor between commits can be
+    harmless; two freezes cannot be."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.2.0")
+    _manifest(tmp_path, ids[1], "a" * 40, freeze="2.3.0")
+    assert _invoke(tmp_path, "--allow-mixed-code").exit_code == 2
+
+
+def test_runs_predating_the_freeze_field_report_unknown(tmp_path: Path) -> None:
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40)
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "predates the field" in result.output
+
+
+def test_a_trace_holding_more_than_one_run_refuses_scoring(tmp_path: Path) -> None:
+    """A file-exists check passes the incident's own worst artifact: the one
+    directory whose trace held every item's events."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, trace=False, freeze="2.3.0")
+    _manifest(tmp_path, ids[1], "a" * 40, freeze="2.3.0")
+    directory = tmp_path / "runs" / str(ids[0])
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "trace.jsonl").write_text('{"stage":"intake"}\n' * 200, encoding="utf-8")
+    result = _invoke(tmp_path)
+    assert result.exit_code == 2
+    assert "cannot be audited" in result.output
+    assert "more than one run can produce" in result.output

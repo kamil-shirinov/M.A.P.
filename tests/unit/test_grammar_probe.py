@@ -136,3 +136,61 @@ def test_the_result_exposes_a_plain_ok_flag() -> None:
     assert _probe(_Provider(text=VALID)).ok is True
     assert _probe(_Provider(text="prose")).ok is False
     assert _probe(_Provider(error=InferenceProtocolError("x"))).ok is False
+
+
+# ---------------------------------------------------------------------------
+# Exact shape, not a superset (ADR 0022)
+# ---------------------------------------------------------------------------
+def test_an_extra_top_level_key_is_evidence_against_enforcement() -> None:
+    """This was scored as `enforced` until the guard audit — an inverted test.
+
+    `additionalProperties: false` makes an extra key unreachable under a grammar
+    the sampler is actually constrained by, so its presence proves the opposite of
+    what the old `>=` check concluded from it.
+    """
+    loose = json.loads(VALID)
+    loose["commentary"] = "here is my reasoning"
+    probe = _probe(_Provider(text=json.dumps(loose)))
+    assert probe.outcome == "accepted_not_enforced"
+    assert "commentary" in probe.detail
+
+
+def test_a_missing_branch_is_still_caught() -> None:
+    partial = json.loads(VALID)
+    del partial["bearish"]
+    assert _probe(_Provider(text=json.dumps(partial))).outcome == "accepted_not_enforced"
+
+
+def test_an_extra_field_inside_a_branch_is_caught() -> None:
+    """The same reasoning one level down: the grammar constrains the whole tree,
+    so a shape check that stops at the top level tests only half of it."""
+    loose = json.loads(VALID)
+    loose["bullish"]["confidence"] = "high"
+    probe = _probe(_Provider(text=json.dumps(loose)))
+    assert probe.outcome == "accepted_not_enforced"
+    assert "bullish" in probe.detail
+
+
+def test_a_missing_field_inside_a_branch_is_caught() -> None:
+    partial = json.loads(VALID)
+    del partial["base_case"]["annualised_vol"]
+    assert _probe(_Provider(text=json.dumps(partial))).outcome == "accepted_not_enforced"
+
+
+def test_a_branch_that_is_not_an_object_is_caught() -> None:
+    wrong = json.loads(VALID)
+    wrong["bearish"] = "sharply down"
+    assert _probe(_Provider(text=json.dumps(wrong))).outcome == "accepted_not_enforced"
+
+
+def test_a_json_array_is_not_an_object() -> None:
+    assert _probe(_Provider(text="[1, 2, 3]")).outcome == "accepted_not_enforced"
+
+
+def test_the_expected_fields_are_read_from_the_model() -> None:
+    """Restating them here would let a field added to `Scenario` leave the probe
+    checking a shape the pipeline no longer uses."""
+    from mapf.core.models import Scenario
+    from mapf.pipeline.probe import FIELDS
+
+    assert set(Scenario.model_fields) == FIELDS

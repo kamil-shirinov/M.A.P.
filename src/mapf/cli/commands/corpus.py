@@ -13,6 +13,7 @@ unintended resume is visible rather than silent.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 from uuid import UUID
@@ -209,7 +210,11 @@ def corpus_run(
                 documents=documents,
                 wiring=wiring,  # type: ignore[arg-type]
                 ledger=ledger,
-                config=RunnerConfig(runs_dir=settings.paths.runs_dir, price_vintage=vintage),
+                config=RunnerConfig(
+                    runs_dir=settings.paths.runs_dir,
+                    price_vintage=vintage,
+                    freeze_version=_freeze_version(record),
+                ),
                 on_progress=_progress,
             )
 
@@ -228,6 +233,16 @@ def corpus_run(
         raise typer.Exit(7) from error
     except MapError as error:
         raise handle(error) from error
+
+
+def _freeze_version(record: Mapping[str, object]) -> str | None:
+    """The frozen record's own version, for stamping into every manifest.
+
+    Absent rather than fabricated when the record does not carry one: a run that
+    genuinely does not know its freeze must not claim a version it invented.
+    """
+    value = record.get("freeze_version")
+    return str(value) if isinstance(value, str) and value else None
 
 
 def _live_spec(registry: ModelRegistry, settings: Settings, stage: str) -> dict[str, object]:

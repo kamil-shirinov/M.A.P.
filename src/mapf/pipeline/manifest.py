@@ -84,7 +84,7 @@ class PriceProvenance(DomainModel):
 class RunManifest(DomainModel):
     # This manifest's own format version. Distinct from, and easily confused with,
     # the forecast's.
-    manifest_version: Literal["1.4.0"] = "1.4.0"
+    manifest_version: Literal["1.5.0"] = "1.5.0"
     # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
     # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
     # to decide. With only `schema_version` here it read the manifest's own version
@@ -113,6 +113,16 @@ class RunManifest(DomainModel):
     # executes its second half under whatever commit is checked out then, and a
     # corpus spanning two commits must be visible rather than invisible.
     code_version: CodeVersion = CodeVersion()
+
+    # Which FROZEN RECORD this run executed under. The freeze governs sampling,
+    # truncation and corpus membership, so a band spanning two of them is at least
+    # as serious as one spanning two commits — and until this field existed it was
+    # undetectable, because nothing anywhere recorded it (ADR 0022).
+    #
+    # `None` for a run outside a corpus, where there is no freeze to record. That
+    # is distinct from a corpus run that predates the field, which cannot be
+    # distinguished from it and is reported as unknown.
+    freeze_version: str | None = None
 
     # Marks a run that is not reproducible. Phase 2 must either exclude these or
     # report them separately (ADR 0007).

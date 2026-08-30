@@ -60,6 +60,14 @@ So a re-run from a cold cache produces *similar* forecasts, not identical ones. 
 is exact is replay **from the cache** — which is why the cache is provenance
 infrastructure and not an optimisation.
 
+**The quality checks read prose, not the forecast.** Every run records whether figures in
+a scenario's *justification* trace back to a material fact. That check does **not** cover
+`price_return`, `annualised_vol` or `probability_weight` — the numbers actually scored.
+Nothing grounds those against the source, and nothing could straightforwardly: a forecast
+is supposed to state something the source did not. Their only checks are the schema's
+bounds and the ordering invariant. Read a clean `ungrounded_numerals` as "the prose cites
+nothing invented", never as "the forecast is supported".
+
 The three-agent architecture is a **hypothesis**, not a result. Whether it beats a
 single-agent baseline is an open question that Phase 3's ablation study exists to answer.
 Nothing here claims it is better.

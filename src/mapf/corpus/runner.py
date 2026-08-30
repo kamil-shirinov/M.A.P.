@@ -24,6 +24,7 @@ import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from http import HTTPStatus
 from math import ceil
 from pathlib import Path
 from typing import Protocol
@@ -50,8 +51,8 @@ from mapf.core.models import Document
 from mapf.core.ports import DividendSource, MarketDataProvider
 from mapf.corpus.ledger import FailureReason, Ledger, LedgerEntry
 from mapf.corpus.selection import Corpus
-from mapf.pipeline.run import Agents, RunRequest, execute
-from mapf.pipeline.trace import CountingTrace
+from mapf.pipeline.run import TRACE_FILE, Agents, RunRequest, execute
+from mapf.pipeline.trace import CountingTrace, audit_trace
 
 _logger = structlog.get_logger(__name__)
 
@@ -209,23 +210,27 @@ def verify_freeze(
         )
 
 
-# A server rejecting an over-long request says so in the body. Matching on the
-# message is unlovely, but the alternative is treating every HTTP 400 as one thing
-# when 400 covers both "this prompt can never fit" and "malformed request".
+# A REFINEMENT ONLY. Both branches below are terminal, so nothing about resume
+# behaviour depends on this matching — it only chooses the more specific of two
+# names for the same outcome. That is the shape ADR 0020 §4 settled on for the
+# context probe: a parsed message may sharpen a report, never decide one.
 _CONTEXT_MARKERS = ("context size", "context length", "context window", "exceeds the available")
 
 
 # What a completed item must have left behind. Checked rather than assumed: the
 # ledger's "append only after every artifact lands" was enforced by ordering alone,
 # and ordering does not verify that a write happened.
-REQUIRED_ARTIFACTS = ("forecast.json", "manifest.json", "trace.jsonl")
+REQUIRED_ARTIFACTS = ("forecast.json", "manifest.json", TRACE_FILE)
 
 
 def _verify_artifacts(run_dir: Path, run_id: str) -> None:
-    """Every required artifact exists and is non-empty, or the item is not complete.
+    """Every required artifact exists, is non-empty, and — for the trace — is *this
+    run's*.
 
-    Empty counts as missing. A zero-byte `trace.jsonl` satisfies an existence check
-    and contains no audit trail, which is the failure this guards against.
+    Empty counts as missing: a zero-byte `trace.jsonl` satisfies an existence check
+    and contains no audit trail. So does a trace holding somebody else's events,
+    which is why the trace gets an event-count bound rather than only a size check
+    (ADR 0022).
     """
     missing = [
         name
@@ -234,6 +239,8 @@ def _verify_artifacts(run_dir: Path, run_id: str) -> None:
     ]
     if missing:
         raise MissingArtifactError(run_id, missing)
+    if (reason := audit_trace(run_dir / TRACE_FILE)) is not None:
+        raise MissingArtifactError(run_id, [f"{TRACE_FILE} ({reason})"])
 
 
 def _reason_for(error: MapError) -> FailureReason:
@@ -267,18 +274,38 @@ def _reason_for(error: MapError) -> FailureReason:
 
 
 def _classify_status(error: InferenceStatusError) -> FailureReason:
-    """Split HTTP status into transient and terminal.
+    """Split HTTP status into transient and terminal, **by status code**.
 
     The exception type alone is too coarse: `InferenceStatusError` covers a 500
     from a server under load, which a retry may well survive, and a 400 rejecting a
-    prompt longer than the context, which will fail identically on every attempt
-    forever. Retrying the latter consumes the failure allowance each pass until the
-    run halts on items that can never succeed — the first corpus run recorded eight
-    of them as transient `other`.
+    prompt longer than the context, which will fail identically forever. Retrying
+    the latter consumes the failure allowance each pass until the run halts on
+    items that can never succeed — the first corpus run recorded eight of them as
+    transient `other`.
+
+    **The split is the status class, not the wording.** This matched four English
+    phrases in the body, so a server phrasing its refusal differently fell through
+    to `other` — transient — and reintroduced exactly that failure. It was also the
+    vendor coupling `CLAUDE.md` §3 forbids, and the one ADR 0020 §4 had already
+    removed from the context probe for the same reason; leaving it here meant the
+    lesson was applied in one place and not the other (ADR 0022).
+
+    A 4xx means *this request* is unacceptable and an identical retry will be
+    refused identically. A 5xx means the server is unwell, which a retry may
+    survive. The naming of the *cause* is where a parsed message may still help, so
+    it is kept as a refinement — never as the thing that decides transient from
+    terminal. The cost of the stricter rule: a misconfigured server 400s every
+    item, and up to five go terminal before the consecutive-failure halt fires.
+    Those five need their ledger lines removed by hand — a bounded, visible price
+    for not retrying the unretryable forever.
     """
-    body = error.body.lower()
-    if error.status_code == 400 and any(m in body for m in _CONTEXT_MARKERS):
-        return "context_overflow"
+    if error.status_code >= HTTPStatus.INTERNAL_SERVER_ERROR:
+        return "other"
+    if error.status_code >= HTTPStatus.BAD_REQUEST:
+        body = error.body.lower()
+        if any(m in body for m in _CONTEXT_MARKERS):
+            return "context_overflow"
+        return "request_rejected"
     return "other"
 
 
@@ -286,6 +313,10 @@ def _classify_status(error: InferenceStatusError) -> FailureReason:
 class RunnerConfig:
     runs_dir: Path
     price_vintage: date
+    # Stamped into every manifest so a band spanning two frozen records is
+    # detectable at scoring time (ADR 0022). Optional only so a caller outside a
+    # corpus need not invent one.
+    freeze_version: str | None = None
     history_days: int = 730
     horizon_days: int = 5
     attempts: int = 3
@@ -327,7 +358,12 @@ def run_band(
         )
 
     done = ledger.completed()
-    health = Health()
+    # Seeded from the ledger, not from zero. The allowance is a property of the
+    # BAND — "2% of 356" — and a fresh count on every resume enforces it per
+    # invocation instead: three resumes would tolerate 24 failures against an
+    # allowance of 8 and never trip (ADR 0022). Six nights involve restarts, so
+    # this is the difference between a threshold and a formality.
+    health = _seed(Health(), ledger, band=items[0].band if items else "")
     consecutive = 0
     total = len(items)
     # An integer allowance, floored at one. Expressed as a bare rate, a short band
@@ -433,6 +469,7 @@ def _attempt(
                 # vintage and mix adjustment bases mid-corpus (ADR 0012).
                 today=config.price_vintage,
                 render_chart=False,
+                freeze_version=config.freeze_version,
             )
             # Inside the try, so a missing artifact fails the item like any other
             # error. In the `else` clause it would escape the handlers entirely.
@@ -487,6 +524,19 @@ def _attempt(
         ),
         last,
     )
+
+
+def _seed(health: Health, ledger: Ledger, *, band: str) -> Health:
+    """Fold this band's already-resolved items into the running health.
+
+    Only *resolved* entries: a transient failure from an earlier pass is absent
+    from `resolved()` and will be retried, so counting it would charge the
+    allowance for a failure that may not survive the retry.
+    """
+    for entry in ledger.resolved().values():
+        if entry.band == band:
+            _absorb(health, entry)
+    return health
 
 
 def _absorb(health: Health, entry: LedgerEntry) -> None:

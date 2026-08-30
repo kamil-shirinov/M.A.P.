@@ -27,7 +27,7 @@ from mapf.core.errors import (
     InferenceTimeoutError,
     InferenceUnreachableError,
 )
-from mapf.core.models import ScenarioSet
+from mapf.core.models import Scenario, ScenarioSet
 from mapf.core.ports import LLMProvider, ModelInfo, PromptStore, SamplingParams
 from mapf.core.schema import decode_schema
 
@@ -35,6 +35,9 @@ TEMPLATE = "grammar_probe"
 VERSION = "v1"
 
 BRANCHES = frozenset({"bullish", "base_case", "bearish"})
+# Read from the model rather than restated, so a field added to `Scenario` cannot
+# leave the probe checking a shape the pipeline no longer uses.
+FIELDS = frozenset(Scenario.model_fields)
 
 Outcome = Literal["enforced", "accepted_not_enforced", "rejected", "inconclusive"]
 
@@ -106,19 +109,46 @@ def probe_grammar(
             ),
         )
 
-    if not isinstance(payload, dict) or not set(payload) >= BRANCHES:
+    if not isinstance(payload, dict):
+        return GrammarProbe(
+            outcome="accepted_not_enforced",
+            detail="the reply was JSON but not an object, so the grammar was not applied.",
+            remedy="As above: confirm json_schema response_format is supported.",
+        )
+
+    # EXACT keys, not a superset. `additionalProperties: false` means an enforced
+    # grammar emits these three and nothing else — so an extra key is evidence
+    # AGAINST enforcement, and the previous `>=` scored it as enforcement (ADR
+    # 0022). The same reasoning one level down: each branch carries exactly the
+    # four fields the model declares.
+    if set(payload) != BRANCHES:
+        extra = sorted(set(payload) - BRANCHES)
         return GrammarProbe(
             outcome="accepted_not_enforced",
             detail=(
-                "the reply was JSON but not the required shape, so the grammar was "
-                "not constraining the sampler."
+                f"the reply carried unexpected key(s) {extra}, which "
+                "additionalProperties:false makes unreachable under an enforced grammar."
+                if extra
+                else "the reply was missing required branches, so the grammar was not applied."
             ),
             remedy="As above: confirm json_schema response_format is supported.",
         )
 
-    # Deliberately not validating cross-field invariants. The probe asks whether the
-    # grammar held, not whether a placeholder answer is a good forecast — those are
-    # exactly the failures the repair loop exists for (ADR 0002).
+    for branch in sorted(BRANCHES):
+        body = payload[branch]
+        if not isinstance(body, dict) or set(body) != FIELDS:
+            return GrammarProbe(
+                outcome="accepted_not_enforced",
+                detail=(
+                    f"branch {branch!r} did not carry exactly the declared fields, so "
+                    "the grammar was shaping the top level only."
+                ),
+                remedy="As above: confirm json_schema response_format is supported.",
+            )
+
+    # Deliberately not validating bounds or cross-field invariants. The probe asks
+    # whether the grammar held its SHAPE, not whether a placeholder answer is a good
+    # forecast — those are exactly the failures the repair loop exists for (ADR 0002).
     return GrammarProbe(
         outcome="enforced",
         detail="the backend accepted $defs/$ref and constrained the output to the schema.",

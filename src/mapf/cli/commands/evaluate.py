@@ -15,6 +15,13 @@ stopping the two-pass design exists to prevent.
 **A corpus spanning code versions, unless acknowledged.** Manifests record the
 commit each run executed under. Scoring across two of them is sometimes fine and
 sometimes the explanation for everything, so it is surfaced rather than averaged.
+
+**A corpus spanning frozen records.** The freeze governs sampling, truncation and
+corpus membership, so a band produced under two of them is at least as serious as
+one produced under two commits — and it was undetectable until manifests began
+recording it, because nothing anywhere did (ADR 0022). This refusal has no override
+flag: a mixed code version can be a harmless refactor, but a mixed freeze means two
+items were not asked the same question.
 """
 
 from __future__ import annotations
@@ -32,6 +39,8 @@ from mapf.corpus.ledger import Ledger
 from mapf.corpus.passes import IncompletePassError, require_finished, split_passes
 from mapf.corpus.runner import plan
 from mapf.corpus.selection import Corpus
+from mapf.pipeline.run import TRACE_FILE
+from mapf.pipeline.trace import audit_trace
 
 FROZEN = Path("corpus/frozen.json")
 LEDGER = Path("var/corpus/ledger.jsonl")
@@ -111,6 +120,28 @@ def evaluate(
             )
         typer.secho("trace      every completed item has a trace", fg=typer.colors.GREEN)
 
+        freezes = _freeze_versions(ledger, runs_dir, band)
+        if len(freezes) > 1:
+            typer.secho(
+                f"freeze     {len(freezes)} distinct frozen records produced this band:",
+                fg=typer.colors.RED,
+            )
+            for label, count in freezes.most_common():
+                typer.echo(f"           {label}  {count} runs")
+            raise fail(
+                "this band was produced under more than one frozen record",
+                2,
+                hint=(
+                    "The freeze governs sampling, truncation and corpus membership, "
+                    "so these items were not asked the same question. Re-run the "
+                    "items produced under the older record. There is deliberately "
+                    "no override for this one."
+                ),
+            )
+        if freezes:
+            ((label, count),) = freezes.most_common()
+            typer.secho(f"freeze     {label} ({count} runs)", fg=typer.colors.GREEN)
+
         versions = _code_versions(ledger, runs_dir)
         if not versions:
             typer.secho("code       no manifests found to read", fg=typer.colors.YELLOW)
@@ -149,20 +180,53 @@ def evaluate(
 
 
 def _unauditable(ledger: Ledger, runs_dir: Path, band: str) -> list[str]:
-    """Completed items whose trace is missing or empty.
+    """Completed items whose trace is missing, empty, or not one run's worth.
 
     56 of 57 runs once had no `trace.jsonl` and were recorded complete regardless,
     because a single shared trace wrote every item's events into the first item's
     directory. Scoring those would put a number on a forecast nobody can inspect.
+
+    The count bound is what makes this cover the 57th. A file-exists check catches
+    the 56 empty directories and passes the one holding the entire band — the
+    incident's own worst artifact (ADR 0022).
     """
     out: list[str] = []
     for key, entry in sorted(ledger.resolved().items()):
         if entry.status != "complete" or entry.band != band or entry.run_id is None:
             continue
-        path = runs_dir / str(entry.run_id) / "trace.jsonl"
-        if not path.is_file() or path.stat().st_size == 0:
-            out.append(f"{key[0]} {key[2]} (run {entry.run_id})")
+        reason = audit_trace(runs_dir / str(entry.run_id) / TRACE_FILE)
+        if reason is not None:
+            out.append(f"{key[0]} {key[2]} (run {entry.run_id}): {reason}")
     return out
+
+
+def _freeze_versions(ledger: Ledger, runs_dir: Path, band: str) -> Counter[str]:
+    """Which frozen records produced this band's completed runs.
+
+    Band-filtered, unlike `_code_versions` below — which is audit finding #4 and is
+    deferred, not overlooked.
+    """
+    seen: Counter[str] = Counter()
+    for entry in ledger.resolved().values():
+        if entry.status != "complete" or entry.band != band or entry.run_id is None:
+            continue
+        manifest = _manifest_of(runs_dir, entry.run_id)
+        if manifest is None:
+            continue
+        version = manifest.get("freeze_version")
+        seen[str(version) if version else "unknown (predates the field)"] += 1
+    return seen
+
+
+def _manifest_of(runs_dir: Path, run_id: object) -> dict[str, object] | None:
+    path = runs_dir / str(run_id) / "manifest.json"
+    if not path.is_file():
+        return None
+    try:
+        loaded = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return loaded if isinstance(loaded, dict) else None
 
 
 def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:
@@ -175,14 +239,12 @@ def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:
     for entry in ledger.resolved().values():
         if entry.status != "complete" or entry.run_id is None:
             continue
-        path = runs_dir / str(entry.run_id) / "manifest.json"
-        if not path.is_file():
+        manifest = _manifest_of(runs_dir, entry.run_id)
+        if manifest is None:
             continue
-        try:
-            manifest = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
-        version = manifest.get("code_version") or {}
+        version = manifest.get("code_version")
+        if not isinstance(version, dict):
+            version = {}
         commit = version.get("commit")
         if commit is None:
             seen["unknown (predates the field)"] += 1

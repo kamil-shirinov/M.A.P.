@@ -667,10 +667,43 @@ Nothing, and it was luck — the drift surfaced only because writing an amendmen
 reading the record by hand. A guard that under-checks has no failure mode of its own. It
 just keeps returning green.
 
-That is the reason for [[Guard Audit]]: one pass over every check in `src/`, asking of each
-what its name implies against what it verifies. **Fifteen more gaps, and eleven guards
-confirmed sound.** The three recurring shapes are worth more than the list:
+That is the reason for [[Guard Audit]]: one pass over every check in `src/`, asking of
+each what its name implies against what it verifies. **Fifteen more gaps, eleven guards
+confirmed sound, seven fixed** ([[decisions/0022-guard-scope|ADR 0022]]).
 
-1. **Presence standing in for identity** — a file exists where "this run's audit trail" is claimed.
-2. **A declared number trusted instead of the thing measured** — this incident's exact shape.
-3. **Scope narrower than the sentence** — "this band" without a band filter.
+### The taxonomy is the finding
+
+Fifteen gaps in fifteen places is a chore. Fifteen instances of **three shapes** is
+something you can carry to the next guard you write.
+
+**1 · Presence standing in for identity.** The check confirms something is there where
+the name claims the *right* thing is there. The sharpest case: the trace guard written
+*specifically for incident #22* verified that a non-empty file sat at the path. Under
+that incident 56 runs had no trace and the 57th held every item's events — so the guard
+would have caught the 56 empty directories and passed **the one artifact that was
+actually wrong.**
+
+**2 · A declared number trusted instead of the thing measured.** The check compares
+against a value someone wrote down and treats agreement with it as agreement with
+reality. This incident's own shape, and [[decisions/0020-context-window-and-truncation|ADR 0020 §4]]'s
+one layer up. Also `max_visible_tokens`, a bound nothing enforces that a startup
+validator treats as a guarantee — and `temperature == 0` standing in for reproducibility,
+which [[Findings & Incidents#24]] measured as false.
+
+**3 · Scope narrower than the sentence.** Correct about a smaller thing than the name
+describes. "This band" with no band filter. A *band* failure rate enforced per
+invocation. A two-point range measured where three-point distinctness is claimed. An
+invariant with an unasserted escape.
+
+### A fourth instance, from the same day, in my own reporting
+
+Re-running the pre-flight took visibly less time than the first run, and I explained it
+to Kamil as the exhibits being cached. **There is no HTTP cache anywhere in this
+project** — `EdgarExhibits.fetch` goes to EDGAR every time, 712 throttled requests per
+`--check`. The audit found that out two hours later.
+
+That is shape 2 with no code involved: an observation checked against a mechanism I
+believed existed rather than against the code, and agreement with the belief reported as
+agreement with reality. It is worth recording next to the others because the failure mode
+is identical and the medium is not. **A green check and a confident sentence fail the
+same way.**

@@ -60,6 +60,13 @@ def spread_floor(horizon_days: int) -> float:
 
 
 def _numerals(text: str) -> set[float]:
+    """Every figure, **signed**.
+
+    The magnitude was kept and the sign discarded, which grounded a justification's
+    -46.3 against a fact of +46.3. On a forecast that is not a rounding difference,
+    it is the opposite claim (ADR 0022). Small values are still ignored by
+    magnitude, since an ordinal is an ordinal either way.
+    """
     values: set[float] = set()
     for token in _NUMERAL.findall(text):
         try:
@@ -67,7 +74,7 @@ def _numerals(text: str) -> set[float]:
         except ValueError:  # pragma: no cover - the regex cannot produce this
             continue
         if abs(value) not in _IGNORED_NUMERALS:
-            values.add(abs(value))
+            values.add(value)
     return values
 
 
@@ -85,12 +92,20 @@ def check(
     but the run should say so rather than presenting three near-identical numbers
     as a distribution of views.
 
-    **Ungrounded numerals.** Every figure in a justification should trace back to a
-    material fact. This is deliberately crude and its recall is not high: models
-    paraphrase, round, and compute. It would not catch "just over 46%" written for
-    46.3%. It *would* have caught the 66.3% gross margin the first live run
-    invented where the source said 46.3% — and converting an invisible failure into
-    a visible one is worth a check that is only sometimes right.
+    **Ungrounded numerals.** Every figure in a **justification** should trace back
+    to a material fact. This is deliberately crude and its recall is not high:
+    models paraphrase, round, and compute. It would not catch "just over 46%"
+    written for 46.3%. It *would* have caught the 66.3% gross margin the first live
+    run invented where the source said 46.3% — and converting an invisible failure
+    into a visible one is worth a check that is only sometimes right.
+
+    **Scope, stated because the name is broader than the check.** It reads the
+    justification prose and nothing else. `price_return`, `annualised_vol` and
+    `probability_weight` — the numbers that are actually scored — are **not**
+    grounded against the facts by this or by anything else. Their only checks are
+    the schema's bounds and the ordering invariant. Grounding a forecast figure
+    against a source fact is not well defined in the first place: a forecast is
+    supposed to state something the source did not (ADR 0022, deferred finding).
 
     False positives are expected and cost nothing but a line in the manifest.
     """
@@ -107,7 +122,7 @@ def check(
     # signal — the first v2 run produced exactly that false positive.
     grounded.add(float(horizon_days))
     if spot_price is not None:
-        grounded.add(abs(spot_price))
+        grounded.add(spot_price)
 
     ungrounded: list[str] = []
     for name in ("bullish", "base_case", "bearish"):
@@ -116,7 +131,9 @@ def check(
             # 1% relative, or 0.05 absolute for small numbers. Models round: a
             # justification saying "about 46%" for a fact of 46.3% is honest
             # paraphrase, and flagging it would bury the signal under noise.
-            if not any(abs(value - known) <= max(0.05, 0.01 * known) for known in grounded):
+            # Signed comparison: +46.3 does not ground -46.3. The tolerance is on
+            # the magnitude of the known value, so it does not widen for negatives.
+            if not any(abs(value - known) <= max(0.05, 0.01 * abs(known)) for known in grounded):
                 ungrounded.append(f"{name}: {value:g}")
 
     lengths = tuple(

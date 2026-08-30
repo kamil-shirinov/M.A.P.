@@ -293,7 +293,17 @@ class Recorder:
         if self.artifacts:
             run_dir.mkdir(parents=True, exist_ok=True)
             for name in self.artifacts:
-                (run_dir / name).write_text("x", encoding="utf-8")
+                # The trace gets a plausible body: three agents, each recording at
+                # least one call. "x" is not a trace, and the guard now says so.
+                body = (
+                    "".join(
+                        f'{{"stage":"{stage}"}}\n'
+                        for stage in ("intake", "analyst", "structuralist")
+                    )
+                    if name == "trace.jsonl"
+                    else "x"
+                )
+                (run_dir / name).write_text(body, encoding="utf-8")
         result.run_dir = run_dir
         return result
 
@@ -755,9 +765,18 @@ def test_a_server_error_stays_transient() -> None:
     assert is_terminal(reason) is False
 
 
-def test_a_non_context_400_stays_transient() -> None:
-    """400 covers more than one thing; only the context case is deterministic."""
-    assert _reason_for(InferenceStatusError(400, "malformed json")) == "other"
+def test_a_non_context_400_is_terminal_whatever_the_body_says() -> None:
+    """This asserted the opposite until the guard audit (ADR 0022).
+
+    The old rule matched four English phrases and sent anything else to `other` --
+    transient -- so a server phrasing its refusal differently was retried on every
+    resume and burned the allowance each time, which is the ADR 0020 failure
+    exactly. A 4xx means THIS request is unacceptable, so an identical retry is
+    refused identically. That is protocol semantics, not one vendor's wording.
+    """
+    reason = _reason_for(InferenceStatusError(400, "malformed json"))
+    assert reason == "request_rejected"
+    assert is_terminal(reason)
 
 
 def test_budget_exhaustion_remains_transient_because_the_analyst_samples() -> None:
@@ -823,7 +842,12 @@ def test_an_empty_artifact_counts_as_missing(
     run_dir = tmp_path / "run"
     run_dir.mkdir()
     for name in REQUIRED_ARTIFACTS:
-        (run_dir / name).write_text("x", encoding="utf-8")
+        body = (
+            "".join(f'{{"stage":"{stage}"}}\n' for stage in ("intake", "analyst", "structuralist"))
+            if name == "trace.jsonl"
+            else "x"
+        )
+        (run_dir / name).write_text(body, encoding="utf-8")
     _verify_artifacts(run_dir, "r")
 
     (run_dir / "trace.jsonl").write_text("", encoding="utf-8")

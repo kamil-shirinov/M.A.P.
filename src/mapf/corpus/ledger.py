@@ -43,6 +43,7 @@ FailureReason = Literal[
     "context_overflow",
     "output_truncated",
     "missing_artifact",
+    "request_rejected",
     "other",
 ]
 
@@ -65,6 +66,11 @@ TERMINAL_REASONS: frozenset[str] = frozenset(
         "context_overflow",
         "output_truncated",
         "missing_artifact",
+        # A 4xx says the request itself is unacceptable to this server, so an
+        # identical retry produces an identical refusal. That is protocol
+        # semantics rather than a guess about one vendor's wording, which is what
+        # lets this be classified without reading the body (ADR 0022).
+        "request_rejected",
     }
 )
 

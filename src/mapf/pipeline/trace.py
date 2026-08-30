@@ -23,6 +23,45 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+# One run's trace is a known size. Three agents each record at least one call, so
+# fewer than three events cannot be a complete run whatever the file contains.
+#
+# The ceiling is the arithmetic of a maximal run: intake up to 2 (a degeneration
+# retry, ADR 0021), analyst 1, structuralist up to `max_repair_attempts` calls plus
+# a `validation_failed` event before each retry. At the configured 3 attempts that
+# is 2 + 1 + 3 + 2 = 8. Tripled, so raising a repair budget does not start failing
+# healthy runs, and still an order of magnitude below a trace holding a whole band.
+MIN_TRACE_EVENTS = 3
+MAX_TRACE_EVENTS = 24
+
+
+def audit_trace(path: Path) -> str | None:
+    """Why this file is not one run's audit trail, or `None` if it could be.
+
+    **Existence is not identity.** The failure this exists for wrote every item's
+    events into the FIRST item's directory: 56 runs had no trace at all, and the
+    one that did held a whole band. A guard checking only that a non-empty file sat
+    at the path would have caught the 56 and passed the one that was actually
+    wrong — the incident's own worst artifact.
+
+    Per-item wiring fixed that at the source, so this is defence in depth. It is
+    still worth having: a guard that would have passed the incident it was written
+    for is not a guard. A count is a weak identity check — the strong one is a
+    `run_id` inside the events, which the format does not carry — but it is enough
+    to separate one run from a band.
+    """
+    if not path.is_file():
+        return "missing"
+    if path.stat().st_size == 0:
+        return "empty"
+    events = sum(1 for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
+    if events < MIN_TRACE_EVENTS:
+        return f"{events} events, fewer than the {MIN_TRACE_EVENTS} a complete run records"
+    if events > MAX_TRACE_EVENTS:
+        return f"{events} events, more than one run can produce (max {MAX_TRACE_EVENTS})"
+    return None
+
+
 class JsonlTrace:
     """A `Trace` that appends one JSON object per line."""
 
