@@ -331,7 +331,26 @@ class PriceAdjustmentUnsupportedError(MarketDataError):
 # Prompts
 # ---------------------------------------------------------------------------
 class ExhibitError(ProviderError):
-    """An Item 2.02 exhibit could not be retrieved."""
+    """An Item 2.02 exhibit could not be retrieved.
+
+    Covers the answers EDGAR actually gave: a 404, a 500, a malformed document. The
+    server was reached and refused or returned something unusable, which is a fact
+    about the filing or about EDGAR's view of it — the same fact on the next pass.
+    """
+
+
+class ExhibitUnreachableError(ExhibitError):
+    """EDGAR was never reached: DNS, a refused connection, a dropped socket.
+
+    Split from `ExhibitError` because the two say opposite things about the ITEM. A
+    404 is a property of the filing; a DNS failure is a property of the afternoon,
+    and five items failing together says only that the network went away.
+
+    The distinction became load-bearing with the repeat rule (ADR 0024): a reason
+    that recurs is treated as terminal for that item, and a shared outage spanning
+    two resumes would otherwise burn every item it touched. It is excluded for the
+    same reason `inference_unreachable` is.
+    """
 
 
 class MissingExhibitError(ExhibitError):

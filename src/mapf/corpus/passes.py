@@ -22,7 +22,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from mapf.core.errors import MapError
-from mapf.corpus.ledger import Ledger, is_terminal
+from mapf.corpus.ledger import Ledger
 from mapf.corpus.runner import CorpusItem
 
 
@@ -116,7 +116,11 @@ def status_of(pass_: Pass, ledger: Ledger) -> PassStatus:
             continue
         if entry.status == "complete":
             complete += 1
-        elif is_terminal(entry.reason):
+        else:
+            # `resolved()` holds only items that will not be attempted again, so a
+            # non-complete entry here is a resolved failure however it got there.
+            # Re-testing `is_terminal` would miss the ones resolved by repetition
+            # and leave a finished pass reading as permanently outstanding.
             terminal += 1
     return PassStatus(label=pass_.label, total=pass_.size, complete=complete, terminal=terminal)
 

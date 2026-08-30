@@ -33,6 +33,8 @@ from uuid import UUID
 import structlog
 
 from mapf.core.errors import (
+    ExhibitError,
+    ExhibitUnreachableError,
     ForecastRepairExhausted,
     InferenceStatusError,
     InferenceTimeoutError,
@@ -258,6 +260,15 @@ def _reason_for(error: MapError) -> FailureReason:
         return _classify_status(error)
     if isinstance(error, MissingExhibitError):
         return "missing_exhibit"
+    if isinstance(error, ExhibitUnreachableError):
+        # EDGAR was never reached. A property of the afternoon, not of the filing —
+        # five items failed together when DNS dropped — so it is excluded from the
+        # repeat rule for the same reason `inference_unreachable` is (ADR 0024).
+        return "exhibit_unreachable"
+    if isinstance(error, ExhibitError):
+        # EDGAR answered and refused. That is its view of this filing, and it is the
+        # same view next pass, so a repeat here IS evidence about the item.
+        return "exhibit_error"
     if isinstance(error, InferenceUnreachableError):
         return "inference_unreachable"
     if isinstance(error, InferenceTimeoutError):

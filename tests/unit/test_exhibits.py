@@ -18,6 +18,7 @@ from mapf.core.models import EarningsFiling
 from mapf.data.exhibits import (
     EdgarExhibits,
     ExhibitError,
+    ExhibitUnreachableError,
     MissingExhibitError,
     find_exhibit,
     html_to_text,
@@ -172,3 +173,37 @@ def test_the_exhibit_is_found_in_escaped_sgml() -> None:
 def test_xbrl_exhibits_are_not_mistaken_for_the_press_release() -> None:
     headers = _headers([("EX-101.SCH", "x.xsd"), ("EX-101.LAB", "l.xml")])
     assert find_exhibit(headers) is None
+
+
+def test_a_dropped_connection_is_distinguished_from_a_refusal() -> None:
+    """The prerequisite for the repeat rule (ADR 0024).
+
+    A 404 is EDGAR's view of this filing and the same view next pass. A DNS failure
+    is a property of the afternoon — five items failed together when one dropped —
+    and treating a repeat of it as evidence about the item would burn all five.
+    """
+
+    def dropped(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("[Errno 8] nodename nor servname provided")
+
+    adapter = _adapter(dropped)
+    with pytest.raises(ExhibitUnreachableError, match="unreachable"):
+        adapter.fetch(FILING)
+
+
+def test_a_refusal_names_the_status_and_is_not_unreachable() -> None:
+    adapter = _adapter(lambda request: httpx.Response(404))
+    with pytest.raises(ExhibitError) as caught:
+        adapter.fetch(FILING)
+    assert not isinstance(caught.value, ExhibitUnreachableError)
+    assert "404" in str(caught.value)
+
+
+def test_unreachable_is_still_an_exhibit_error_for_callers_that_catch_broadly() -> None:
+    """Narrowing a type must not silently stop an existing handler from firing."""
+
+    def dropped(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out")
+
+    with pytest.raises(ExhibitError):
+        _adapter(dropped).fetch(FILING)

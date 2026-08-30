@@ -827,3 +827,68 @@ ticker while the fetched range depended on the as-of date — so the first item 
 calendar, and every later item silently got one truncated to an earlier window. Scoring runs in ascending
 date order, so the truncation would have hit *most* items of every ticker, biasing the multiplier in the
 precise direction the whole change was made to prevent.
+
+---
+
+## 29 · The comment that justified a policy with a fact that was not true
+
+`budget_exhausted` was classified transient, and `ledger.py` said why:
+
+> The analyst samples at temperature 0.7, so a second attempt genuinely explores a different reasoning
+> path and may finish inside the budget.
+
+**`seed` is fixed for the analyst and goes on every request.** `attempt` reaches the cache key but never
+the request body. So a retry sends a *byte-identical* request, and whether it explores anything at all
+depends on the backend choosing to ignore the seed — which [[Findings & Incidents#24|#24]] measured as only
+partially true.
+
+The policy was resting on a coin-flip nobody chose, in the direction where being wrong costs a full
+15-minute analyst call on every resume. [[Guard Audit|Shape 2]] again: a declared property trusted instead
+of the thing measured. The comment was written when it was plausible and never re-read against the config
+beside it.
+
+**What made it visible was ALLY failing twice.** Nothing about the comment looked wrong; it looked like
+careful reasoning, and it was — about a system that had a different `seed` setting.
+
+### The rule that replaced it
+
+*Transient* is a hypothesis about an item, and the ledger already holds the evidence to test it. A reason
+that recurs on the same item twice has stopped being a hypothesis, so the item is resolved
+([[decisions/0024-repeat-rule|ADR 0024]]). The retry is the experiment: flipping `budget_exhausted` to
+terminal outright would have discarded the evidence, and leaving it transient collects the same evidence
+forever without ever reading it.
+
+Two observations do not prove determinism — at P(runaway) = 0.6 two hits happen 36% of the time — which is
+exactly why the answer should be per item rather than per class.
+
+---
+
+## 30 · The bucket that would have made the fix worse than the bug
+
+The repeat rule needed a prerequisite, and it was not obvious until the failure modes were laid side by
+side.
+
+A network failure fetching an exhibit raised `ExhibitError`, which the classifier did not match, so it fell
+through to `other` — **the same bucket as a genuine model failure**. `httpx` invites this: a 404 from
+`raise_for_status()` and a dropped socket both raise `HTTPError`, and one `except` clause reads as complete
+coverage.
+
+When DNS dropped, five items — WAL, BXP, CP, ELV, LVS — failed together and were recorded as `other`. Ship
+the repeat rule without splitting that bucket and a **second** outage spanning two resumes burns all five
+permanently. The mechanism built to stop one item wasting 15 minutes per pass would have silently deleted
+five items from the corpus, and the deletion would have looked exactly like the intended behaviour.
+
+The split is by what the failure says about the **item**:
+
+| | says | repeat is evidence? |
+| --- | --- | --- |
+| `exhibit_unreachable` | EDGAR was never reached — a property of the afternoon | **no**, excluded |
+| `exhibit_error` | EDGAR answered and refused — its view of this filing | **yes** |
+
+The general form is worth more than the case: **before treating a repeated failure as evidence about a
+thing, check that the failure is about that thing.** Five items failing together is a fact about what they
+share, and what they shared was the network.
+
+`MissingExhibitError` subclasses `ExhibitError`, so the classifier's `isinstance` order is load-bearing —
+a filing with no EX-99.1 must not be reported as an EDGAR refusal, which would make a permanent absence
+look like something a retry could change.

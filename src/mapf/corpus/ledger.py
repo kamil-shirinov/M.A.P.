@@ -40,6 +40,8 @@ FailureReason = Literal[
     "repair_exhausted",
     "no_material_facts",
     "missing_exhibit",
+    "exhibit_error",
+    "exhibit_unreachable",
     "context_overflow",
     "output_truncated",
     "missing_artifact",
@@ -74,11 +76,44 @@ TERMINAL_REASONS: frozenset[str] = frozenset(
     }
 )
 
-# `budget_exhausted` is deliberately NOT terminal. The analyst samples at
-# temperature 0.7, so a second attempt genuinely explores a different reasoning
-# path and may finish inside the budget. The same reason would be terminal for a
-# temperature-0 agent, which is why the distinction is about the sampling rather
-# than about the exception.
+# `budget_exhausted` is NOT in the terminal set, and the reason it is not has been
+# corrected. It used to read: "the analyst samples at temperature 0.7, so a second
+# attempt genuinely explores a different reasoning path." That is not what happens.
+# `seed` is fixed for the analyst and goes on every request, and `attempt` reaches
+# the cache key but never the request body — so a retry sends a BYTE-IDENTICAL
+# request, and whether it explores anything depends entirely on the backend choosing
+# not to honour the seed. Finding #24 measured this backend as only partially
+# deterministic, which makes that a coin-flip nobody chose, in the direction where
+# being wrong costs a full analyst call on every resume.
+#
+# It stays non-terminal because a long reasoning chain genuinely can be a one-off.
+# What bounds it is no longer an assumption about sampling but the repeat rule below:
+# the first failure buys a retry, and a second identical outcome is the answer.
+
+
+# --------------------------------------------------------------------------
+# The repeat rule (ADR 0024)
+# --------------------------------------------------------------------------
+# "Transient" is a hypothesis about an ITEM, and the ledger already holds the
+# evidence to test it. A reason that recurs on the same item twice has stopped being
+# a hypothesis, so the item is resolved rather than retried on every resume — which
+# would otherwise consume the failure allowance afresh each pass and halt the run on
+# something that can never succeed. That is the `missing_exhibit` shape arriving
+# through a reason nobody classified as terminal.
+REPEAT_LIMIT = 2
+
+# Reasons where a repeat says nothing about the item, because the cause is shared
+# infrastructure rather than the item itself. Five items failed together when DNS
+# dropped; a second outage spanning two resumes would burn all five permanently, and
+# the failure they share is the afternoon, not the filing.
+ALWAYS_RETRIED: frozenset[str] = frozenset(
+    {
+        "inference_unreachable",
+        "inference_timeout",
+        "market_data",
+        "exhibit_unreachable",
+    }
+)
 
 
 def is_terminal(reason: FailureReason | None) -> bool:
@@ -170,16 +205,44 @@ class Ledger:
 
         A *transient* failure is deliberately absent, so the next pass retries it
         and an outage costs minutes rather than the run. A *terminal* failure is
-        present, because it would fail identically on every resume — retrying it
-        would consume the failure threshold each pass and eventually halt the run
-        on an item that can never succeed.
+        present, because it would fail identically on every resume.
+
+        A transient failure that has now happened `REPEAT_LIMIT` times on the same
+        item with the same reason is also present: it was a hypothesis, the retry
+        tested it, and the answer came back the same.
         """
-        return {e.key for e in self.entries() if e.status == "complete" or is_terminal(e.reason)}
+        return set(self.resolved())
 
     def resolved(self) -> dict[tuple[str, str, date], LedgerEntry]:
-        """Every item with a terminal outcome, latest entry winning."""
+        """Every item that will not be attempted again, latest entry winning.
+
+        Three ways in: it completed, its reason is terminal by nature, or its reason
+        has recurred on it often enough to stop being transient. The last is counted
+        per (item, reason) — an item that failed once on the network and once in the
+        model has one of each, which is two hypotheses rather than a confirmed one.
+        """
         out: dict[tuple[str, str, date], LedgerEntry] = {}
+        repeats: dict[tuple[tuple[str, str, date], str], int] = {}
         for entry in self.entries():
             if entry.status == "complete" or is_terminal(entry.reason):
                 out[entry.key] = entry
+                continue
+            reason = entry.reason or "other"
+            if reason in ALWAYS_RETRIED:
+                continue
+            seen = repeats[entry.key, reason] = repeats.get((entry.key, reason), 0) + 1
+            if seen >= REPEAT_LIMIT:
+                out[entry.key] = entry
         return out
+
+    def exhausted(self) -> dict[tuple[str, str, date], LedgerEntry]:
+        """Items resolved by repetition rather than by a terminal reason.
+
+        Reported separately because they are a weaker claim: `missing_exhibit` says
+        the filing has no exhibit, while this says only that we stopped asking.
+        """
+        return {
+            key: entry
+            for key, entry in self.resolved().items()
+            if entry.status != "complete" and not is_terminal(entry.reason)
+        }

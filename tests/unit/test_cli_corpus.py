@@ -704,3 +704,23 @@ def test_a_rescued_item_is_named_per_item_as_it_happens(
     assert "intake looped at its cap" in out
     assert "sensitivity partition" in out
     assert "retried=1" in out
+
+
+def test_an_exhausted_item_is_named_on_resume(tmp_path: Path) -> None:
+    """Counted AND named, unlike the terminal failures. "This filing has no exhibit"
+    is a fact about the corpus; "we stopped asking" is a decision, and a decision
+    that removes an item from the sample should not be a number (ADR 0024)."""
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    for _ in range(2):
+        ledger.append(
+            LedgerEntry(
+                ticker="AAPL",
+                band="clean",
+                filing_date=date(2026, 2, 1),
+                status="failed",
+                reason="budget_exhausted",
+            )
+        )
+    result = _invoke(tmp_path, "--check")
+    assert "1 retries exhausted" in result.output
+    assert "AAPL 2026-02-01: budget_exhausted twice — not retried again" in result.output

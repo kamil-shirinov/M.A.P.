@@ -127,12 +127,22 @@ def corpus_run(
         in_band = {k: v for k, v in resolved.items() if k[1] == band}
         done = sum(1 for v in in_band.values() if v.status == "complete")
         terminal = sum(1 for v in in_band.values() if is_terminal(v.reason))
+        exhausted = {k: v for k, v in ledger.exhausted().items() if k[1] == band}
         remaining = [i for i in items if i.key not in resolved]
         if in_band:
             typer.secho(
                 f"resume     skipping {len(in_band)} of {len(items)} items "
-                f"({done} complete, {terminal} terminal failures) — "
-                f"{len(remaining)} to run",
+                f"({done} complete, {terminal} terminal failures, "
+                f"{len(exhausted)} retries exhausted) — {len(remaining)} to run",
+                fg=typer.colors.YELLOW,
+            )
+        # Named individually, unlike the terminal failures. "This filing has no
+        # exhibit" is a fact about the corpus; "we stopped asking" is a decision,
+        # and a decision that removes an item from the sample should not be a count
+        # (ADR 0024).
+        for key, entry in sorted(exhausted.items()):
+            typer.secho(
+                f"           {key[0]} {key[2]}: {entry.reason} twice — not retried again",
                 fg=typer.colors.YELLOW,
             )
         else:

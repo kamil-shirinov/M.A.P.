@@ -868,3 +868,33 @@ def test_a_complete_item_writes_every_required_artifact(
     run_dir = Path(recorder.calls[0]["runs_dir"])  # type: ignore[arg-type]
     written = {p.name for d in run_dir.iterdir() for p in d.iterdir()}
     assert set(REQUIRED_ARTIFACTS) <= written
+
+
+def test_an_unreachable_edgar_is_not_the_filing_s_fault() -> None:
+    """DNS dropped and five items failed together. What they had in common was the
+    afternoon, so a repeat says nothing about any of them (ADR 0024)."""
+    from mapf.core.errors import ExhibitUnreachableError
+    from mapf.corpus.ledger import ALWAYS_RETRIED
+
+    reason = _reason_for(ExhibitUnreachableError("EDGAR was unreachable: [Errno 8]"))
+    assert reason == "exhibit_unreachable"
+    assert reason in ALWAYS_RETRIED
+    assert not is_terminal(reason)
+
+
+def test_an_edgar_refusal_is_evidence_about_the_filing() -> None:
+    """The server answered. A 404 is its view of this filing, and the same view next
+    pass — so unlike an outage, a repeat here does mean something."""
+    from mapf.core.errors import ExhibitError
+    from mapf.corpus.ledger import ALWAYS_RETRIED
+
+    reason = _reason_for(ExhibitError("EDGAR refused: HTTP 404"))
+    assert reason == "exhibit_error"
+    assert reason not in ALWAYS_RETRIED
+
+
+def test_a_missing_exhibit_still_outranks_both() -> None:
+    """`MissingExhibitError` subclasses `ExhibitError`, so the order of the isinstance
+    checks is load-bearing: a filing with no EX-99.1 must not be reported as an EDGAR
+    refusal, which would make it look like something a retry could change."""
+    assert _reason_for(MissingExhibitError("no EX-99.1")) == "missing_exhibit"

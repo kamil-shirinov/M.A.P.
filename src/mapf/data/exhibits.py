@@ -26,7 +26,7 @@ from html.parser import HTMLParser
 import httpx
 import structlog
 
-from mapf.core.errors import ExhibitError, MissingExhibitError
+from mapf.core.errors import ExhibitError, ExhibitUnreachableError, MissingExhibitError
 from mapf.core.hashing import document_id
 from mapf.core.models import Document, EarningsFiling, UntrustedText
 from mapf.data.symbols import Throttle
@@ -56,6 +56,7 @@ MIN_EXHIBIT_CHARS = 200
 __all__ = [
     "EdgarExhibits",
     "ExhibitError",
+    "ExhibitUnreachableError",
     "MissingExhibitError",
     "find_exhibit",
     "html_to_text",
@@ -142,8 +143,13 @@ class EdgarExhibits:
                 url, headers={"User-Agent": self._user_agent, "Accept-Encoding": "gzip"}
             )
             response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            # The server answered. A 404 or a 500 is EDGAR's view of this filing,
+            # and it is the same view on the next pass.
+            raise ExhibitError(f"EDGAR refused {url}: HTTP {error.response.status_code}") from error
         except httpx.HTTPError as error:
-            raise ExhibitError(f"EDGAR request failed for {url}: {error}") from error
+            # The server was never reached. Says nothing about the filing.
+            raise ExhibitUnreachableError(f"EDGAR was unreachable for {url}: {error}") from error
         return response
 
 
