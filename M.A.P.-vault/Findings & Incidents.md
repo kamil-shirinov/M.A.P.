@@ -755,9 +755,17 @@ The partition keyed the excluded set on the ledger's `filing_date` and the score
 `as_of`. **A forecast opens the day after the filing it reads**, so the two sets could not intersect. Both
 checks would have reported *"no items in the set"* for the entire corpus, forever.
 
-An empty subset reads as **nothing was affected**, which is good news. Nothing would have failed, no count
-would have looked wrong, and two pre-registrations declared before any score existed would have been
-quietly discharged against nothing.
+**A pre-registered check that can never fire is worse than no check at all.**
+
+Not equivalent to it — worse. Having no robustness check is a visible gap. This one would have printed a
+line, in the report, saying the result did not change when the truncated exhibits were excluded. Nothing
+would have failed, no count would have looked wrong, and **we would have cited it.** An empty subset reads
+as *nothing was affected*, which is not a null result — it is reassurance, manufactured, in the place where
+evidence was promised.
+
+Both pre-registrations were declared in an ADR before any score existed, precisely so they could not become
+optional afterwards. They would have been discharged against nothing, and the discharge would have looked
+like the strongest possible outcome.
 
 Found by the test written for it, which is the entire argument of [[Findings & Incidents#The second lesson, which took three instances to see|the second lesson]]: the test asserted a subset of a *known* size, so it could tell "excluded 1 of 2" from "excluded 0 of 2". An assertion that the checks merely *ran* would have passed.
 
@@ -778,7 +786,10 @@ adapters had a natural implementation that is silently wrong ([[decisions/0023-s
 an older schema. Several would parse. The scored set comes from the ledger, which is the reasoning that
 killed resume-by-scanning applied to the other end of the pipeline.
 
-**Two of the three "fixes" were already safe, and safe by accident** — which is its own finding:
+**Two of the three "fixes" were already safe, and safe by accident** — which is its own finding. The
+vintage concern as originally raised (a split between forecast and scoring leaving the endpoints on
+different bases) **could not happen**, and saying so mattered: recording the change as a repair would have
+claimed a fix for a defect that did not exist. What it actually fixed was elsewhere.
 
 - A split between forecast and scoring re-adjusts *both* endpoints, so `SpotDriftError` already fires on
   the recorded spot. The reachable vintage failure was elsewhere and unguarded: `ProviderChain` fails over
@@ -792,3 +803,27 @@ killed resume-by-scanning applied to the other end of the pipeline.
 Both are the shape from [[Guard Audit]]: *safe by construction* is a claim about code, and code changes.
 The contract now carries the as-of date, so a look-ahead is something a caller writes on purpose rather
 than something it inherits.
+
+### The baseline that would have been easy to beat
+
+The first version fitted the earnings multiplier on the frozen corpus's own filing dates — no network,
+already verified. Rejected on review, and the objection turned my own argument back on me: **a
+poorly-fitted baseline flatters the result invisibly**, which is exactly why this project depends on `arch`
+instead of hand-rolling a GARCH. It applies to the input as much as to the estimator.
+
+The mechanism is worse than "fewer data points". `earnings_multiplier` sorts every window into *earnings*
+or *ordinary*. A window the calendar fails to name **is not merely missing from the numerator — it lands in
+the denominator**, raising the ordinary bucket's dispersion with exactly the windows the numerator exists
+to isolate. The ratio is squeezed toward 1.0 from both ends, and a multiplier at 1.0 is the random walk
+wearing a second name. The benchmark that exists to *widen for a scheduled event* would have declined to
+widen, and beating it would have proved nothing.
+
+The calendar now comes from EDGAR — complete over the fitting window, ~120 requests, cached. And the
+weakness is measured rather than argued away: every item carries the multiplier it was fitted with, and
+the report distinguishes *could not be fitted* from *fitted, and found nothing to widen for*.
+
+**Writing the test for it found a bug in the cache I had just written.** The in-memory memo was keyed by
+ticker while the fetched range depended on the as-of date — so the first item of a ticker fixed the
+calendar, and every later item silently got one truncated to an earlier window. Scoring runs in ascending
+date order, so the truncation would have hit *most* items of every ticker, biasing the multiplier in the
+precise direction the whole change was made to prevent.

@@ -35,7 +35,7 @@ from pathlib import Path
 import typer
 from pydantic import ValidationError
 
-from mapf.bootstrap import build_market_data
+from mapf.bootstrap import build_earnings_calendar, build_http_client, build_market_data
 from mapf.cli.app import app, fail, handle
 from mapf.core.errors import MapError
 from mapf.core.models import PriceWindow
@@ -44,6 +44,7 @@ from mapf.corpus.ledger import Ledger
 from mapf.corpus.passes import IncompletePassError, require_finished, split_passes
 from mapf.corpus.runner import plan
 from mapf.corpus.selection import Corpus
+from mapf.data.earnings import EdgarEarningsCalendar
 from mapf.eval.aggregate import Comparison, calibration_ratio, compare, leakage, summarise
 from mapf.eval.scorer import BandScores, score_band
 from mapf.pipeline.run import TRACE_FILE
@@ -189,12 +190,14 @@ def evaluate(
                 "ledger entry and are not scored"
             )
 
-        scores = _score(forecasts, settings, corpus)
-        _report(scores, band)
+        with build_http_client(settings) as client:
+            calendar = build_earnings_calendar(settings, client)
+            scores = _score(forecasts, settings, calendar)
+            _report(scores, band, calendar)
 
-        other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
-        if other is not None:
-            _leakage(other, corpus, ledger, runs_dir, settings, scores)
+            other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
+            if other is not None:
+                _leakage(other, corpus, ledger, runs_dir, settings, calendar, scores)
 
         _sensitivity(scores, forecasts)
         raise typer.Exit(0)
@@ -282,47 +285,23 @@ def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:
 # ---------------------------------------------------------------------------
 # The adapters
 # ---------------------------------------------------------------------------
-def _earnings_index(corpus: Corpus) -> dict[str, tuple[date, ...]]:
-    """Every filing date the frozen corpus holds, per ticker.
-
-    The corpus is the earnings calendar. These are Item 2.02 8-K dates taken from
-    EDGAR, already frozen and already verified, so the multiplier needs no second
-    source and no network — and cannot be fitted against a calendar that shifts
-    between one scoring pass and the next.
-
-    **The limitation, stated.** It holds only the selected filings, so a ticker
-    offers at most a handful of prior windows. `earnings_multiplier` returns a
-    neutral 1.0 below its evidence threshold, so a thin history weakens the
-    baseline rather than corrupting it — but the baseline is weaker than one fitted
-    on a full history would be, and that is a property of the comparison, not an
-    accident of it.
-    """
-    out: dict[str, tuple[date, ...]] = {}
-    for entry in corpus.accepted:
-        days = sorted({d for filings in entry.filings for d in filings.dates})
-        out[entry.ticker] = tuple(days)
-    return out
-
-
-def _score(loaded: Sequence[Loaded], settings: Settings, corpus: Corpus) -> BandScores:
-    """Fit and score everything, against one price series."""
+def _score(
+    loaded: Sequence[Loaded], settings: Settings, calendar: EdgarEarningsCalendar
+) -> BandScores:
+    """Fit and score everything, against one price series and one EDGAR calendar."""
     market = build_market_data(settings)
-    index = _earnings_index(corpus)
 
     def prices(ticker: str, start: date, end: date) -> PriceWindow:
         return market.get_ohlcv(ticker, start, end)
 
-    def earnings(ticker: str, as_of: date) -> tuple[date, ...]:
-        # STRICTLY prior. The cut is here, in the adapter, and asserted again in
-        # `score_item` — the multiplier would otherwise drop a future date silently
-        # by failing to find it in an already-truncated history, which leaves a
-        # broken adapter looking correct forever (ADR 0023).
-        return tuple(day for day in index.get(ticker, ()) if day < as_of)
-
     return score_band(
         [(item.forecast, item.band) for item in loaded],
         prices=prices,
-        earnings=earnings,
+        # STRICTLY prior, cut inside the adapter and asserted again in `score_item`.
+        # The multiplier would otherwise drop a future date silently by failing to
+        # find it in an already-truncated history, which leaves a broken adapter
+        # looking correct forever (ADR 0023).
+        earnings=calendar.dates_before,
         history_days=settings.data.history_days,
     )
 
@@ -339,7 +318,7 @@ def _comparisons(scores: BandScores) -> list[Comparison]:
     return out
 
 
-def _report(scores: BandScores, band: str) -> None:
+def _report(scores: BandScores, band: str, calendar: EdgarEarningsCalendar) -> None:
     if not scores.items:
         raise fail(
             f"no item of the {band} band could be scored",
@@ -363,6 +342,42 @@ def _report(scores: BandScores, band: str) -> None:
         f"  calibration: stated sigma / realised = {k:.3f} "
         f"({'over' if k > 1 else 'under'}-dispersed; 1.0 is calibrated)"
     )
+    _benchmark_strength(scores, calendar)
+
+
+def _benchmark_strength(scores: BandScores, calendar: EdgarEarningsCalendar) -> None:
+    """How hard the earnings baseline actually was.
+
+    A multiplier pinned at 1.0 is the random walk wearing a second name, so a band
+    where most of them sit there was never compared against a benchmark that widens
+    for a scheduled event. Reported as a number rather than assumed away, because
+    a weak baseline flatters the result **invisibly** — the argument for `arch` over
+    a hand-rolled GARCH, applied to the input (ADR 0023).
+    """
+    values = scores.multipliers
+    if not values:
+        typer.secho(
+            "  earnings baseline: never fitted — it is the random walk under a "
+            "second name, and any win over it should be read as such",
+            fg=typer.colors.YELLOW,
+        )
+        return
+    neutral = scores.neutral_multipliers
+    median = sorted(values)[len(values) // 2]
+    line = (
+        f"  earnings baseline: multiplier median {median:.2f}, "
+        f"neutral (1.00) on {neutral} of {len(values)}"
+    )
+    weak = neutral > len(values) // 2
+    if weak:
+        line += " — on most items this baseline declined to widen at all"
+    typer.secho(line, fg=typer.colors.YELLOW if weak else typer.colors.GREEN)
+    if calendar.failures:
+        typer.secho(
+            f"  earnings calendar: unavailable for {len(calendar.failures)} ticker(s) "
+            f"({', '.join(sorted(calendar.failures)[:8])})",
+            fg=typer.colors.YELLOW,
+        )
 
 
 def _leakage(
@@ -371,6 +386,7 @@ def _leakage(
     ledger: Ledger,
     runs_dir: Path,
     settings: Settings,
+    calendar: EdgarEarningsCalendar,
     scores: BandScores,
 ) -> None:
     """The headline number, reported only when both bands are actually finished.
@@ -392,7 +408,7 @@ def _leakage(
             fg=typer.colors.YELLOW,
         )
         return
-    theirs = _score(load_band(ledger, corpus, runs_dir, other), settings, corpus)
+    theirs = _score(load_band(ledger, corpus, runs_dir, other), settings, calendar)
     if not theirs.items:
         return
     estimate = leakage(scores.crps(), theirs.crps())

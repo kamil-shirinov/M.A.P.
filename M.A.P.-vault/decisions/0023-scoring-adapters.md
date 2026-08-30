@@ -48,14 +48,17 @@ visible instead of being invisible good behaviour.
 A realised return is a ratio of two prices, and a ratio means something only when
 both sides share a measurement basis.
 
-**Within one item this already held, and the assertion is worth stating anyway.**
-Both endpoints are bars of a single `PriceWindow`, which carries one provider and
-one adjustment for the whole series. The specific failure of a split landing
-between forecast and scoring is also already caught: re-adjustment moves *both*
-endpoints, and `SpotDriftError` fires on the first one, because the recorded spot
-no longer matches. So the window's basis is now asserted against the canonical one
-rather than assumed — "by construction" being a claim about code that changes — but
-this is defence in depth, not a repair.
+**The requirement as originally stated was already satisfied, and this ADR does not
+fix it.** The concern raised was a split landing between forecast and scoring,
+leaving the two endpoints on different adjustment bases. That cannot happen. Both
+endpoints are bars of a single `PriceWindow`, fetched in one call, carrying one
+provider and one adjustment for the whole series — and a retroactive re-adjustment
+moves *both* of them, so `SpotDriftError` fires on the first endpoint before the
+second is ever read, because the recorded spot no longer matches.
+
+The window's basis is now asserted against the canonical one anyway, since "holds by
+construction" is a claim about code and code changes. **That is defence in depth, and
+recording it as a repair would be claiming a fix for a defect that did not exist.**
 
 **Across the band it did not hold, and that is the reachable failure.**
 `ProviderChain` fails over **per call**, so one ticker can be served by yfinance and
@@ -87,14 +90,40 @@ Two changes, and the first is the one that matters:
 - **`score_item` raises on any date at or after `as_of`.** Filtering would restore
   the silence.
 
-The calendar itself comes from the frozen corpus — EDGAR-dated Item 2.02 filings,
-already frozen and verified, needing no second source and no network, and unable to
-shift between one scoring pass and the next. **The limitation, stated:** it holds
-only the *selected* filings, so a ticker offers at most a handful of prior windows.
-`earnings_multiplier` returns a neutral 1.0 below its evidence threshold, so a thin
-history weakens the baseline rather than corrupting it. That makes the earnings
-baseline weaker than one fitted on a full history would be, which is a property of
-the comparison and must be reported as one.
+### The calendar comes from EDGAR, not from corpus membership
+
+The first version fitted the multiplier on the frozen corpus's own filing dates: no
+network, already verified, unable to shift between passes. It was rejected on review
+and the objection was correct — **a poorly-fitted baseline flatters the result
+invisibly**, which is the argument this project already used for depending on `arch`
+rather than hand-rolling a GARCH. It applies to the *input* as much as the estimator.
+
+The mechanism is worse than "fewer windows", and it is worth stating precisely.
+`earnings_multiplier` splits every window in the history into two buckets — those
+opening on an earnings date, and everything else — and reports the ratio of their
+dispersions. **An earnings window the calendar fails to name is not merely absent
+from the numerator; it is sorted into the ordinary bucket**, raising the denominator
+with exactly the high-dispersion windows the numerator exists to isolate. The ratio
+is compressed toward 1.0 from both ends at once.
+
+A multiplier at 1.0 is the random walk under a second name. Fitting on corpus
+membership would therefore have produced a baseline that **declines to widen for a
+scheduled event** — the one thing it exists to do — and losing to it would have been
+impossible for a reason nothing in the output would show. There is a test asserting
+the bias directly: the same synthetic history, a complete calendar against a partial
+one, and the partial multiplier is strictly lower.
+
+So the calendar is fetched per ticker from EDGAR: complete over the fitting window,
+dated by the filing itself so point-in-time is a property of the data rather than a
+convention, cached on disk keyed by the range it covers, and about 120 requests for
+the whole corpus. `EdgarFilings.earnings_dates` already existed for selection.
+
+**The weakness is now measured rather than assumed away.** Every scored item carries
+the multiplier it was fitted with, and the report names the median and how many items
+came back neutral — distinguishing *could not be fitted* (`None`) from *fitted, and
+found nothing to widen for* (`1.0`), because only the second means M.A.P. was
+compared against the random walk twice. A band where most items sit at 1.0 says so on
+the line above the comparison.
 
 ## The pre-registered checks run unconditionally
 
@@ -122,5 +151,11 @@ from dates.
   scored against instead of leaving the reader to assume one.
 - `map evaluate` reports leakage when the *other* band is finished and names it as
   absent when it is not — never partially, for the reason the pass boundary exists.
-- The unit tests score end to end against a generated series with `build_market_data`
-  patched out. No unit test reaches the network.
+- The unit tests score end to end against a generated series, with **both**
+  `build_market_data` and `build_earnings_calendar` patched out. The calendar happens
+  to fail closed without a symbol index, so the tests would pass offline regardless —
+  but an accident is not a guarantee, so it is patched explicitly.
+- **The first scoring pass makes ~120 EDGAR requests.** It must not run while a
+  corpus run is fetching exhibits: the two would share EDGAR's 10/s budget and a 403
+  costs a ten-minute IP block. Scoring naturally follows the run, and the calendar is
+  cached afterwards, so this is a sequencing note rather than a constraint.

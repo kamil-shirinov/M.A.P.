@@ -328,3 +328,48 @@ def test_the_multiplier_actually_moves_when_earnings_differ() -> None:
         with_spikes.baseline_crps["earnings_scaled_random_walk"]
         != without.baseline_crps["earnings_scaled_random_walk"]
     )
+
+
+def test_a_history_too_short_to_fit_records_no_multiplier() -> None:
+    """`None` rather than 1.0: "could not be fitted" and "fitted, and declined to
+    widen" are different facts about the benchmark, and the report distinguishes
+    them."""
+    window = _realistic_window(n=60)
+    as_of = window.bars[-HORIZON - 1].date
+    item = score_item(
+        _forecast(as_of, window.bars[-HORIZON - 1].close), window, band="clean", paths=200
+    )
+    assert item.earnings_multiplier is None
+    assert "earnings_scaled_random_walk" not in item.baseline_crps
+
+
+def test_a_fitted_baseline_that_declines_to_widen_records_one_not_none() -> None:
+    """The distinction the report rests on. "Could not be fitted" and "fitted, and
+    found nothing to widen for" are different facts about the benchmark, and only
+    the second one means M.A.P. was compared against the random walk twice."""
+    window = _realistic_window()
+    as_of = window.bars[-HORIZON - 1].date
+    item = score_item(
+        _forecast(as_of, window.bars[-HORIZON - 1].close),
+        window,
+        band="clean",
+        past_earnings=[],
+        paths=200,
+    )
+    assert item.earnings_multiplier == 1.0
+    assert "earnings_scaled_random_walk" in item.baseline_crps
+
+
+def test_a_fitted_multiplier_is_recorded_on_the_item() -> None:
+    window = _realistic_window()
+    as_of = window.bars[-HORIZON - 1].date
+    quarters = [window.bars[i].date for i in range(60, 340, 63)]
+    item = score_item(
+        _forecast(as_of, window.bars[-HORIZON - 1].close),
+        window,
+        band="clean",
+        past_earnings=quarters,
+        paths=200,
+    )
+    assert item.earnings_multiplier is not None
+    assert item.earnings_multiplier > 0.0

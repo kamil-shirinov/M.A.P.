@@ -42,6 +42,7 @@ from mapf.eval.baselines import (
     BaselineError,
     History,
     Prediction,
+    earnings_multiplier,
     earnings_scaled_random_walk,
     garch,
     random_walk,
@@ -123,6 +124,11 @@ class ScoredItem:
     # half of the vintage problem (ADR 0023).
     provider: str = ""
     adjustment: str = ADJUSTMENT_BASIS
+    # What the earnings baseline actually widened by. Recorded because a multiplier
+    # pinned at 1.0 is a benchmark that declines to widen for a scheduled event —
+    # easy to beat, and easy for a reason invisible in the score (ADR 0023). `None`
+    # means the baseline could not be fitted at all.
+    earnings_multiplier: float | None = None
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -216,6 +222,16 @@ def score_item(
     for name, prediction in _fit(prior, past_earnings, forecast.horizon_days):
         baselines[name] = float(crps_normal(prediction.mean, prediction.sigma, outcome))
 
+    # Recomputed rather than plumbed out of the baseline: it is a few hundred
+    # floats through `np.std`, and threading a second return value through
+    # `Prediction` would put a field on every baseline that only one of them means.
+    try:
+        multiplier: float | None = earnings_multiplier(
+            prior, past_earnings, horizon_days=forecast.horizon_days
+        )
+    except BaselineError:
+        multiplier = None
+
     return ScoredItem(
         ticker=forecast.ticker,
         band=band,
@@ -229,6 +245,7 @@ def score_item(
         baseline_crps=baselines,
         provider=window.provider,
         adjustment=window.adjustment,
+        earnings_multiplier=multiplier,
     )
 
 
@@ -295,6 +312,18 @@ class BandScores:
     @property
     def pit_values(self) -> list[float]:
         return [item.map_pit for item in self.items]
+
+    @property
+    def multipliers(self) -> list[float]:
+        """Every fitted earnings multiplier, for reporting how hard that baseline
+        actually was. A band where most of them sit at 1.0 was not compared against
+        a benchmark that widens — it was compared against the random walk twice."""
+        return [i.earnings_multiplier for i in self.items if i.earnings_multiplier is not None]
+
+    @property
+    def neutral_multipliers(self) -> int:
+        """Items whose earnings baseline declined to widen at all."""
+        return sum(1 for m in self.multipliers if m == 1.0)
 
 
 def score_band(

@@ -170,6 +170,12 @@ structuralist = "v2"
 [cache]
 llm_dir = "var/llm"          # namespaced by model fingerprint (ADR 0001)
 price_dir = "var/prices"     # parquet, keyed ticker + range + adjustment (ADR 0003)
+# Per-ticker Item 2.02 dates from EDGAR, for the earnings-multiplier baseline
+# (ADR 0023). One fetch per ticker per range -- roughly 120 requests for the whole
+# corpus. Fitting the multiplier on corpus membership instead would sort every
+# unnamed earnings window into the ORDINARY bucket and pull the ratio toward 1.0,
+# producing a benchmark that declines to widen for a scheduled event.
+earnings_dir = "var/earnings"
 
 # ---------------------------------------------------------------------------
 # Market data

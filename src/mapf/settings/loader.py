@@ -177,6 +177,7 @@ class PromptsSettings(_Section):
 class CacheSettings(_Section):
     llm_dir: Path
     price_dir: Path
+    earnings_dir: Path = Path("var/earnings")
 
 
 class SecSettings(_Section):

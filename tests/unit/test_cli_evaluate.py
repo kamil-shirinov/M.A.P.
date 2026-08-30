@@ -25,6 +25,7 @@ from mapf.core.models import (
     ScenarioSet,
 )
 from mapf.corpus.ledger import Ledger, LedgerEntry
+from mapf.eval.baselines import BaselineError
 from tests.unit.test_cli import _config
 from tests.unit.test_cli_corpus import _frozen
 
@@ -695,3 +696,69 @@ def test_leakage_is_silent_when_the_other_band_scored_nothing(tmp_path: Path) ->
     # Plotly mistake of finding #7, in a fixture.
     assert "leakage: clean" not in result.output
     assert "leakage: not reported" not in result.output
+
+
+class _NoCalendar:
+    """EDGAR answers for nothing — the case that makes the baseline weakest."""
+
+    def __init__(self) -> None:
+        self.failures = {"AAPL": "no CIK for 'AAPL'; it is not in the SEC index"}
+
+    def dates_before(self, ticker: str, as_of: date) -> tuple[date, ...]:
+        return ()
+
+
+def test_a_baseline_that_declined_to_widen_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A multiplier at 1.0 is the random walk under a second name. Beating it is not
+    beating a benchmark that widens for a scheduled event, and a weak baseline
+    flatters the result invisibly unless the report says how weak it was."""
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.build_earnings_calendar",
+        lambda _settings, _client: _NoCalendar(),
+    )
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "neutral (1.00) on 2 of 2" in result.output
+    assert "declined to widen" in result.output
+    assert "earnings calendar: unavailable for 1 ticker" in result.output
+
+
+def test_a_fitted_baseline_reports_its_multiplier(tmp_path: Path) -> None:
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    result = _invoke(tmp_path)
+    assert "earnings baseline: multiplier median" in result.output
+    assert "declined to widen" not in result.output
+
+
+def test_a_band_where_the_baseline_never_fitted_says_it_plainly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not the same as "fitted and declined to widen": here there is no earnings
+    benchmark at all, and any win over it is a win over the random walk."""
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.build_earnings_calendar",
+        lambda _settings, _client: _NoCalendar(),
+    )
+    monkeypatch.setattr(
+        "mapf.eval.scorer.earnings_multiplier",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(BaselineError("too short")),
+    )
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "earnings baseline: never fitted" in result.output
+    assert "random walk under a second name" in result.output

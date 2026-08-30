@@ -23,11 +23,13 @@ from mapf.agents.intake import IntakeAgent
 from mapf.agents.structuralist import StructuralistAgent
 from mapf.core.ports import DividendSource, LLMProvider, MarketDataProvider, ModelInfo
 from mapf.data.cache import ParquetPriceCache
+from mapf.data.earnings import EdgarEarningsCalendar
+from mapf.data.filings import EdgarFilings
 from mapf.data.providers.chain import ProviderChain
 from mapf.data.providers.dividends import NullDividendSource, YFinanceDividendSource
 from mapf.data.providers.stooq import StooqProvider
 from mapf.data.providers.yfinance_provider import YFinanceProvider
-from mapf.data.symbols import SqliteSymbolIndex
+from mapf.data.symbols import SqliteSymbolIndex, Throttle
 from mapf.pipeline.run import TRACE_FILE, Agents
 from mapf.pipeline.trace import CountingTrace, JsonlTrace
 from mapf.prompts.loader import FilePromptStore
@@ -76,6 +78,25 @@ def build_dividends(settings: Settings) -> DividendSource:
 
 def build_prompts() -> FilePromptStore:
     return FilePromptStore()
+
+
+def build_earnings_calendar(settings: Settings, client: httpx.Client) -> EdgarEarningsCalendar:
+    """The Item 2.02 calendar the multiplier baseline is fitted on (ADR 0023).
+
+    Takes the client so the caller owns its lifetime: this is used inside `map
+    evaluate`, which already opens one, and a second connection pool per adapter is
+    a way to leak sockets over 356 items.
+    """
+    sec = settings.data.sec
+    return EdgarEarningsCalendar(
+        EdgarFilings(
+            build_symbol_index(settings),
+            user_agent=sec.user_agent,
+            client=client,
+            throttle=Throttle(sec.requests_per_second),
+        ),
+        cache_dir=settings.cache.earnings_dir,
+    )
 
 
 def build_symbol_index(settings: Settings) -> SqliteSymbolIndex:
