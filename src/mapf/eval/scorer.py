@@ -334,6 +334,7 @@ def score_band(
     history_days: int = 730,
     paths: int = DEFAULT_PATHS,
     seed: int = 20260813,
+    strict: bool = True,
 ) -> BandScores:
     """Score every forecast in a band, counting the ones that could not be.
 
@@ -373,11 +374,12 @@ def score_band(
             reason = type(error).__name__
             unscored[reason] = unscored.get(reason, 0) + 1
 
-    _require_one_vintage(scored)
+    if strict:
+        require_one_vintage(scored)
     return BandScores(items=tuple(scored), unscored=unscored)
 
 
-def _require_one_vintage(items: Sequence[ScoredItem]) -> None:
+def require_one_vintage(items: Sequence[ScoredItem]) -> None:
     """Every item in a band must have been priced from the same source and basis.
 
     Unlike the two endpoints of a single return, this does **not** hold by
@@ -389,6 +391,12 @@ def _require_one_vintage(items: Sequence[ScoredItem]) -> None:
 
     ADR 0012 states the obligation as "Phase 2 must refuse to score across mixed
     values". This is where it is refused.
+
+    Called by `score_band` unless `strict=False`, which exists for one caller: the
+    structural pre-flight, which needs to *report* this alongside every other problem
+    rather than abort on the first. That caller runs this itself — the check is not
+    skipped, only moved — so there is one implementation and no way to score a mixed
+    band by forgetting.
     """
     vintages = {(item.provider, item.adjustment) for item in items}
     if len(vintages) > 1:

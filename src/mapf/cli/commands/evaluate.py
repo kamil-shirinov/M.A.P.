@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date
 from pathlib import Path
 
@@ -41,12 +41,17 @@ from mapf.core.errors import MapError
 from mapf.core.models import PriceWindow
 from mapf.corpus.forecasts import Loaded, load_band, unreferenced_runs
 from mapf.corpus.ledger import Ledger
-from mapf.corpus.passes import IncompletePassError, require_finished, split_passes
+from mapf.corpus.passes import (
+    IncompletePassError,
+    require_finished,
+    split_passes,
+    status_of,
+)
 from mapf.corpus.runner import plan
 from mapf.corpus.selection import Corpus
 from mapf.data.earnings import EdgarEarningsCalendar
 from mapf.eval.aggregate import Comparison, calibration_ratio, compare, leakage, summarise
-from mapf.eval.scorer import BandScores, score_band
+from mapf.eval.scorer import BandScores, VintageError, require_one_vintage, score_band
 from mapf.pipeline.run import TRACE_FILE
 from mapf.pipeline.trace import audit_trace
 from mapf.settings import load
@@ -75,8 +80,40 @@ def evaluate(
         "--allow-mixed-code",
         help="Score even though runs executed under different commits.",
     ),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help=(
+            "Structural pre-flight: exercise the whole path on real artifacts and "
+            "print no scores. Reports every problem it finds rather than the first."
+        ),
+    ),
 ) -> None:
-    """Score a completed band. Refuses on an unfinished pass."""
+    """Score a completed band, or pre-flight the path with `--check`.
+
+    `--check` is `map corpus run --check` one layer up. It loads from the ledger,
+    applies every refusal, fetches the realised windows, fits all three baselines,
+    and confirms each completed item is scoreable end to end — then prints **counts
+    and reasons only**. It computes the scores, exactly as scoring does, and does not
+    report them; the boundary is on what is shown, not on what is run, because a
+    pre-flight that exercised a different path would not be checking this one.
+
+    Two differences from a scoring run, both stated where they occur: the pass
+    boundary is reported rather than enforced (an unfinished band is the normal case
+    for a pre-flight), and leakage is skipped (it needs both bands).
+    """
+    problems: list[str] = []
+
+    def refuse(line: str, *, hint: str = "") -> None:
+        """Refuse now, or collect and continue under `--check`.
+
+        A pre-flight that stopped at the first problem would have to be run once per
+        problem. `map corpus run --check` reports the whole picture; so does this.
+        """
+        if not check:
+            raise fail(line, 2, hint=hint)
+        problems.append(line)
+
     try:
         if not frozen.is_file():
             raise fail(f"no frozen corpus at {frozen}", 5)
@@ -103,7 +140,13 @@ def evaluate(
         band_passes = split_passes(items, band=band, count=passes)
         wanted = [s.strip() for s in declared.split(",")] if declared else None
 
-        statuses = require_finished(band_passes, ledger, declared=wanted)
+        if check:
+            # SKIPPED, and named: an unfinished band is the normal case for a
+            # pre-flight, so enforcing the pass boundary here would make the check
+            # unusable for exactly the situation it exists to serve.
+            statuses = tuple(status_of(p, ledger) for p in band_passes)
+        else:
+            statuses = require_finished(band_passes, ledger, declared=wanted)
         for status in statuses:
             mark = "complete" if status.finished else "not run"
             typer.echo(
@@ -119,16 +162,16 @@ def evaluate(
             )
             for label in unauditable[:10]:
                 typer.echo(f"           {label}")
-            raise fail(
+            refuse(
                 f"{len(unauditable)} items cannot be audited",
-                2,
                 hint=(
                     "Full provenance is the claim the result rests on. Re-run the "
                     "affected items; a forecast whose trace is missing or empty is "
                     "not one this project can defend."
                 ),
             )
-        typer.secho("trace      every completed item has a trace", fg=typer.colors.GREEN)
+        else:
+            typer.secho("trace      every completed item has a trace", fg=typer.colors.GREEN)
 
         freezes = _freeze_versions(ledger, runs_dir, band)
         if len(freezes) > 1:
@@ -138,9 +181,8 @@ def evaluate(
             )
             for label, count in freezes.most_common():
                 typer.echo(f"           {label}  {count} runs")
-            raise fail(
+            refuse(
                 "this band was produced under more than one frozen record",
-                2,
                 hint=(
                     "The freeze governs sampling, truncation and corpus membership, "
                     "so these items were not asked the same question. Re-run the "
@@ -148,7 +190,10 @@ def evaluate(
                     "no override for this one."
                 ),
             )
-        if freezes:
+        elif freezes:
+            # `elif`, because under `--check` the refusal above collects and returns
+            # rather than raising — so this line is reachable with two versions in
+            # hand, and would unpack a two-element list into one name.
             ((label, count),) = freezes.most_common()
             typer.secho(f"freeze     {label} ({count} runs)", fg=typer.colors.GREEN)
 
@@ -163,9 +208,8 @@ def evaluate(
             for label, count in versions.most_common():
                 typer.echo(f"           {label}  {count} runs")
             if not allow_mixed_code:
-                raise fail(
+                refuse(
                     "this band was produced by more than one code version",
-                    2,
                     hint=(
                         "Sometimes fine, sometimes the explanation for everything. "
                         "Re-run the affected items, or pass --allow-mixed-code to "
@@ -192,14 +236,35 @@ def evaluate(
 
         with build_http_client(settings) as client:
             calendar = build_earnings_calendar(settings, client)
-            scores = _score(forecasts, settings, calendar)
-            _report(scores, band, calendar)
+            # Computed identically in both modes. `--check` withholds the scores; it
+            # does not avoid producing them, because a path that skipped the
+            # computation would not be exercising the one that matters.
+            scores = _score(forecasts, settings, calendar, strict=not check)
+            if check:
+                _structural(scores, forecasts, calendar, refuse)
+            else:
+                _report(scores, band, calendar)
+                other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
+                if other is not None:
+                    _leakage(other, corpus, ledger, runs_dir, settings, calendar, scores)
 
-            other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
-            if other is not None:
-                _leakage(other, corpus, ledger, runs_dir, settings, calendar, scores)
+        _sensitivity(scores, forecasts, counts_only=check)
 
-        _sensitivity(scores, forecasts)
+        if not check:
+            raise typer.Exit(0)
+        typer.echo("")
+        if problems:
+            typer.secho(
+                f"check      {len(problems)} problem(s) would refuse a scoring run:",
+                fg=typer.colors.RED,
+            )
+            for line in problems:
+                typer.echo(f"           {line}")
+            raise typer.Exit(2)
+        typer.secho(
+            "check      the whole path runs on real artifacts; no scores printed",
+            fg=typer.colors.GREEN,
+        )
         raise typer.Exit(0)
     except IncompletePassError as error:
         typer.secho(f"REFUSED    {error}", fg=typer.colors.RED, err=True)
@@ -286,7 +351,11 @@ def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:
 # The adapters
 # ---------------------------------------------------------------------------
 def _score(
-    loaded: Sequence[Loaded], settings: Settings, calendar: EdgarEarningsCalendar
+    loaded: Sequence[Loaded],
+    settings: Settings,
+    calendar: EdgarEarningsCalendar,
+    *,
+    strict: bool = True,
 ) -> BandScores:
     """Fit and score everything, against one price series and one EDGAR calendar."""
     market = build_market_data(settings)
@@ -303,6 +372,7 @@ def _score(
         # looking correct forever (ADR 0023).
         earnings=calendar.dates_before,
         history_days=settings.data.history_days,
+        strict=strict,
     )
 
 
@@ -380,6 +450,59 @@ def _benchmark_strength(scores: BandScores, calendar: EdgarEarningsCalendar) -> 
         )
 
 
+def _structural(
+    scores: BandScores,
+    loaded: Sequence[Loaded],
+    calendar: EdgarEarningsCalendar,
+    refuse: Callable[..., None],
+) -> None:
+    """Counts and reasons. Never a score.
+
+    The same boundary the corpus runner holds between health and result (ADR 0019
+    §7), one layer up: everything here says whether the machine works, and nothing
+    says whether the forecasts are any good.
+    """
+    typer.echo("")
+    typer.secho(f"scoreable  {scores.n} of {len(loaded)} loaded items", fg=typer.colors.GREEN)
+    if scores.unscored:
+        for reason, count in sorted(scores.unscored.items()):
+            typer.secho(f"           {count} unscored: {reason}", fg=typer.colors.YELLOW)
+        refuse(f"{sum(scores.unscored.values())} completed item(s) could not be scored")
+
+    vintages = sorted({(i.provider, i.adjustment) for i in scores.items})
+    for provider, adjustment in vintages:
+        n = sum(1 for i in scores.items if (i.provider, i.adjustment) == (provider, adjustment))
+        typer.echo(f"vintage    {provider} / {adjustment}  ({n} items)")
+    try:
+        # The same refusal a scoring run makes, run here so it can be REPORTED
+        # beside the other problems instead of ending the pre-flight on the first.
+        require_one_vintage(scores.items)
+    except VintageError as error:
+        refuse(str(error).split(".")[0])
+
+    names = sorted({n for item in scores.items for n in item.baseline_crps})
+    for name in names:
+        fitted = sum(1 for i in scores.items if name in i.baseline_crps)
+        typer.echo(f"baseline   {name:<28}{fitted:>4} of {scores.n} fitted")
+    for expected in ("random_walk", "garch", "earnings_scaled_random_walk"):
+        if expected not in names:
+            typer.secho(f"baseline   {expected:<28}   0 fitted", fg=typer.colors.YELLOW)
+            refuse(f"the {expected} baseline was never fitted on this band")
+
+    if scores.multipliers:
+        neutral = scores.neutral_multipliers
+        typer.echo(
+            f"multiplier {len(scores.multipliers)} fitted, {neutral} neutral (1.00) — "
+            "a neutral one is the random walk under a second name"
+        )
+    if calendar.failures:
+        typer.secho(
+            f"calendar   unavailable for {len(calendar.failures)} ticker(s): "
+            f"{', '.join(sorted(calendar.failures)[:8])}",
+            fg=typer.colors.YELLOW,
+        )
+
+
 def _leakage(
     other: str,
     corpus: Corpus,
@@ -423,7 +546,9 @@ def _leakage(
     )
 
 
-def _sensitivity(scores: BandScores, loaded: Sequence[Loaded]) -> None:
+def _sensitivity(
+    scores: BandScores, loaded: Sequence[Loaded], *, counts_only: bool = False
+) -> None:
     """The two pre-registered robustness checks, run unconditionally.
 
     ADR 0020 and ADR 0021 both committed to reporting the primary result with and
@@ -446,7 +571,14 @@ def _sensitivity(scores: BandScores, loaded: Sequence[Loaded]) -> None:
         if not keys:
             typer.echo(f"  sensitivity: no items in the {label} set")
             continue
-        subset = BandScores(items=kept, unscored={})
         typer.echo(f"  sensitivity, excluding {label} — {affected} of {scores.n} items:")
+        if counts_only:
+            # Membership is structural and is named; the comparison is a score and
+            # is not. A partition reported only as a count cannot be checked against
+            # the ledger, and an empty one reads as reassurance (finding #27).
+            for ticker, day in sorted(keys & {i.key for i in loaded}):
+                typer.echo(f"    {ticker} {day}")
+            continue
+        subset = BandScores(items=kept, unscored={})
         for line in summarise(_comparisons(subset)):
             typer.echo(f"    {line}")

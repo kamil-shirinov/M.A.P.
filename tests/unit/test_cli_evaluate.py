@@ -762,3 +762,173 @@ def test_a_band_where_the_baseline_never_fitted_says_it_plainly(
     assert result.exit_code == 0
     assert "earnings baseline: never fitted" in result.output
     assert "random walk under a second name" in result.output
+
+
+# ---------------------------------------------------------------------------
+# `--check`: the structural pre-flight (ADR 0025)
+# ---------------------------------------------------------------------------
+def _checked(tmp_path: Path, *args: str):  # type: ignore[no-untyped-def]
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    return _invoke(tmp_path, "--check", *args), ids
+
+
+def test_the_check_prints_no_score(tmp_path: Path) -> None:
+    """The boundary is on what is SHOWN, not on what is run. A pre-flight that
+    skipped the computation would not be exercising the path that matters."""
+    result, _ = _checked(tmp_path)
+    assert result.exit_code == 0
+    for forbidden in ("calibration", "M.A.P. vs", "indistinguishable", "leakage"):
+        assert forbidden not in result.output
+
+
+def test_the_check_confirms_every_item_is_scoreable(tmp_path: Path) -> None:
+    result, _ = _checked(tmp_path)
+    assert "scoreable  2 of 2 loaded items" in result.output
+    assert "the whole path runs on real artifacts; no scores printed" in result.output
+
+
+def test_the_check_reports_each_baseline_and_the_multiplier(tmp_path: Path) -> None:
+    result, _ = _checked(tmp_path)
+    for name in ("random_walk", "garch", "earnings_scaled_random_walk"):
+        assert f"baseline   {name}" in result.output
+    assert "multiplier" in result.output
+
+
+def test_the_check_does_not_enforce_the_pass_boundary(tmp_path: Path) -> None:
+    """SKIPPED and named. An unfinished band is the normal case for a pre-flight, so
+    enforcing it here would make the check unusable for what it exists to serve."""
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    run_id = uuid4()
+    ledger.append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="clean",
+            filing_date=CLEAN[0],
+            status="complete",
+            run_id=run_id,
+        )
+    )
+    _write_forecast(tmp_path, run_id, CLEAN[0])
+    _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    assert _invoke(tmp_path, "--check").exit_code == 0
+    assert _invoke(tmp_path).exit_code == 8  # a scoring run still refuses
+
+
+def test_the_check_reports_every_problem_rather_than_the_first(tmp_path: Path) -> None:
+    """A pre-flight that stopped at the first problem would have to be run once per
+    problem. `map corpus run --check` reports the whole picture; so does this."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.2.0")
+    _manifest(tmp_path, ids[1], "b" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path, "--check")
+    assert result.exit_code == 2
+    assert "2 problem(s) would refuse a scoring run" in result.output
+    assert "more than one frozen record" in result.output
+    assert "more than one code version" in result.output
+
+
+def test_the_check_names_the_sensitivity_members(tmp_path: Path) -> None:
+    """Membership is structural, so it is named. A partition reported only as a
+    count cannot be checked against the ledger, and an empty one reads as
+    reassurance (finding #27)."""
+    ids = [uuid4(), uuid4()]
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    for i, day in enumerate(CLEAN):
+        ledger.append(
+            LedgerEntry(
+                ticker="AAPL",
+                band="clean",
+                filing_date=day,
+                status="complete",
+                run_id=ids[i],
+                truncated=i == 0,
+                elided_chars=5000 if i == 0 else 0,
+            )
+        )
+        _write_forecast(tmp_path, ids[i], day)
+        _manifest(tmp_path, ids[i], "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path, "--check")
+    assert "excluding truncated exhibits (ADR 0020) — 1 of 2 items" in result.output
+    assert f"    AAPL {CLEAN[0] + timedelta(days=1)}" in result.output
+
+
+def test_an_unscoreable_item_is_a_problem_in_check_mode(tmp_path: Path) -> None:
+    """Scoring counts it and carries on; the pre-flight exists to find it first."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    path = tmp_path / "runs" / str(ids[0]) / "forecast.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["spot_price"] = 1.0
+    path.write_text(json.dumps(body), encoding="utf-8")
+
+    result = _invoke(tmp_path, "--check")
+    assert result.exit_code == 2
+    assert "1 unscored: SpotDriftError" in result.output
+    assert "could not be scored" in result.output
+
+
+class _TwoVintages:
+    """One ticker served by yfinance, the next by stooq — what `ProviderChain`
+    failing over per call actually produces."""
+
+    def __init__(self) -> None:
+        self._n = 0
+
+    def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+        self._n += 1
+        window = tuple(bar for bar in BARS if start <= bar.date <= end)
+        return PriceWindow(
+            ticker=ticker,
+            provider="yfinance" if self._n == 1 else "stooq",
+            adjustment="split_adjusted",
+            bars=window,
+        )
+
+
+def test_the_check_reports_a_mixed_vintage_as_a_problem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Scoring raises on this; the pre-flight names both series and carries on, so
+    one run shows every problem rather than the first."""
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.build_market_data", lambda _settings: _TwoVintages()
+    )
+    result, _ = _checked(tmp_path)
+    assert result.exit_code == 2
+    assert "different series" in result.output
+    assert "yfinance" in result.output and "stooq" in result.output
+
+
+def test_the_check_flags_a_baseline_that_was_never_fitted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A band scored against two baselines instead of three is a weaker comparison
+    than the one the report will claim, and nothing else would say so."""
+    monkeypatch.setattr(
+        "mapf.eval.scorer.garch",
+        lambda *_a, **_k: (_ for _ in ()).throw(BaselineError("no convergence")),
+    )
+    result, _ = _checked(tmp_path)
+    assert result.exit_code == 2
+    assert "0 fitted" in result.output
+    assert "the garch baseline was never fitted" in result.output
+
+
+def test_the_check_names_tickers_edgar_could_not_answer_for(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.build_earnings_calendar",
+        lambda _settings, _client: _NoCalendar(),
+    )
+    result, _ = _checked(tmp_path)
+    assert "calendar   unavailable for 1 ticker(s): AAPL" in result.output
