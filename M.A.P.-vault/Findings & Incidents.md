@@ -931,3 +931,48 @@ scoring-side additions that cannot touch a forecast. Tightening the exclusion li
 would be choosing the rule after seeing the result. So the split stands, and the refusal now **names the
 differing files** — which turns the override from a flag you learn to pass into a judgement you can make in
 one glance.
+
+---
+
+## 32 · The halt reintroduces the confound the pass design was built to prevent
+
+Projecting the failure rate forward showed the clean band halting somewhere between item 208 and 312. The
+obvious question was how much power survives. The answer is that a halt at 312 costs nothing measurable and
+a halt at 208 takes calibration power at the decision-relevant k from 73% to 53%.
+
+**The more serious cost is not power.** `plan()` orders items by `(filing_date, ticker)`, so a halt does not
+take a random subset of the band — it takes a **prefix of the year**. A halt at 208 keeps January to May 5
+and loses May through August entirely.
+
+That is precisely the confound `passes.py` exists to prevent. Its own docstring:
+
+> Taking the first half of the plan and calling it pass one would make it a calendar-contiguous subsample —
+> roughly H1 of the band — so stopping after it would confound "we stopped early" with "we only measured
+> the first half of the year".
+
+**The interleaving was built for the two-pass ambiguous band. The clean band runs straight through** — and
+the clean band is the one carrying the primary result. A protection was designed, reasoned about, written
+down, and installed on the band that needed it less.
+
+Nothing was wrong with the pass design. The gap is that "what does an early stop leave" was asked of the
+band that was *planned* to stop early, and never of the band that might stop early by accident.
+
+It is recorded rather than fixed: re-ordering now cannot un-bias the 78 items already run in date order, and
+changing execution order partway is its own confound.
+
+---
+
+## 33 · Sized on 344, reported on 90
+
+Computing the halt power meant reproducing ADR 0018's published table first, so the numbers would be
+comparable. The design that reproduces it — 100% at k=0.2, 92% at k=0.5, 32% at k=0.8 — is **120 tickers ×
+3 dates on a reportable subset of ~90**, not on the 344 forecasts the ADR names in the same sentence.
+
+Both numbers are correct and the ADR states both. But "the primary result is calibration on the clean band,
+at 120 × ~2.87 ≈ 344 forecasts. Power: 100% at k=0.2…" reads as though the power belongs to the 344. It
+belongs to the quarter of it that is reportable after the holdout and post-cutoff splits.
+
+`power.py`'s own docstring names this as the failure it exists to prevent — *"sizing on the full corpus and
+reporting on a quarter of it"* — so the module was right and the sentence summarising it was ambiguous. **A
+correct number in a sentence that invites the wrong reading is a reporting defect**, and this one would have
+been repeated into the write-up by anyone reading the consequences list rather than the module.
