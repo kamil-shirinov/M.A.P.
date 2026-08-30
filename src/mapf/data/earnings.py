@@ -31,6 +31,7 @@ ticker. One fetch per ticker per range, on disk, keyed by the range it covers.
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -45,6 +46,15 @@ _logger = structlog.get_logger(__name__)
 # inside the price history it is fitted on, so anything earlier is a wasted request;
 # the margin over `history_days` covers a filer whose quarter lands just outside.
 DEFAULT_LOOKBACK_DAYS = 1_100
+
+
+# A ticker reaches this module from the frozen corpus and from EDGAR's own index,
+# and is then used as a FILENAME. Neither source is attacker-controlled today, which
+# is an argument about the callers rather than about this function: `Ticker` permits
+# any 16 characters after upper-casing, so "../../X" is a valid one and would place
+# the cache write outside its directory. Validated at the sink, where the path is
+# built, because that is the property being protected.
+_SAFE_TICKER = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,15}$")
 
 
 class EarningsCalendarError(MapError):
@@ -95,13 +105,30 @@ class EdgarEarningsCalendar:
             return ()
         return tuple(day for day in calendar if day < as_of)
 
+    def _cache_path(self, ticker: str) -> Path:
+        """Where this ticker's calendar is cached, or a refusal.
+
+        Two checks rather than one. The pattern rejects the obvious traversal, and
+        the containment check confirms the result actually lands under the cache
+        root — a pattern is a claim about what strings look like, and the thing that
+        matters is where the write goes.
+        """
+        if not _SAFE_TICKER.match(ticker):
+            raise EarningsCalendarError(
+                f"{ticker!r} is not a ticker this cache will build a filename from"
+            )
+        path = (self._cache_dir / f"{ticker}.json").resolve()
+        if not path.is_relative_to(self._cache_dir.resolve()):
+            raise EarningsCalendarError(f"{ticker!r} resolves outside the calendar cache")
+        return path
+
     def _calendar(self, ticker: str, as_of: date) -> tuple[date, ...]:
         start = as_of - timedelta(days=self._lookback_days)
         cached = self._memo.get(ticker)
         if cached is not None and cached[0] <= start and cached[1] >= as_of:
             return cached[2]
 
-        path = self._cache_dir / f"{ticker}.json"
+        path = self._cache_path(ticker)
         loaded = self._read(path, start, as_of)
         if loaded is None:
             loaded = self._fetch(ticker, start, as_of)

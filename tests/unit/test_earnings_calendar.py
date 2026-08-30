@@ -193,3 +193,36 @@ def test_an_incomplete_calendar_biases_the_multiplier_toward_one() -> None:
 
     assert complete > 1.2, "the fixture must have a real earnings effect to detect"
     assert partial < complete
+
+
+# ---------------------------------------------------------------------------
+# The ticker is used as a filename
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "ticker", ["../../etc/passwd", "..", "/abs", "A/B", "A\\B", "", ".hidden", "A" * 17]
+)
+def test_a_ticker_that_is_not_a_filename_is_refused(tmp_path: Path, ticker: str) -> None:
+    """`Ticker` permits any 16 characters after upper-casing, so `../../X` is a
+    valid one. Neither the frozen corpus nor EDGAR's index is attacker-controlled
+    today, which is a fact about the callers rather than about this function."""
+    calendar = _calendar(tmp_path, _Filings())
+    assert calendar.dates_before(ticker, AS_OF) == ()
+    assert ticker in calendar.failures
+
+
+def test_nothing_is_written_outside_the_cache_directory(tmp_path: Path) -> None:
+    root = tmp_path / "earnings"
+    _calendar(tmp_path, _Filings()).dates_before("../../escaped", AS_OF)
+    assert not (tmp_path.parent / "escaped.json").exists()
+    assert list(root.glob("**/*.json")) == [] or all(
+        p.is_relative_to(root) for p in root.glob("**/*.json")
+    )
+
+
+@pytest.mark.parametrize("ticker", ["AAPL", "BRK-B", "BF.B", "A"])
+def test_real_tickers_still_pass(tmp_path: Path, ticker: str) -> None:
+    """Dots and dashes are ordinary in US symbols; a pattern that rejected them
+    would trade one defect for a broken corpus."""
+    calendar = _calendar(tmp_path, _Filings())
+    assert calendar.dates_before(ticker, AS_OF)
+    assert ticker not in calendar.failures
