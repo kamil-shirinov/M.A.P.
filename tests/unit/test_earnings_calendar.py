@@ -9,6 +9,7 @@ to a benchmark rather than about a data adapter.
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -226,3 +227,19 @@ def test_real_tickers_still_pass(tmp_path: Path, ticker: str) -> None:
     calendar = _calendar(tmp_path, _Filings())
     assert calendar.dates_before(ticker, AS_OF)
     assert ticker not in calendar.failures
+
+
+def test_the_containment_check_holds_if_the_pattern_ever_stops(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second layer, tested by removing the first.
+
+    Unreachable while the pattern is correct — which is the whole point of it being
+    there, and also why it would otherwise be an untested line. A pattern is a claim
+    about what strings look like; the containment check is about where the write
+    actually goes, and only one of those is the property being protected.
+    """
+    monkeypatch.setattr("mapf.data.earnings._SAFE_TICKER", re.compile(r"^.*$"))
+    calendar = _calendar(tmp_path, _Filings())
+    assert calendar.dates_before("../escaped", AS_OF) == ()
+    assert "resolves outside" in calendar.failures["../escaped"]
