@@ -29,6 +29,29 @@ nothing broke at all:
 
 ---
 
+## The third lesson: a true sentence can still mislead
+
+**Two correct numbers in one sentence can invite a wrong reading, and review does not catch it, because
+every number checks out.**
+
+ADR 0018 says: *"The primary result is calibration on the clean band, at 120 × ~2.87 ≈ 344 forecasts.
+Power: 100% at k=0.2, 93–98% at k=0.5, ~32% at k=0.8."* Both figures are right. The 344 is the corpus; the
+power belongs to the **reportable ~90** left after the holdout and post-cutoff splits. Read in one pass it
+says the power belongs to the 344 — and `power.py`'s own docstring names that exact confusion as the thing
+it exists to prevent: *"sizing on the full corpus and reporting on a quarter of it."*
+
+It survived because there is nothing to catch. No number is wrong, no claim is false, and a reviewer
+checking facts finds only facts. What is wrong is the **adjacency** — a sample size and a power figure in
+one sentence assert a relationship between themselves that neither states.
+
+The repair is not more precision. It is to put the number the reader will quote next to the thing it is
+about: *"power is computed on the reportable subset (~90 of the 344)."*
+
+**The question to ask of a summary sentence:** *if someone quotes this from memory, what will they say?* If
+the answer differs from what it means, the sentence is the defect, not the reader.
+
+---
+
 ## The second lesson, which took three instances to see
 
 **A test that would pass under both the bug and the correct behaviour is not a test.**
@@ -976,3 +999,50 @@ belongs to the quarter of it that is reportable after the holdout and post-cutof
 reporting on a quarter of it"* — so the module was right and the sentence summarising it was ambiguous. **A
 correct number in a sentence that invites the wrong reading is a reporting defect**, and this one would have
 been repeated into the write-up by anyone reading the consequences list rather than the module.
+
+---
+
+## 34 · The protection was built, argued for, and installed on the other band
+
+Projecting the failure rate forward showed the clean band halting somewhere between item 208 and 312, so I
+computed how much power survives. The power answer was mild. The thing beside it was not.
+
+`plan()` orders by `(filing_date, ticker)`, so a halt takes **a prefix of the year**. At item 208 that is
+January to May 5 — **May, June, July and August absent entirely.**
+
+`passes.py` already contained the argument for why that is unacceptable, written before any of these
+failures:
+
+> Taking the first half of the plan and calling it pass one would make it a calendar-contiguous subsample
+> — roughly H1 of the band — so stopping after it would confound "we stopped early" with "we only measured
+> the first half of the year".
+
+**The protection was designed, reasoned about, written down — and installed on the ambiguous band.** The
+clean band, which carries the primary result, runs straight through.
+
+Nothing was wrong with the pass design. The gap is that *"what does an early stop leave?"* was asked of the
+band **planned** to stop early, and never of the band that might stop early by accident. A question asked
+in one place and not the other, where the second place was the one that mattered.
+
+### I proposed to record it rather than fix it, and that was wrong
+
+My reasoning was that re-ordering cannot un-bias the items already run, and that changing execution order
+partway is its own confound. The first is true and the second is not — and Kamil's push-back carried the
+argument I should have made myself:
+
+- **No score exists anywhere yet**, so nothing here can be tuned toward a result.
+- **Applying a documented principle where it was missed is the opposite of tuning**, and it is the same
+  move that made backfilling the forecast digest legitimate.
+- **Execution order cannot reach a forecast**: `as_of` comes from the filing date, the vintage is pinned,
+  sampling has a fixed seed, the cache is keyed on content. It determines only which subset survives.
+
+I had generalised "don't change the protocol mid-run" — a good rule — past the case it covers, exactly as I
+had generalised "don't infer unrecorded data" past the digest backfill a day earlier. **Twice now the
+over-general form of a correct rule has been the thing standing in the way**, and both times the cost of
+being wrong was invisible until someone pushed.
+
+The remainder is now executed in a seeded shuffle ([[decisions/0028-execution-order|ADR 0028]]). The result
+is a hybrid — 80 contiguous early items plus an interleaved remainder — stated as that rather than dressed
+as a clean design. At a halt near 210 all eight months survive with January over-weighted about 1.7×, which
+is a distortion that can be stated and weighted. The prefix lost three months, and no weighting repairs an
+absence.

@@ -20,6 +20,7 @@ prints can inform the two-pass continuation decision.
 
 from __future__ import annotations
 
+import random
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -145,6 +146,47 @@ def plan(corpus: Corpus, band: str) -> tuple[CorpusItem, ...]:
         for d in b.dates
     ]
     return tuple(sorted(items, key=lambda i: (i.filing_date, i.ticker)))
+
+
+# The seed for the execution order (ADR 0028). Recorded in the frozen corpus rather
+# than derived, so the order is reproducible from the record alone.
+EXECUTION_SEED = 20260830
+
+
+def execution_order(
+    items: Sequence[CorpusItem], done: set[tuple[str, str, date]], *, seed: int
+) -> tuple[CorpusItem, ...]:
+    """The order to ATTEMPT items in — which is not the order they are planned in.
+
+    **This cannot change what any item produces.** `as_of` comes from the filing
+    date, the price vintage is pinned, sampling carries a fixed seed, and the cache
+    is keyed on content. Execution order determines one thing only: *which subset
+    survives a halt*.
+
+    And that turned out to matter. `plan()` orders by `(filing_date, ticker)`, so a
+    halt took a **prefix of the year** rather than a sample of it — losing May
+    through August entirely at item 208. That is precisely the confound `passes.py`
+    was written to prevent, and its rationale was in writing before any of this:
+    a calendar-contiguous subsample "would confound *we stopped early* with *we only
+    measured the first half of the year*". The protection existed and had been
+    applied to the other band.
+
+    A seeded shuffle rather than a stride, because it makes **any prefix an unbiased
+    random sample of the remainder** — a claim that can be stated in a result. A
+    stride gives a systematic sample, which is defensible but needs an argument that
+    a random one does not.
+
+    The whole band is shuffled and then filtered, not the remainder shuffled: that
+    makes the order a function of the corpus and the seed alone, so it is stable
+    across resumes rather than reshuffling on each one.
+
+    `plan()` is deliberately untouched. It defines pass membership, which is
+    pre-registered (ADR 0019) and computed at scoring time from the planned order —
+    so the two are independent and this changes neither.
+    """
+    ordered = list(items)
+    random.Random(seed).shuffle(ordered)
+    return tuple(item for item in ordered if item.key not in done)
 
 
 def verify_freeze(
@@ -324,6 +366,9 @@ def _classify_status(error: InferenceStatusError) -> FailureReason:
 class RunnerConfig:
     runs_dir: Path
     price_vintage: date
+    # Fixed here rather than passed per call, so a run cannot quietly execute in a
+    # different order from the one the freeze records (ADR 0028).
+    execution_seed: int = EXECUTION_SEED
     # Stamped into every manifest so a band spanning two frozen records is
     # detectable at scoring time (ADR 0022). Optional only so a caller outside a
     # corpus need not invent one.
@@ -382,9 +427,11 @@ def run_band(
     # correct and not what a 2% tolerance means.
     allowance = max(1, ceil(config.max_band_failure_rate * total))
 
-    for index, item in enumerate(items, start=1):
-        if item.key in done:
-            continue
+    queue = execution_order(items, done, seed=config.execution_seed)
+    for offset, item in enumerate(queue, start=1):
+        # Position in the BAND, not in this invocation: a resume that shows
+        # "[3/356]" after 200 completed items would misreport the run's progress.
+        index = len(done) + offset
 
         started = time.monotonic()
         entry, error = _attempt(

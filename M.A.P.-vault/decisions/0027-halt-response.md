@@ -88,9 +88,11 @@ than 53% power on a representative one. Ticker coverage is unaffected — all 12
 survive any halt, because every ticker files in Q1 — so what is lost is calendar
 span and filings per ticker, not breadth.
 
-**Recorded as a limitation, not fixed mid-run.** Re-ordering the clean band now would
-not un-bias the 78 items already executed in date order, and changing execution order
-partway is its own confound.
+**Fixed, not merely recorded — see [ADR 0028](0028-execution-order.md).** The
+remaining items are executed in a seeded interleave, so any halt from here leaves a
+sample of the year rather than a prefix of it. The 80 already run stay as they are and
+the result is a **hybrid**: 80 contiguous early items plus an interleaved remainder,
+stated as that rather than claimed as a clean design.
 
 ### 4 · The remedy, decided now and conditional on evidence
 
@@ -158,5 +160,52 @@ not.
   under its own separate allowance.
 - A halt at 312 or later is accepted as substantively complete: indistinguishable
   power, one week of calendar lost.
-- A halt at 208 is not accepted as a result. The remedy must let the band complete,
-  because the loss there is a biased subsample and no amount of reporting repairs it.
+- A halt at 208 is not accepted as a result on power grounds: 53% at k = 0.58 is a
+  coin flip on the pre-registered expected reading, and the remedy must let the band
+  complete.
+
+## Addendum · Band pairing when one band halts and the other does not
+
+The leakage estimate is a clean-versus-ambiguous difference, and what protects it is
+**same-ticker, same-shape construction** ([ADR 0018](0018-corpus-band-and-panel-shape.md)) —
+not per-item pairing, since `aggregate.leakage` takes an unpaired difference of band
+means. A clean band halted at 208 compared against a complete ambiguous band is a
+comparison of two differently-shaped subsets, and the difference then carries a
+composition effect that no interval accounts for.
+
+Decided now, because choosing at the halt is choosing with the numbers in view.
+
+> **Truncate the ambiguous band to match the surviving clean set** — the same
+> tickers, the same number of filings per ticker, matched by quarter — and report the
+> leakage estimate on the matched pair with both n's stated.
+
+The argument is that this costs nothing that matters. **The ambiguous band exists
+only for this comparison**; ADR 0018 is explicit that it "is never a second result".
+So discarding unmatched ambiguous items forfeits no finding — only compute already
+spent — while restoring the construction the estimate depends on. Reporting leakage as
+unavailable, the alternative, forfeits the headline number to protect against a
+composition effect that matching removes.
+
+**The fallback, and its condition, stated now.** If matching leaves fewer than one
+filing per ticker for a material share of tickers — so the matched set is no longer
+the same-ticker panel the design assumes — **leakage is reported as unavailable**
+rather than as an adjusted number. A matched panel that has quietly become a
+different panel is the failure the matching was meant to prevent.
+
+**One thing the interleave changes here.** With execution in a seeded random order,
+the surviving clean set is an unbiased random sample of its band, so the clean mean
+is an unbiased estimate of the clean-band mean and the leakage difference stays
+unbiased — wider, not skewed. Under the old prefix order it was seasonally biased and
+matching would have had to correct a bias rather than a shape. **The ordering fix and
+the pairing decision are the same repair seen from two sides.**
+
+## Addendum · An observation about the two-pass continuation option
+
+ADR 0019 offers stopping after pass one as a legitimate outcome decided on time.
+**The runner has no notion of passes** — `split_passes` is computed at scoring time
+from the planned order, and `run_band` executes the whole band. So under date order
+a stop partway gave half of each pass rather than all of pass one, and the
+continuation option was already not executable as described.
+
+The interleave does not change that either way. Recorded here because it is adjacent
+and would otherwise be found while trying to exercise it.
