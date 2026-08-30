@@ -7,6 +7,11 @@ guard, validator and assertion in `src/`, asking the same question of each.
 Ordered by how close the gap sits to a scored result. **Verified-sound entries are listed
 too** — a check confirmed adequate is as useful as a gap found.
 
+**Update, 2026-08-30.** Wiring `map evaluate` produced three more instances of shape 2
+(*a declared number trusted instead of the thing measured*) and one of shape 3 — see
+[[decisions/0023-scoring-adapters|ADR 0023]] and [[Findings & Incidents#27]]. Two of the
+three were **safe by accident**: correct behaviour that no assertion held in place.
+
 **Status.** Seven are fixed — see [[decisions/0022-guard-scope|ADR 0022]]. Each fixed
 row below is struck through and carries what it now verifies. The remaining eight are
 **stated limitations**, not open questions: their behaviour is known, documented, and

@@ -325,7 +325,7 @@ def test_earnings_dates_reach_the_scaled_baseline() -> None:
     scores = score_band(
         [(_forecast(as_of, window.bars[-HORIZON - 1].close), "clean")],
         prices=_prices_for({"AAPL": window}),
-        earnings=lambda ticker: quarters,
+        earnings=lambda _ticker, _as_of: quarters,
         paths=500,
     )
     item = scores.items[0]

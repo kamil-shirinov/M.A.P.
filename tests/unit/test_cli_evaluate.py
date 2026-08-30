@@ -7,19 +7,112 @@ half-finished band, so the refusals are the substance rather than error handling
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
+import numpy as np
 import pytest
 from typer.testing import CliRunner
 
 from mapf.cli.app import app
+from mapf.core.models import (
+    Bar,
+    Forecast,
+    ModelVersions,
+    PriceWindow,
+    Scenario,
+    ScenarioSet,
+)
 from mapf.corpus.ledger import Ledger, LedgerEntry
 from tests.unit.test_cli import _config
 from tests.unit.test_cli_corpus import _frozen
 
 runner = CliRunner()
+
+# The two clean items of the fixture corpus, and the day each forecast opens: the
+# runner dates a forecast one day after the filing it reads.
+CLEAN = (date(2026, 2, 1), date(2026, 5, 1))
+AMBIGUOUS = date(2025, 2, 1)
+SERIES_START = date(2024, 1, 1)
+SERIES_DAYS = 900
+
+
+def _bars() -> list[Bar]:
+    """A deterministic daily series, generated rather than fetched.
+
+    Calendar-daily rather than business-daily so every `as_of` lands on a bar and
+    the scorer's fallback to the nearest earlier close is never exercised here —
+    that path has its own test in `test_scorer`.
+    """
+    rng = np.random.default_rng(20260830)
+    closes = 100.0 * np.exp(np.cumsum(rng.normal(0.0002, 0.011, SERIES_DAYS)))
+    return [
+        Bar(
+            date=SERIES_START + timedelta(days=i),
+            open=float(c),
+            high=float(c),
+            low=float(c),
+            close=float(c),
+            volume=1_000_000,
+        )
+        for i, c in enumerate(closes)
+    ]
+
+
+BARS = _bars()
+CLOSE_ON = {bar.date: bar.close for bar in BARS}
+
+
+class _Market:
+    """Serves the generated series, sliced to the requested range."""
+
+    name = "fake"
+
+    def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+        window = tuple(bar for bar in BARS if start <= bar.date <= end)
+        return PriceWindow(ticker=ticker, provider="fake", adjustment="split_adjusted", bars=window)
+
+
+@pytest.fixture(autouse=True)
+def _offline(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No unit test may reach the network. Ever."""
+    monkeypatch.setattr("mapf.cli.commands.evaluate.build_market_data", lambda _settings: _Market())
+
+
+def _write_forecast(tmp_path: Path, run_id: UUID, filing_date: date) -> None:
+    """A schema-2.0.0 forecast whose spot matches the series it will be scored on.
+
+    A mismatched spot is what `SpotDriftError` exists to catch, so a fixture that
+    guessed one would be testing the guard rather than the scoring pass.
+    """
+    as_of = filing_date + timedelta(days=1)
+
+    def branch(justification: str, weight: float, ret: float) -> Scenario:
+        return Scenario(
+            justification=justification.ljust(20, "."),
+            probability_weight=weight,
+            price_return=ret,
+            annualised_vol=0.30,
+        )
+
+    forecast = Forecast(
+        run_id=run_id,
+        ticker="AAPL",
+        as_of=datetime.combine(as_of, datetime.min.time(), tzinfo=UTC),
+        horizon_days=5,
+        spot_price=CLOSE_ON[as_of],
+        source_doc_ids=("sha256:" + "a" * 64,),
+        model_versions=ModelVersions(intake="i", analyst="a", structuralist="s"),
+        scenarios=ScenarioSet(
+            bullish=branch("upside reasoning", 0.3, 0.04),
+            base_case=branch("base reasoning", 0.4, 0.0),
+            bearish=branch("downside reasoning", 0.3, -0.04),
+        ),
+    )
+    directory = tmp_path / "runs" / str(run_id)
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "forecast.json").write_text(forecast.model_dump_json(), encoding="utf-8")
 
 
 def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ignore[no-untyped-def]
@@ -41,16 +134,18 @@ def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ig
 def _finish(tmp_path: Path, run_ids: list[UUID] | None = None) -> Ledger:
     """Complete both clean items of the fixture corpus."""
     ledger = Ledger(tmp_path / "ledger.jsonl")
-    for i, day in enumerate((date(2026, 2, 1), date(2026, 5, 1))):
+    for i, day in enumerate(CLEAN):
+        run_id = run_ids[i] if run_ids else uuid4()
         ledger.append(
             LedgerEntry(
                 ticker="AAPL",
                 band="clean",
                 filing_date=day,
                 status="complete",
-                run_id=run_ids[i] if run_ids else uuid4(),
+                run_id=run_id,
             )
         )
+        _write_forecast(tmp_path, run_id, day)
     return ledger
 
 
@@ -115,9 +210,18 @@ def test_a_partially_finished_band_is_still_refused(tmp_path: Path) -> None:
 def test_a_declared_single_pass_is_accepted(tmp_path: Path) -> None:
     """A deliberate stop is a legitimate outcome — provided it was declared."""
     ledger = Ledger(tmp_path / "ledger.jsonl")
+    run_id = uuid4()
     ledger.append(
-        LedgerEntry(ticker="AAPL", band="clean", filing_date=date(2026, 2, 1), status="complete")
+        LedgerEntry(
+            ticker="AAPL",
+            band="clean",
+            filing_date=CLEAN[0],
+            status="complete",
+            run_id=run_id,
+        )
     )
+    _write_forecast(tmp_path, run_id, CLEAN[0])
+    _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
     result = _invoke(tmp_path, "--declared", "clean_half_1")
     assert result.exit_code == 0
     assert "clean_half_1" in result.output
@@ -225,13 +329,115 @@ def test_an_unknown_band_lists_the_real_ones(tmp_path: Path) -> None:
     assert "clean" in result.output
 
 
-def test_scoring_is_declared_unimplemented_rather_than_faked(tmp_path: Path) -> None:
-    """Better an explicit gap than a number nobody can trace to a computation."""
+def test_a_completed_item_with_no_run_id_refuses_rather_than_shrinking_the_sample(
+    tmp_path: Path,
+) -> None:
+    """Skipping it would remove from the sample exactly the items whose bookkeeping
+    is broken, which is a selection effect rather than a smaller sample."""
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(LedgerEntry(ticker="AAPL", band="clean", filing_date=CLEAN[0], status="complete"))
+    result = _invoke(tmp_path, "--declared", "clean_half_1")
+    assert result.exit_code != 0
+    assert "record no run id" in result.output
+
+
+def test_a_finished_band_is_scored_end_to_end(tmp_path: Path) -> None:
+    """This asserted `not yet implemented` until the pass was wired. It now asserts
+    the shape of a real result: a vintage, a count, a paired comparison against each
+    baseline, and a calibration ratio."""
     ids = [uuid4(), uuid4()]
     _finish(tmp_path, ids)
-    _traces_for(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
     result = _invoke(tmp_path)
-    assert "not yet implemented" in result.output
+    assert result.exit_code == 0
+    assert "vintage    fake / split_adjusted" in result.output
+    assert "scored     2 items" in result.output
+    assert "M.A.P. vs random_walk" in result.output
+    assert "calibration:" in result.output
+
+
+def test_the_scored_set_comes_from_the_ledger_not_the_directory(tmp_path: Path) -> None:
+    """`runs/` still holds first-capture and the loose UUIDs of the first live
+    forecasts — different prompts, a different horizon, an older schema. Scanning
+    would find them and several would even parse."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    stray = tmp_path / "runs" / "first-capture-v2"
+    stray.mkdir(parents=True)
+    (stray / "forecast.json").write_text('{"schema_version": "1.0.0"}', encoding="utf-8")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "scored     2 items" in result.output
+    assert "from the ledger and not by scanning" in result.output
+    assert "1 run director" in result.output
+
+
+def test_a_ledger_item_absent_from_the_frozen_corpus_refuses(tmp_path: Path) -> None:
+    """The ledger and the corpus have diverged, so every rate reported afterwards
+    would have the wrong denominator."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    intruder = uuid4()
+    for run_id in (*ids, intruder):
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(
+        LedgerEntry(
+            ticker="MSFT",
+            band="clean",
+            filing_date=date(2026, 3, 3),
+            status="complete",
+            run_id=intruder,
+        )
+    )
+    result = _invoke(tmp_path)
+    assert result.exit_code != 0
+    assert "absent from the frozen corpus" in result.output
+    assert "MSFT" in result.output
+
+
+def test_a_forecast_for_the_wrong_ticker_refuses(tmp_path: Path) -> None:
+    """A file in the right directory is not proof it belongs to the right item;
+    scoring it would attribute one ticker's forecast to another's outcome."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    path = tmp_path / "runs" / str(ids[0]) / "forecast.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["ticker"] = "MSFT"
+    path.write_text(json.dumps(body), encoding="utf-8")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code != 0
+    assert "item-to-run mapping is broken" in result.output
+
+
+def test_leakage_is_not_reported_on_a_half_finished_other_band(tmp_path: Path) -> None:
+    """A leakage estimate on an unfinished band is a different number, not a
+    preliminary one — the same rule that governs the pass boundary."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    result = _invoke(tmp_path)
+    assert "leakage: not reported" in result.output
+    assert "outstanding" in result.output
+
+
+def test_both_pre_registered_sensitivity_checks_run_unconditionally(tmp_path: Path) -> None:
+    """Declared before any score existed, so they are not an option here."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    output = _invoke(tmp_path).output
+    assert "ADR 0020" in output
+    assert "ADR 0021" in output
 
 
 def test_the_config_option_is_not_required(tmp_path: Path) -> None:
@@ -372,3 +578,120 @@ def test_a_trace_holding_more_than_one_run_refuses_scoring(tmp_path: Path) -> No
     assert result.exit_code == 2
     assert "cannot be audited" in result.output
     assert "more than one run can produce" in result.output
+
+
+def test_a_band_where_nothing_could_be_scored_is_a_sentence(tmp_path: Path) -> None:
+    """Refused, not reported as an empty result: a comparison over zero items has
+    no interval, and printing one would put a shape where a number belongs."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+        # A spot the series cannot produce: every item fails on SpotDriftError.
+        path = tmp_path / "runs" / str(run_id) / "forecast.json"
+        body = json.loads(path.read_text(encoding="utf-8"))
+        body["spot_price"] = 1.0
+        path.write_text(json.dumps(body), encoding="utf-8")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 2
+    assert "no item of the clean band could be scored" in result.output
+    assert "SpotDriftError" in result.output
+
+
+def test_an_unscoreable_item_is_counted_by_reason(tmp_path: Path) -> None:
+    """Counted rather than dropped: a shrinking sample must say why it shrank."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    path = tmp_path / "runs" / str(ids[0]) / "forecast.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["spot_price"] = 1.0
+    path.write_text(json.dumps(body), encoding="utf-8")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "scored     1 items" in result.output
+    assert "1 unscored: SpotDriftError" in result.output
+
+
+def test_leakage_is_reported_when_both_bands_are_finished(tmp_path: Path) -> None:
+    """The headline number of the whole project: clean-band performance minus
+    ambiguous-band performance, reported as a difference rather than two results."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    ambiguous_id = uuid4()
+    Ledger(tmp_path / "ledger.jsonl").append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="ambiguous",
+            filing_date=AMBIGUOUS,
+            status="complete",
+            run_id=ambiguous_id,
+        )
+    )
+    _write_forecast(tmp_path, ambiguous_id, AMBIGUOUS)
+    for run_id in (*ids, ambiguous_id):
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "leakage: clean" in result.output
+    assert "n=2/1" in result.output
+
+
+def test_a_sensitivity_subset_that_exists_is_reported_with_its_size(tmp_path: Path) -> None:
+    ids = [uuid4(), uuid4()]
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    for i, day in enumerate(CLEAN):
+        ledger.append(
+            LedgerEntry(
+                ticker="AAPL",
+                band="clean",
+                filing_date=day,
+                status="complete",
+                run_id=ids[i],
+                truncated=i == 0,
+                elided_chars=5000 if i == 0 else 0,
+            )
+        )
+        _write_forecast(tmp_path, ids[i], day)
+        _manifest(tmp_path, ids[i], "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "excluding truncated exhibits (ADR 0020) — 1 of 2 items" in result.output
+
+
+def test_leakage_is_silent_when_the_other_band_scored_nothing(tmp_path: Path) -> None:
+    """Finished but unscoreable is not the same as unfinished, and it is not a
+    leakage estimate either. Neither is reported as the other."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    ambiguous_id = uuid4()
+    Ledger(tmp_path / "ledger.jsonl").append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="ambiguous",
+            filing_date=AMBIGUOUS,
+            status="complete",
+            run_id=ambiguous_id,
+        )
+    )
+    _write_forecast(tmp_path, ambiguous_id, AMBIGUOUS)
+    path = tmp_path / "runs" / str(ambiguous_id) / "forecast.json"
+    body = json.loads(path.read_text(encoding="utf-8"))
+    body["spot_price"] = 1.0
+    path.write_text(json.dumps(body), encoding="utf-8")
+    for run_id in (*ids, ambiguous_id):
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    # The two forms the report can emit, rather than the bare word: `tmp_path`
+    # carries this test's own name and contains "leakage", so a substring check on
+    # that would pass on the directory rather than on anything the code did — the
+    # Plotly mistake of finding #7, in a fixture.
+    assert "leakage: clean" not in result.output
+    assert "leakage: not reported" not in result.output

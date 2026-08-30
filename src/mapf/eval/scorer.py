@@ -37,7 +37,7 @@ from datetime import date
 import numpy as np
 
 from mapf.core.errors import MapError
-from mapf.core.models import Forecast, PriceWindow
+from mapf.core.models import ADJUSTMENT_BASIS, Forecast, PriceWindow
 from mapf.eval.baselines import (
     BaselineError,
     History,
@@ -77,6 +77,33 @@ class SpotDriftError(ScoringError):
     """
 
 
+class VintageError(ScoringError):
+    """Two prices in one comparison do not share an adjustment basis or a source.
+
+    A realised return is a ratio of two prices, and a ratio is only meaningful when
+    both sides are on the same basis. Within one item that holds by construction —
+    both endpoints are bars of a single `PriceWindow`, which carries one provider
+    and one adjustment for the whole series — so this asserts what construction
+    already provides, because "by construction" is a claim about code that changes.
+
+    Across a band it does *not* hold by construction, and that is the reachable
+    failure: the provider chain fails over per call, so one ticker can be served by
+    yfinance and the next by stooq, and the price cache is keyed by `fetched_on`,
+    so a scoring pass spanning midnight mixes two vintages. Both produce well-formed
+    windows that silently mean different things.
+    """
+
+
+class LookAheadError(ScoringError):
+    """A baseline was handed an event dated at or after the forecast opens.
+
+    The earnings multiplier is the likeliest place for look-ahead to re-enter,
+    because "the ticker's earnings dates" reads as a static property of the ticker
+    rather than as a point-in-time question. Raised rather than filtered: dropping
+    the offending dates silently would leave a broken adapter looking correct.
+    """
+
+
 @dataclass(frozen=True)
 class ScoredItem:
     """One forecast, its outcome, and every forecaster's score on it."""
@@ -91,6 +118,11 @@ class ScoredItem:
     map_sigma: float
     map_pit: float
     baseline_crps: dict[str, float]
+    # The series this item was scored against. Carried per item so `score_band` can
+    # refuse a band whose items were priced from different sources — the reachable
+    # half of the vintage problem (ADR 0023).
+    provider: str = ""
+    adjustment: str = ADJUSTMENT_BASIS
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -103,7 +135,18 @@ def realised_return(window: PriceWindow, as_of: date, horizon_days: int, spot: f
     `as_of` is the last trading date the forecast saw. The horizon is counted in
     trading days, so it is an index offset in the bar series rather than a calendar
     delta — a five-day window over a long weekend is still five bars.
+
+    **Both endpoints come from one window, and that is asserted rather than
+    assumed.** The numerator and denominator of a return must share an adjustment
+    basis; a split landing between them on different bases makes the ratio wrong
+    while every individual number stays plausible.
     """
+    if window.adjustment != ADJUSTMENT_BASIS:
+        raise VintageError(
+            f"{window.ticker} {as_of}: window is on {window.adjustment!r}, not the "
+            f"canonical {ADJUSTMENT_BASIS!r}; both endpoints of a return must share "
+            "one basis and this one cannot be compared to any other item"
+        )
     bars = window.bars
     index = {bar.date: i for i, bar in enumerate(bars)}
     start = index.get(as_of)
@@ -144,8 +187,21 @@ def score_item(
     `window` must span both the history the baselines need and the horizon that
     followed. Baselines are fitted on bars strictly before the forecast's `as_of`,
     which is what keeps the benchmark free of the look-ahead the corpus excludes.
+
+    `past_earnings` must be **strictly prior** to `as_of`. It is checked here rather
+    than trusted, because the multiplier only ever sees dates that happen to land in
+    an already-truncated history — so a future date is silently dropped, and an
+    adapter handing them over looks correct forever.
     """
     as_of = forecast.as_of.date()
+    future = sorted(day for day in past_earnings if day >= as_of)
+    if future:
+        raise LookAheadError(
+            f"{forecast.ticker} {as_of}: {len(future)} earnings date(s) at or after "
+            f"the forecast opens, first {future[0]}. The multiplier is fitted on the "
+            "ticker's own past windows; a future one is the look-ahead the corpus "
+            "design exists to exclude, arriving through the benchmark."
+        )
     outcome = realised_return(window, as_of, forecast.horizon_days, forecast.spot_price)
 
     simulation = simulate(
@@ -171,6 +227,8 @@ def score_item(
         map_sigma=simulation.sigma,
         map_pit=float(pit(simulation.mean, simulation.sigma, outcome)),
         baseline_crps=baselines,
+        provider=window.provider,
+        adjustment=window.adjustment,
     )
 
 
@@ -243,7 +301,7 @@ def score_band(
     forecasts: Sequence[tuple[Forecast, str]],
     *,
     prices: Callable[[str, date, date], PriceWindow],
-    earnings: Callable[[str], Sequence[date]] = lambda _: (),
+    earnings: Callable[[str, date], Sequence[date]] = lambda _t, _d: (),
     history_days: int = 730,
     paths: int = DEFAULT_PATHS,
     seed: int = 20260813,
@@ -253,6 +311,12 @@ def score_band(
     `prices` and `earnings` are callables rather than adapters so this module never
     imports `mapf.data` — the boundary that lets the whole pass be tested against
     generated series with no network.
+
+    **`earnings` takes the forecast date, not only the ticker.** The signature is
+    the guard: asked for "the ticker's earnings dates" an adapter returns all of
+    them, because that reads as a static property of the company. Asked as of a
+    date, it has to answer a point-in-time question, and a look-ahead becomes
+    something a caller has to write on purpose rather than something it inherits.
     """
     from datetime import timedelta
 
@@ -271,7 +335,7 @@ def score_band(
                     forecast,
                     window,
                     band=band,
-                    past_earnings=earnings(forecast.ticker),
+                    past_earnings=earnings(forecast.ticker, as_of),
                     paths=paths,
                     seed=seed,
                 )
@@ -279,4 +343,29 @@ def score_band(
         except MapError as error:
             reason = type(error).__name__
             unscored[reason] = unscored.get(reason, 0) + 1
+
+    _require_one_vintage(scored)
     return BandScores(items=tuple(scored), unscored=unscored)
+
+
+def _require_one_vintage(items: Sequence[ScoredItem]) -> None:
+    """Every item in a band must have been priced from the same source and basis.
+
+    Unlike the two endpoints of a single return, this does **not** hold by
+    construction. `ProviderChain` fails over per call, so one ticker can be served
+    by yfinance and the next by stooq; the price cache is keyed by `fetched_on`, so
+    a pass spanning midnight mixes two vintages. Both produce well-formed windows
+    that mean different things, and every number downstream — the paired
+    difference, the leakage estimate — assumes one series.
+
+    ADR 0012 states the obligation as "Phase 2 must refuse to score across mixed
+    values". This is where it is refused.
+    """
+    vintages = {(item.provider, item.adjustment) for item in items}
+    if len(vintages) > 1:
+        listed = ", ".join(f"{p or '?'}/{a}" for p, a in sorted(vintages))
+        raise VintageError(
+            f"this band was priced from {len(vintages)} different series ({listed}). "
+            "A paired comparison across them compares two things that were measured "
+            "differently. Clear the price cache and re-score in one pass."
+        )

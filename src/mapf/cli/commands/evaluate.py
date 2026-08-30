@@ -28,19 +28,28 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from collections.abc import Sequence
+from datetime import date
 from pathlib import Path
 
 import typer
 from pydantic import ValidationError
 
+from mapf.bootstrap import build_market_data
 from mapf.cli.app import app, fail, handle
 from mapf.core.errors import MapError
+from mapf.core.models import PriceWindow
+from mapf.corpus.forecasts import Loaded, load_band, unreferenced_runs
 from mapf.corpus.ledger import Ledger
 from mapf.corpus.passes import IncompletePassError, require_finished, split_passes
 from mapf.corpus.runner import plan
 from mapf.corpus.selection import Corpus
+from mapf.eval.aggregate import Comparison, calibration_ratio, compare, leakage, summarise
+from mapf.eval.scorer import BandScores, score_band
 from mapf.pipeline.run import TRACE_FILE
 from mapf.pipeline.trace import audit_trace
+from mapf.settings import load
+from mapf.settings.loader import Settings
 
 FROZEN = Path("corpus/frozen.json")
 LEDGER = Path("var/corpus/ledger.jsonl")
@@ -166,11 +175,28 @@ def evaluate(
             ((label, count),) = versions.most_common()
             typer.secho(f"code       {label} ({count} runs)", fg=typer.colors.GREEN)
 
+        settings = load()
+        forecasts = load_band(ledger, corpus, runs_dir, band)
         typer.secho(
-            "scoring    not yet implemented: baselines, Monte Carlo and the "
-            "aggregation exist, the per-item scoring pass does not",
-            fg=typer.colors.YELLOW,
+            f"loaded     {len(forecasts)} forecasts, from the ledger and not by "
+            f"scanning {runs_dir}/",
+            fg=typer.colors.GREEN,
         )
+        stray = list(unreferenced_runs(ledger, runs_dir))
+        if stray:
+            typer.echo(
+                f"           {len(stray)} run director(ies) there are referenced by no "
+                "ledger entry and are not scored"
+            )
+
+        scores = _score(forecasts, settings, corpus)
+        _report(scores, band)
+
+        other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
+        if other is not None:
+            _leakage(other, corpus, ledger, runs_dir, settings, scores)
+
+        _sensitivity(scores, forecasts)
         raise typer.Exit(0)
     except IncompletePassError as error:
         typer.secho(f"REFUSED    {error}", fg=typer.colors.RED, err=True)
@@ -251,3 +277,160 @@ def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:
         else:
             seen[f"{commit[:12]}{'+dirty' if version.get('dirty') else ''}"] += 1
     return seen
+
+
+# ---------------------------------------------------------------------------
+# The adapters
+# ---------------------------------------------------------------------------
+def _earnings_index(corpus: Corpus) -> dict[str, tuple[date, ...]]:
+    """Every filing date the frozen corpus holds, per ticker.
+
+    The corpus is the earnings calendar. These are Item 2.02 8-K dates taken from
+    EDGAR, already frozen and already verified, so the multiplier needs no second
+    source and no network — and cannot be fitted against a calendar that shifts
+    between one scoring pass and the next.
+
+    **The limitation, stated.** It holds only the selected filings, so a ticker
+    offers at most a handful of prior windows. `earnings_multiplier` returns a
+    neutral 1.0 below its evidence threshold, so a thin history weakens the
+    baseline rather than corrupting it — but the baseline is weaker than one fitted
+    on a full history would be, and that is a property of the comparison, not an
+    accident of it.
+    """
+    out: dict[str, tuple[date, ...]] = {}
+    for entry in corpus.accepted:
+        days = sorted({d for filings in entry.filings for d in filings.dates})
+        out[entry.ticker] = tuple(days)
+    return out
+
+
+def _score(loaded: Sequence[Loaded], settings: Settings, corpus: Corpus) -> BandScores:
+    """Fit and score everything, against one price series."""
+    market = build_market_data(settings)
+    index = _earnings_index(corpus)
+
+    def prices(ticker: str, start: date, end: date) -> PriceWindow:
+        return market.get_ohlcv(ticker, start, end)
+
+    def earnings(ticker: str, as_of: date) -> tuple[date, ...]:
+        # STRICTLY prior. The cut is here, in the adapter, and asserted again in
+        # `score_item` — the multiplier would otherwise drop a future date silently
+        # by failing to find it in an already-truncated history, which leaves a
+        # broken adapter looking correct forever (ADR 0023).
+        return tuple(day for day in index.get(ticker, ()) if day < as_of)
+
+    return score_band(
+        [(item.forecast, item.band) for item in loaded],
+        prices=prices,
+        earnings=earnings,
+        history_days=settings.data.history_days,
+    )
+
+
+# ---------------------------------------------------------------------------
+# The report
+# ---------------------------------------------------------------------------
+def _comparisons(scores: BandScores) -> list[Comparison]:
+    out: list[Comparison] = []
+    for name in sorted({n for item in scores.items for n in item.baseline_crps}):
+        model, base, days = scores.paired(name)
+        if model:
+            out.append(compare(model, base, days, name="M.A.P.", baseline=name))
+    return out
+
+
+def _report(scores: BandScores, band: str) -> None:
+    if not scores.items:
+        raise fail(
+            f"no item of the {band} band could be scored",
+            2,
+            hint=f"unscored by reason: {scores.unscored or 'nothing was loaded'}",
+        )
+    provider, adjustment = scores.items[0].provider, scores.items[0].adjustment
+    typer.secho(f"vintage    {provider} / {adjustment}", fg=typer.colors.GREEN)
+    typer.secho(f"scored     {scores.n} items", fg=typer.colors.GREEN)
+    for reason, count in sorted(scores.unscored.items()):
+        typer.echo(f"           {count} unscored: {reason}")
+
+    typer.echo("")
+    for line in summarise(_comparisons(scores)):
+        typer.echo(f"  {line}")
+
+    realised = [item.realised_return for item in scores.items]
+    k = calibration_ratio([item.map_sigma for item in scores.items], realised)
+    typer.echo("")
+    typer.echo(
+        f"  calibration: stated sigma / realised = {k:.3f} "
+        f"({'over' if k > 1 else 'under'}-dispersed; 1.0 is calibrated)"
+    )
+
+
+def _leakage(
+    other: str,
+    corpus: Corpus,
+    ledger: Ledger,
+    runs_dir: Path,
+    settings: Settings,
+    scores: BandScores,
+) -> None:
+    """The headline number, reported only when both bands are actually finished.
+
+    A leakage estimate on a half-run band is not a preliminary version of the real
+    one, which is the whole reason this command refuses an unfinished pass. So the
+    other band is scored when it is complete and named as absent when it is not —
+    never partially.
+    """
+    wanted = {item.key for item in plan(corpus, other)}
+    resolved = ledger.resolved()
+    outstanding = len(wanted) - sum(1 for key in wanted if key in resolved)
+    if outstanding:
+        typer.echo("")
+        typer.secho(
+            f"  leakage: not reported — the {other} band has {outstanding} of "
+            f"{len(wanted)} items outstanding, and a leakage estimate on a "
+            "half-finished band is a different number, not a preliminary one",
+            fg=typer.colors.YELLOW,
+        )
+        return
+    theirs = _score(load_band(ledger, corpus, runs_dir, other), settings, corpus)
+    if not theirs.items:
+        return
+    estimate = leakage(scores.crps(), theirs.crps())
+    typer.echo("")
+    typer.secho(
+        f"  leakage: clean {estimate.clean_mean:.5f} vs {other} "
+        f"{estimate.ambiguous_mean:.5f}, difference {estimate.difference:+.5f} "
+        f"[{estimate.lower:+.5f}, {estimate.upper:+.5f}], "
+        f"n={estimate.clean_n}/{estimate.ambiguous_n}"
+        + ("  — SUGGESTS LEAKAGE" if estimate.suggests_leakage else ""),
+        fg=typer.colors.RED if estimate.suggests_leakage else typer.colors.GREEN,
+    )
+
+
+def _sensitivity(scores: BandScores, loaded: Sequence[Loaded]) -> None:
+    """The two pre-registered robustness checks, run unconditionally.
+
+    ADR 0020 and ADR 0021 both committed to reporting the primary result with and
+    without an identified subset, *regardless of what the comparison shows*, before
+    any score existed. Running them here rather than on request is what keeps that
+    a pre-registration instead of an option.
+    """
+    # Keyed on the FORECAST date, taken from the loaded pairing. Keying on the
+    # ledger's filing date would match nothing at all — a forecast opens the day
+    # after the filing it reads — and an empty subset reads as "nothing was
+    # affected" rather than as a broken partition.
+    excluded = {
+        "truncated exhibits (ADR 0020)": {i.key for i in loaded if i.entry.truncated},
+        "degeneration retries (ADR 0021)": {i.key for i in loaded if i.entry.degeneration_retry},
+    }
+    typer.echo("")
+    for label, keys in excluded.items():
+        kept = tuple(i for i in scores.items if (i.ticker, i.as_of) not in keys)
+        affected = scores.n - len(kept)
+        if not keys:
+            typer.echo(f"  sensitivity: no items in the {label} set")
+            continue
+        subset = BandScores(items=kept, unscored={})
+        typer.echo(f"  sensitivity, excluding {label} — {affected} of {scores.n} items:")
+        for line in summarise(_comparisons(subset)):
+            typer.echo(f"    {line}")

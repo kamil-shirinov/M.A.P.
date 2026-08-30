@@ -27,6 +27,40 @@ nothing broke at all:
 - an agent that expanded a document instead of compressing it, uncapped, because each agent was
   checked against its own limits and the boundary between them belonged to nobody (#21)
 
+---
+
+## The second lesson, which took three instances to see
+
+**A test that would pass under both the bug and the correct behaviour is not a test.**
+
+It is worse than no test, because it occupies the place where a real one would go and reports success
+from it. Three separate cases, none related to the others, all found by accident:
+
+| | The assertion | Why it could not fail |
+| --- | --- | --- |
+| **#7** | `chart.html` contains `cdn.plot.ly` and `tonexty` | Both strings are literals inside the vendored Plotly bundle. The file contained them whatever the code did. |
+| **#8** | the sanitiser is called *somewhere* in `src/` — a positive control | It was false, because nothing called it yet. The control that existed to prove the scan worked was itself asserting nothing. |
+| **#26** | the earnings baseline's CRPS "looks reasonable" | CRPS is dominated by the size of the realised move, so a leak and a large move are indistinguishable in it. |
+
+The repair is the same in all three, and it is not "assert harder". It is to find an input pair the bug
+and the correct behaviour **must** answer differently, and assert on the difference:
+
+> Identical history through the window, a different one afterwards, and every score **bit-identical**.
+
+That statement is false under a leak and true otherwise, with no threshold to tune and no magnitude to
+eyeball. The same shape retro-fixes the other two: interrogate the figure object rather than the rendered
+file; make the positive control assert a construction site that provably exists.
+
+**The question to ask of a new test:** *what would this print if the thing it guards were broken?* If the
+answer is "the same thing", it is decoration.
+
+A fourth arrived while this very entry was being written, in the test for it. An assertion read
+`"leakage" not in result.output` — and pytest's `tmp_path` carries the test's own name, which contains the
+word *leakage*, so the substring matched the **directory path** rather than anything the code printed.
+Finding #7 exactly, in a fixture, twenty minutes after writing the entry warning about it.
+
+---
+
 Every one of those produced output that could be read aloud in a meeting without anyone objecting. That
 is the property that makes them dangerous, and it is why this project spends so much of its effort on
 things that make wrongness *loud*: typed errors instead of sentinels, `null` rather than `0` for an
@@ -707,3 +741,54 @@ believed existed rather than against the code, and agreement with the belief rep
 agreement with reality. It is worth recording next to the others because the failure mode
 is identical and the medium is not. **A green check and a confident sentence fail the
 same way.**
+
+---
+
+## 27 · The sensitivity check that could never exclude anything
+
+`map evaluate` runs the two pre-registered robustness checks of
+[[decisions/0020-context-window-and-truncation|ADR 0020]] and
+[[decisions/0021-degeneration-retry|ADR 0021]] unconditionally — the primary result with and without the
+truncated exhibits, and with and without the degeneration retries.
+
+The partition keyed the excluded set on the ledger's `filing_date` and the scored items on the forecast's
+`as_of`. **A forecast opens the day after the filing it reads**, so the two sets could not intersect. Both
+checks would have reported *"no items in the set"* for the entire corpus, forever.
+
+An empty subset reads as **nothing was affected**, which is good news. Nothing would have failed, no count
+would have looked wrong, and two pre-registrations declared before any score existed would have been
+quietly discharged against nothing.
+
+Found by the test written for it, which is the entire argument of [[Findings & Incidents#The second lesson, which took three instances to see|the second lesson]]: the test asserted a subset of a *known* size, so it could tell "excluded 1 of 2" from "excluded 0 of 2". An assertion that the checks merely *ran* would have passed.
+
+The pairing between a ledger entry and its forecast is now carried through the loader rather than
+reconstructed from dates. **Two identifiers that are nearly the same are worse than two that are obviously
+different** — `filing_date` and `as_of` are both dates, both about the same item, one day apart, and
+comparing them type-checks.
+
+---
+
+## 28 · Three adapters, three ways to be plausibly wrong
+
+Wiring `map evaluate` meant writing the join between stored artifacts and the scoring engine. All three
+adapters had a natural implementation that is silently wrong ([[decisions/0023-scoring-adapters|ADR 0023]]).
+
+**Scanning `runs/` would have scored the wrong corpus.** That directory still holds `first-capture`,
+`first-capture-v2` and loose UUIDs from the first live forecasts — different prompts, a different horizon,
+an older schema. Several would parse. The scored set comes from the ledger, which is the reasoning that
+killed resume-by-scanning applied to the other end of the pipeline.
+
+**Two of the three "fixes" were already safe, and safe by accident** — which is its own finding:
+
+- A split between forecast and scoring re-adjusts *both* endpoints, so `SpotDriftError` already fires on
+  the recorded spot. The reachable vintage failure was elsewhere and unguarded: `ProviderChain` fails over
+  **per call**, so one ticker can be served by yfinance and the next by stooq, and the price cache is keyed
+  by `fetched_on`, so a pass spanning midnight mixes vintages.
+- A future earnings date was already dropped, because the multiplier looks each date up in an
+  already-truncated history and a future one simply is not found. **Silently.** An adapter handing over the
+  full calendar looked correct, and would have kept looking correct until the day the history stopped being
+  pre-truncated.
+
+Both are the shape from [[Guard Audit]]: *safe by construction* is a claim about code, and code changes.
+The contract now carries the as-of date, so a look-ahead is something a caller writes on purpose rather
+than something it inherits.
