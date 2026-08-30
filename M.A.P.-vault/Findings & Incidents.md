@@ -639,3 +639,38 @@ failure it detected would not have been recorded either.
 It belongs inside the `try`, where every other failure is classified. The rule that
 falls out: **a check exists to classify a failure, so it must run where failures are
 classified.** Anywhere else it is not a check, it is a new failure mode.
+
+---
+
+## 26 · The guard that compared one field of six
+
+`verify_freeze` refuses to start a corpus run when the live configuration has drifted from
+the frozen record. It had been passing for weeks. It compared the **model alias** and
+nothing else.
+
+So the frozen record said `intake.max_tokens: null` while every run since the cap was
+introduced had been configured at 2,048, and `analyst.max_visible_tokens` was never
+recorded at all. Neither value was wrong in the config — the **record** was wrong, and the
+guard whose entire job is to notice that disagreement was looking at a different field.
+
+This is [[decisions/0020-context-window-and-truncation|ADR 0020 §4]] one layer up. That
+one says a pre-flight comparing `config` to a computed number would have passed the halted
+run happily, *because both were internally consistent and neither was the server*. Here:
+the freeze held a number, the config held a different number, **and nothing ever put them
+side by side.**
+
+It now compares every field the frozen record names, and reports all mismatches at once.
+
+### What it cost to find, and what it bought
+
+Nothing, and it was luck — the drift surfaced only because writing an amendment meant
+reading the record by hand. A guard that under-checks has no failure mode of its own. It
+just keeps returning green.
+
+That is the reason for [[Guard Audit]]: one pass over every check in `src/`, asking of each
+what its name implies against what it verifies. **Fifteen more gaps, and eleven guards
+confirmed sound.** The three recurring shapes are worth more than the list:
+
+1. **Presence standing in for identity** — a file exists where "this run's audit trail" is claimed.
+2. **A declared number trusted instead of the thing measured** — this incident's exact shape.
+3. **Scope narrower than the sentence** — "this band" without a band filter.
