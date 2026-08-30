@@ -65,6 +65,7 @@ class LLMAgent:
         version: str | None = None,
         context_tokens: int | None = None,
         upstream: str | None = None,
+        degeneration_penalty: float | None = None,
     ) -> None:
         self._template = template or self.TEMPLATE
         self._version = version or self.VERSION
@@ -76,6 +77,7 @@ class LLMAgent:
         self._stage = stage
         self._context_tokens = context_tokens
         self._upstream = upstream
+        self._degeneration_penalty = degeneration_penalty
 
     @property
     def model(self) -> ModelInfo:
@@ -85,6 +87,15 @@ class LLMAgent:
     @property
     def sampling(self) -> SamplingParams:
         return self._sampling
+
+    @property
+    def retry_sampling(self) -> SamplingParams:
+        """The configured parameters plus the degeneration penalty (ADR 0021).
+
+        Derived rather than configured separately, so a retry can never silently
+        differ from the first attempt in anything but the penalty.
+        """
+        return self._sampling.model_copy(update={"frequency_penalty": self._degeneration_penalty})
 
     @property
     def stage(self) -> str:
@@ -108,7 +119,7 @@ class LLMAgent:
     ) -> RenderedPrompt:
         return self._prompts.render(template, version, trusted=trusted, untrusted=untrusted)
 
-    def _assert_fits(self, prompt: RenderedPrompt) -> None:
+    def _assert_fits(self, prompt: RenderedPrompt, sampling: SamplingParams) -> None:
         """Refuse an oversized prompt here, where its origin is still known.
 
         The server answers an over-long request with an HTTP 400 that says only
@@ -118,7 +129,7 @@ class LLMAgent:
         if self._context_tokens is None:
             return
         tokens = estimate_tokens(sum(len(m.content) for m in prompt.messages))
-        allowance = prompt_allowance(self._context_tokens, self._sampling.max_tokens)
+        allowance = prompt_allowance(self._context_tokens, sampling.max_tokens)
         if tokens > allowance:
             raise PromptTooLargeError(
                 self._stage, self._upstream, tokens, allowance, self._context_tokens
@@ -131,11 +142,32 @@ class LLMAgent:
         json_schema: Mapping[str, Any] | None = None,
         attempt: int = 0,
     ) -> LLMResponse:
-        self._assert_fits(prompt)
+        """One call, plus one degeneration retry where a penalty is configured.
+
+        Stopping at the token cap is a decoding loop far more often than genuine
+        length: the two observed cases were 97% and 60% repeated lines, and both
+        completed normally under a frequency penalty (ADR 0021). One retry, then
+        the caller's truncation check fails the item — a second identical loop is
+        no evidence a third would differ, and the penalty is a deviation from the
+        corpus-wide sampling that must stay rare enough to report.
+        """
+        response = self._dispatch(prompt, self._sampling, json_schema, attempt)
+        if self._degeneration_penalty is None or response.finish_reason != "length":
+            return response
+        return self._dispatch(prompt, self.retry_sampling, json_schema, attempt + 1)
+
+    def _dispatch(
+        self,
+        prompt: RenderedPrompt,
+        sampling: SamplingParams,
+        json_schema: Mapping[str, Any] | None,
+        attempt: int,
+    ) -> LLMResponse:
+        self._assert_fits(prompt, sampling)
         response = self._provider.complete(
             model=self._model,
             prompt=prompt,
-            sampling=self._sampling,
+            sampling=sampling,
             json_schema=json_schema,
             attempt=attempt,
         )
@@ -149,6 +181,10 @@ class LLMAgent:
             data={
                 "template": f"{prompt.template_name}.{prompt.template_version}",
                 "template_sha256": prompt.template_sha256,
+                # The sampling that produced THIS response, not the agent's
+                # configured sampling. A degeneration retry differs from its own
+                # first attempt, and without this the trace cannot show which.
+                "sampling": sampling.model_dump(),
                 "messages": [message.model_dump() for message in prompt.messages],
                 "response": response.text,
                 "model_id": response.model_id,

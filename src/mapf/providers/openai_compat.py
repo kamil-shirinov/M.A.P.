@@ -229,6 +229,8 @@ class OpenAICompatProvider:
             body["top_p"] = sampling.top_p
         if sampling.max_tokens is not None:
             body["max_tokens"] = sampling.max_tokens
+        if sampling.frequency_penalty is not None:
+            body["frequency_penalty"] = sampling.frequency_penalty
         if json_schema is not None:
             body["response_format"] = {
                 "type": "json_schema",

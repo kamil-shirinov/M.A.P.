@@ -39,9 +39,7 @@ class FakeFilings:
     def earnings_dates(self, ticker: str, start: date, end: date) -> tuple[date, ...]:
         return tuple(f.filed for f in self.earnings_filings(ticker, start, end))
 
-    def earnings_filings(
-        self, ticker: str, start: date, end: date
-    ) -> tuple[EarningsFiling, ...]:
+    def earnings_filings(self, ticker: str, start: date, end: date) -> tuple[EarningsFiling, ...]:
         self.calls.append((ticker, start, end))
         band = "clean" if start.year == 2026 else "ambiguous"
         n = self.overrides.get((ticker, band), 3 if band == "clean" else 6)
@@ -200,7 +198,11 @@ def test_a_rejected_ticker_is_replaced_by_the_next_name_in_sequence() -> None:
     victim = ordering[2]
     corpus = _select(liquidity=FakeLiquidity(missing={victim}), target_tickers=5)
     assert [p.ticker for p in corpus.accepted] == [
-        ordering[0], ordering[1], ordering[3], ordering[4], ordering[5],
+        ordering[0],
+        ordering[1],
+        ordering[3],
+        ordering[4],
+        ordering[5],
     ]
 
 
@@ -378,9 +380,7 @@ class TaggedFilings(FakeFilings):
         # onto one accession and the ownership assertion would fail intermittently.
         self._ids: dict[str, int] = {}
 
-    def earnings_filings(
-        self, ticker: str, start: date, end: date
-    ) -> tuple[EarningsFiling, ...]:
+    def earnings_filings(self, ticker: str, start: date, end: date) -> tuple[EarningsFiling, ...]:
         found = super().earnings_filings(ticker, start, end)
         out = []
         for i, f in enumerate(found):
@@ -420,9 +420,7 @@ def test_a_replacement_must_clear_the_exhibit_check_too() -> None:
 
 
 def test_without_an_exhibit_check_selection_is_unchanged() -> None:
-    assert _select(target_tickers=5).accepted == _select(
-        target_tickers=5, exhibits=None
-    ).accepted
+    assert _select(target_tickers=5).accepted == _select(target_tickers=5, exhibits=None).accepted
 
 
 # ---------------------------------------------------------------------------
@@ -499,9 +497,7 @@ def test_two_filings_on_one_date_become_one_window() -> None:
             self, ticker: str, start: date, end: date
         ) -> tuple[EarningsFiling, ...]:
             base = super().earnings_filings(ticker, start, end)
-            extra = EarningsFiling(
-                accession="0000000009-26-999999", cik=1, filed=base[0].filed
-            )
+            extra = EarningsFiling(accession="0000000009-26-999999", cik=1, filed=base[0].filed)
             return (*base, extra)
 
     corpus = _select(filings=SameDay(), target_tickers=1, match_band_counts=False)

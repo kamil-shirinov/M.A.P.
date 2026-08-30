@@ -116,8 +116,14 @@ class ModelSettings(_Section):
     @property
     def visible_budget(self) -> int | None:
         return self.max_visible_tokens if self.max_visible_tokens is not None else self.max_tokens
+
     top_p: float | None = Field(default=None, gt=0.0, le=1.0)
     max_tokens: int | None = Field(default=None, ge=1)
+    # Applied only when this agent stops at its cap, and only for one retry
+    # (ADR 0021). Unset means no retry: the item fails on a truncated output
+    # instead, which is the right behaviour for an agent whose output is schema-
+    # constrained or already sampled above zero.
+    degeneration_penalty: float | None = Field(default=None, ge=0.0, le=2.0)
 
 
 class ModelsSettings(_Section):
@@ -252,9 +258,7 @@ class Settings(BaseSettings):
             # A prompt of at least a few hundred tokens always exists; requiring
             # strict headroom rather than mere inequality keeps the check honest.
             if spec.max_tokens + _MIN_PROMPT_TOKENS > spec.context_tokens:
-                raise UnreachableContextBudgetError(
-                    agent, spec.max_tokens, spec.context_tokens
-                )
+                raise UnreachableContextBudgetError(agent, spec.max_tokens, spec.context_tokens)
         return self
 
     @model_validator(mode="after")

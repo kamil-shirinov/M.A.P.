@@ -91,7 +91,11 @@ def _record(agent: LLMAgent, trace: CountingTrace) -> AgentRecord:
         fingerprint=agent.model.fingerprint,
         fingerprint_source=agent.model.fingerprint_source,
         fingerprint_fields=agent.model.fingerprint_fields,
-        sampling=agent.sampling,
+        # What ran, not what was configured: a degeneration retry departs from
+        # the configured parameters, and the manifest must name the ones that
+        # produced this response (ADR 0021).
+        sampling=trace.sampling.get(stage, agent.sampling),
+        degeneration_retry=stage in trace.degeneration_retries,
         template_name=name,
         template_version=version,
         template_sha256=digest,
@@ -103,10 +107,23 @@ def _record(agent: LLMAgent, trace: CountingTrace) -> AgentRecord:
     )
 
 
+def _refuse_if_truncated(agents: Agents, trace: CountingTrace) -> None:
+    """Stop as soon as any agent hands on a fragment.
+
+    A fragment presented as a whole is worse than a missing item: it produces a
+    schema-valid forecast, scored beside forecasts built on complete summaries.
+
+    Checked after *each* agent rather than once at the end, so an item that cannot
+    succeed fails before paying for two more model swaps — minutes, on hardware
+    that loads one model at a time.
+    """
+    if trace.truncated_output:
+        agent = sorted(trace.truncated_output)[0]
+        raise OutputTruncatedError(agent, _cap_of(agents, agent))
+
+
 def _cap_of(agents: Agents, stage: str) -> int:
-    spec = {"intake": agents.intake, "analyst": agents.analyst}.get(
-        stage, agents.structuralist
-    )
+    spec = {"intake": agents.intake, "analyst": agents.analyst}.get(stage, agents.structuralist)
     return spec.sampling.max_tokens or 0
 
 
@@ -146,6 +163,7 @@ def execute(
     facts = agents.intake.run(
         IntakeRequest(ticker=request.ticker, as_of_date=as_of_date, documents=request.documents)
     )
+    _refuse_if_truncated(agents, trace)
     narrative = agents.analyst.run(
         AnalystRequest(
             ticker=request.ticker,
@@ -154,13 +172,9 @@ def execute(
             facts=facts,
         )
     )
+    _refuse_if_truncated(agents, trace)
     scenarios = agents.structuralist.run(StructuralistRequest(narrative=narrative))
-
-    # A fragment presented as a whole is worse than a missing item: it produces a
-    # schema-valid forecast scored beside forecasts built on complete summaries.
-    if trace.truncated_output:
-        agent = sorted(trace.truncated_output)[0]
-        raise OutputTruncatedError(agent, _cap_of(agents, agent))
+    _refuse_if_truncated(agents, trace)
 
     # 3. Assemble. The model authored `scenarios` and nothing else (ADR 0002) —
     #    every other field here is something the pipeline already knew.

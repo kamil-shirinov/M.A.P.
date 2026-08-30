@@ -85,6 +85,20 @@ max_tokens = 2048
 # number is checked against the server, never trusted (ADR 0020 §4).
 context_tokens = 32768
 
+# Intake stopping at its cap is a DECODING LOOP, not a long document (ADR 0021).
+# Measured on the two items that hit it: 757 lines of which 22 were unique, and 53
+# of which 21 were. Under a frequency penalty of 0.3 both completed normally, at
+# 350 and 1,171 tokens. Applied ONLY as a retry after a truncated first attempt,
+# never on a first call, because at 0.3 it also changes every well-behaved item --
+# one nearly doubled in length, another shrank a fifth. Rescuing 2 items by
+# perturbing the other 354 is the wrong trade; rescuing them without touching the
+# 354 is not.
+#
+# Deliberately unset for the analyst and the structuralist. The analyst already
+# samples at 0.7, which breaks loops on its own, and the structuralist decodes
+# against a schema that makes an unbounded repeat unreachable.
+degeneration_penalty = 0.3
+
 [models.analyst]
 alias = "google/gemma-4-12b-qat"
 temperature = 0.7            # the one agent where sampling diversity is wanted

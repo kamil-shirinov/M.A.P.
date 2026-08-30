@@ -129,9 +129,7 @@ def parse_reported_context(body: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _accepts(
-    provider: LLMProvider, model: ModelInfo, tokens: int
-) -> tuple[bool, str | None]:
+def _accepts(provider: LLMProvider, model: ModelInfo, tokens: int) -> tuple[bool, str | None]:
     """Whether a prompt of roughly `tokens` is accepted, and any rejection body."""
     prompt = RenderedPrompt(
         template_name="context_probe",

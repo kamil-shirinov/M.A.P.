@@ -132,6 +132,9 @@ def build_run(
             # that produced it rather than arriving as an anonymous HTTP 400.
             "context_tokens": registry.spec(stage).context_tokens,  # type: ignore[arg-type]
             "upstream": registry.spec(stage).upstream,  # type: ignore[arg-type]
+            # None for every agent that has no penalty configured, which disables
+            # the retry entirely rather than applying a zero penalty (ADR 0021).
+            "degeneration_penalty": registry.spec(stage).degeneration_penalty,  # type: ignore[arg-type]
         }
 
     agents = Agents(

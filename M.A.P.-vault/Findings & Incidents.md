@@ -539,7 +539,7 @@ found a real defect *and* a false alarm — and the false alarm was itself a rea
 
 ---
 
-## 23 · Not verbose — degenerate. And a determinism claim that did not hold
+## 23 · Not verbose — degenerate
 
 Two items were failing intake at its cap. The question was whether the model was genuinely
 verbose on those documents, in which case a bigger cap would help, or looping, in which case it
@@ -580,14 +580,62 @@ length, another shrank by a fifth, and no normal output survived unchanged. Resc
 perturbing the inputs to the other 354 is the wrong trade; applying it only as a retry when
 degeneration is detected is not.
 
-### A determinism claim that did not hold
+The fix is [[decisions/0021-degeneration-retry|ADR 0021]]: a retry, not a default.
+See #24 for the determinism gap the replay exposed on the way.
 
-The replay was run at temperature 0 against the recorded prompts, so every output should have
-reproduced byte for byte. **Two of five did.** STZ and one normal item matched exactly; FCX and two
-others came back close but not identical — FCX produced 53 lines both times, 21 unique then 22.
+---
 
-`CLAUDE.md` §6 asks for "determinism where available" and the manifest deliberately records sampling
-as *requested* rather than as honoured. This is the first direct measurement of the gap: on this
-backend, **temperature 0 is near-deterministic, not deterministic**. Any claim of bit-identical
-reproducibility from a re-run is unsupported; the defensible claim is that the cache makes replay
-exact, and that a genuine re-run is only approximately so.
+## 24 · Four reproducibility claims. Three hold; one does not, and it is measured
+
+Replaying the two looping items ran the **exact recorded prompts** back through the
+server at **temperature 0**. Every output should have come back byte for byte.
+**Two of five did.** STZ and one normal item matched exactly; FCX and two others came
+back close but not identical — FCX produced 53 lines both times, 21 unique then 22.
+
+The value is not the defect. It is that "reproducible" was doing the work of four
+separate claims, and only three of them survive contact with a measurement:
+
+| claim | what it asserts | verdict |
+| --- | --- | --- |
+| **pre-registered** | the corpus was fixed before any result was seen | **HOLDS** — commit order proves it |
+| **auditable** | every prompt and every response is preserved | **HOLDS** — now guarded (#22) |
+| **replayable from cache** | re-reading a run returns byte-identical output | **HOLDS** |
+| **re-derivable** | a cold cache reproduces the same forecasts | **DOES NOT HOLD** — measured |
+
+The three that hold are the three that were ever actually being claimed; the fourth
+is the one a reader supplies for themselves unless it is explicitly disclaimed. So
+the README disclaims it, in these words:
+
+> Temperature 0 is **near-deterministic, not deterministic**, on this backend —
+> measured: 2 of 5 replays of identical prompts returned byte-identical output. A
+> re-run from a cold cache will produce **similar** forecasts, not identical ones.
+> What is exact is replay **from the cache**, which is why the cache is provenance
+> infrastructure and not an optimisation.
+
+`SamplingParams` already carried the honest version in a docstring — *"many local
+backends ignore both; recording the request is honest, claiming reproducibility from
+it would not be"* — written before any evidence existed. **It was right, and it was
+also unenforced prose sitting next to a README that implied the stronger claim.** A
+caveat in a docstring does not reach the person reading the abstract.
+
+The stronger sentence is the specific one. "Reproducible" invites the question; "2 of
+5 replays byte-identical" answers it, and is the one that can be defended in a room.
+
+---
+
+## 25 · A check in the wrong block turns one failed item into a dead run
+
+The artifact verification of #22 was first written in the `try/except/else` of the
+runner's attempt loop — in the **`else`** clause, which reads naturally: *run, and if
+nothing went wrong, verify.*
+
+`else` runs **outside** the handlers. A `MissingArtifactError` raised there is caught
+by no `except` in that function, so instead of failing one item and continuing, it
+propagates through the loop, past the ledger append, and out of the run. **The guard
+against losing 56 traces would have ended the whole night on the first item that
+tripped it** — and, worse, ended it *before* the ledger line was written, so the
+failure it detected would not have been recorded either.
+
+It belongs inside the `try`, where every other failure is classified. The rule that
+falls out: **a check exists to classify a failure, so it must run where failures are
+classified.** Anywhere else it is not a check, it is a new failure mode.

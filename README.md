@@ -41,11 +41,24 @@ from the SEC's `company_tickers_exchange.json` (~10k US-listed companies). Non-U
 listings work only if you already know the suffixed ticker (`.L`, `.TO`, `.DE`); they do
 not appear in name search. There is no global name coverage.
 
-**Determinism holds where the backend honours it.** Agents 1 and 3 request
-`temperature=0` and a fixed seed, and every run records the seed, sampling parameters and
-model fingerprint. Many local inference servers ignore `seed`, and some do not
-implement `temperature=0` deterministically. The manifest records what was *requested*.
-This is reproducible-where-supported, not reproducible.
+**"Reproducible" is four separate claims here. Three hold; the fourth does not.**
+
+| claim | verdict |
+| --- | --- |
+| **Pre-registered** — the corpus, the bands and every threshold were fixed before any result was seen | **holds**, and the commit order proves it |
+| **Auditable** — every prompt and every raw response is preserved in `runs/<run_id>/trace.jsonl` | **holds**; a run is refused if any trace is missing or empty |
+| **Replayable from cache** — re-reading a completed run returns byte-identical output | **holds** |
+| **Re-derivable** — a cold cache reproduces the same forecasts | **does not hold** |
+
+Agents 1 and 3 request `temperature=0` and a fixed seed, and every run records the
+seed, the sampling parameters and the model fingerprint *as requested* — many local
+inference servers ignore both. **Temperature 0 is near-deterministic, not
+deterministic, on this backend, and that is measured rather than assumed: replaying
+five identical recorded prompts returned byte-identical output twice out of five.**
+
+So a re-run from a cold cache produces *similar* forecasts, not identical ones. What
+is exact is replay **from the cache** — which is why the cache is provenance
+infrastructure and not an optimisation.
 
 The three-agent architecture is a **hypothesis**, not a result. Whether it beats a
 single-agent baseline is an open question that Phase 3's ablation study exists to answer.

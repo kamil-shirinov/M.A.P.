@@ -63,11 +63,7 @@ def _serving(
 # ---------------------------------------------------------------------------
 def test_the_exhibit_is_fetched_not_the_8k_body() -> None:
     """The body is a cover page; the numbers are in EX-99.1."""
-    adapter = _adapter(
-        _serving(
-            [("8-K", "aapl-8k.htm"), ("EX-99.1", "ex-991.htm")]
-        )
-    )
+    adapter = _adapter(_serving([("8-K", "aapl-8k.htm"), ("EX-99.1", "ex-991.htm")]))
     document = adapter.fetch(FILING)
     assert document.source.endswith("ex-991.htm")
     assert "Revenue rose" in document.text
@@ -79,11 +75,7 @@ def test_a_bare_ex_99_is_accepted_when_there_is_no_ex_99_1() -> None:
 
 
 def test_ex_99_1_is_preferred_over_a_bare_ex_99() -> None:
-    adapter = _adapter(
-        _serving(
-            [("EX-99", "ex99.htm"), ("EX-99.1", "ex-991.htm")]
-        )
-    )
+    adapter = _adapter(_serving([("EX-99", "ex99.htm"), ("EX-99.1", "ex-991.htm")]))
     assert adapter.fetch(FILING).source.endswith("ex-991.htm")
 
 
@@ -96,9 +88,7 @@ def test_a_filing_with_no_exhibit_raises_missing_not_generic() -> None:
 
 def test_a_stub_exhibit_is_rejected_as_missing() -> None:
     """A cover page or a logo would otherwise produce a forecast from nothing."""
-    adapter = _adapter(
-        _serving([("EX-99.1", "ex-991.htm")], b"<p>See attached.</p>")
-    )
+    adapter = _adapter(_serving([("EX-99.1", "ex-991.htm")], b"<p>See attached.</p>"))
     with pytest.raises(MissingExhibitError, match="characters"):
         adapter.fetch(FILING)
 
@@ -126,9 +116,7 @@ def test_the_document_id_hashes_the_bytes_as_they_arrived() -> None:
 
 
 def test_a_plain_text_exhibit_is_not_html_stripped() -> None:
-    adapter = _adapter(
-        _serving([("EX-99.1", "e.txt")], b"Net income " + b"rose. " * 40)
-    )
+    adapter = _adapter(_serving([("EX-99.1", "e.txt")], b"Net income " + b"rose. " * 40))
     assert "Net income" in adapter.fetch(FILING).text
 
 

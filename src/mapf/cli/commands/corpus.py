@@ -179,8 +179,7 @@ def corpus_run(
                     return (document,)
                 TRUNCATION_NOTES[item.key] = record.removed_chars
                 typer.secho(
-                    f"           truncated {item.ticker} {item.filing_date}: "
-                    f"{record.describe()}",
+                    f"           truncated {item.ticker} {item.filing_date}: {record.describe()}",
                     fg=typer.colors.YELLOW,
                 )
                 # The id still hashes the bytes EDGAR served (ADR 0005); truncation
@@ -197,9 +196,9 @@ def corpus_run(
                     resolved={str(k): v for k, v in models.items()},
                     run_id=run_id,
                 )
+
             typer.echo(
-                f"start      band={band} items={len(remaining)} "
-                f"vintage={vintage} charts=off"
+                f"start      band={band} items={len(remaining)} vintage={vintage} charts=off"
             )
             health = run_band(
                 items,
@@ -227,12 +226,17 @@ def corpus_run(
         raise handle(error) from error
 
 
-def _progress(
-    index: int, total: int, item: CorpusItem, entry: LedgerEntry, health: Health
-) -> None:
+def _progress(index: int, total: int, item: CorpusItem, entry: LedgerEntry, health: Health) -> None:
     """One line per item. This is what gets watched for twelve nights."""
     ok = entry.status == "complete"
     outcome = "ok" if ok else f"FAIL:{entry.reason}"
+    if entry.degeneration_retry:
+        typer.secho(
+            f"           NOTE {item.ticker} {item.filing_date}: "
+            f"{entry.retried_agents} looped at its cap and was re-run once under a "
+            f"frequency penalty — this item is in the sensitivity partition",
+            fg=typer.colors.YELLOW,
+        )
     if entry.output_truncated:
         typer.secho(
             f"           WARNING {item.ticker} {item.filing_date}: "
@@ -246,7 +250,8 @@ def _progress(
         f"done={health.completed} fail={health.failed} "
         f"unparse={health.unparseable} diverge={health.divergent} "
         f"ungrounded={health.ungrounded_numerals} flat={health.degenerate_spread} "
-        f"exhausted={health.budget_exhausted} cutoff={health.output_truncated}",
+        f"exhausted={health.budget_exhausted} cutoff={health.output_truncated} "
+        f"retried={health.degeneration_retry}",
         fg=typer.colors.GREEN if ok else typer.colors.RED,
     )
 
@@ -334,9 +339,7 @@ def _preflight(
             for row in rows[:10]:
                 typer.echo(f"           {row}")
     if not missing and not changed and not unrecorded:
-        typer.secho(
-            f"exhibits   all {len(items)} match the frozen hashes", fg=typer.colors.GREEN
-        )
+        typer.secho(f"exhibits   all {len(items)} match the frozen hashes", fg=typer.colors.GREEN)
     typer.secho("check      pre-flight complete; no inference ran", fg=typer.colors.GREEN)
     if missing or changed:
         raise typer.Exit(6)
@@ -387,8 +390,7 @@ def _report_fit(
 
     if truncated:
         typer.secho(
-            f"tokens     {len(truncated)} exhibits will be truncated by the frozen "
-            f"rule (ADR 0020)",
+            f"tokens     {len(truncated)} exhibits will be truncated by the frozen rule (ADR 0020)",
             fg=typer.colors.YELLOW,
         )
         for label, removed in sorted(truncated, key=lambda r: -r[1])[:15]:

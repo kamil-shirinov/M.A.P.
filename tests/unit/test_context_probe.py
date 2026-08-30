@@ -170,17 +170,13 @@ def test_budget_exhaustion_on_the_probe_means_the_prompt_was_accepted() -> None:
     answer, which the provider reports as exhaustion. Reaching generation at all
     proves the prompt fitted — reading it as a rejection made the probe report
     TOO SMALL for a correctly configured server."""
-    report = probe_context(
-        _Server(16384, reasons=True), MODEL, agent="analyst", configured=16384
-    )
+    report = probe_context(_Server(16384, reasons=True), MODEL, agent="analyst", configured=16384)
     assert report.agrees is True
     assert report.accepts_under is True
 
 
 def test_a_reasoning_model_below_the_window_still_reads_as_too_small() -> None:
-    report = probe_context(
-        _Server(4096, reasons=True), MODEL, agent="analyst", configured=16384
-    )
+    report = probe_context(_Server(4096, reasons=True), MODEL, agent="analyst", configured=16384)
     assert report.agrees is False
 
 
@@ -188,9 +184,7 @@ def test_a_reasoning_model_below_the_window_still_reads_as_too_small() -> None:
 # The optional refinement
 # ---------------------------------------------------------------------------
 def test_a_named_number_is_shown_when_present() -> None:
-    report = probe_context(
-        _Server(8192, body=REAL_BODY), MODEL, agent="intake", configured=32768
-    )
+    report = probe_context(_Server(8192, body=REAL_BODY), MODEL, agent="intake", configured=32768)
     assert report.reported == 8192
     assert "names 8,192" in report.describe()
 
@@ -218,9 +212,7 @@ def test_the_report_names_the_agent() -> None:
 
 @pytest.mark.parametrize("configured", [512, 8192, 16384, 32768, 65536])
 def test_the_bracket_holds_at_any_configured_size(configured: int) -> None:
-    assert probe_context(
-        _Server(configured), MODEL, agent="a", configured=configured
-    ).agrees
+    assert probe_context(_Server(configured), MODEL, agent="a", configured=configured).agrees
     assert not probe_context(
         _Server(configured // 2), MODEL, agent="a", configured=configured
     ).agrees

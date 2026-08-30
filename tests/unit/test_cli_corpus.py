@@ -180,9 +180,7 @@ def test_a_resume_reports_what_it_skips_and_why(tmp_path: Path) -> None:
     """An unintended resume must be visible rather than silent."""
     ledger = Ledger(tmp_path / "ledger.jsonl")
     ledger.append(
-        LedgerEntry(
-            ticker="AAPL", band="clean", filing_date=date(2026, 2, 1), status="complete"
-        )
+        LedgerEntry(ticker="AAPL", band="clean", filing_date=date(2026, 2, 1), status="complete")
     )
     ledger.append(
         LedgerEntry(
@@ -293,9 +291,7 @@ def test_the_run_reports_the_pinned_vintage_and_that_charts_are_off(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _stub_infra(monkeypatch)
-    monkeypatch.setattr(
-        "mapf.cli.commands.corpus.run_band", lambda *a, **k: Health(completed=2)
-    )
+    monkeypatch.setattr("mapf.cli.commands.corpus.run_band", lambda *a, **k: Health(completed=2))
     result = _invoke(tmp_path)
     assert "vintage=2026-08-14" in result.output
     assert "charts=off" in result.output
@@ -469,9 +465,7 @@ def test_check_prints_progress_on_a_long_corpus(
     frozen = _frozen(tmp_path)
     record = json.loads(frozen.read_text())
     plan_ = record["corpus"]["accepted"][0]["filings"][0]
-    days = [f"2026-02-{d:02d}" for d in range(1, 29)] + [
-        f"2026-03-{d:02d}" for d in range(1, 25)
-    ]
+    days = [f"2026-02-{d:02d}" for d in range(1, 29)] + [f"2026-03-{d:02d}" for d in range(1, 25)]
     plan_["dates"] = days
     plan_["accessions"] = [f"0000000001-26-{i:06d}" for i in range(len(days))]
     record["exhibits"]["by_accession"] = {
@@ -490,17 +484,15 @@ def test_check_refuses_when_the_server_context_is_smaller_than_configured(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The exact failure of the first corpus run, now caught before it starts."""
-    _check_with(monkeypatch, "sha256:" + "d" * 64)   # re-stubs the provider
-    _stub_infra(monkeypatch, window=8192)           # so this must come after
+    _check_with(monkeypatch, "sha256:" + "d" * 64)  # re-stubs the provider
+    _stub_infra(monkeypatch, window=8192)  # so this must come after
     result = _invoke(tmp_path, "--check")
     assert result.exit_code != 0
     assert "TOO SMALL" in result.output
     assert "do not match the configuration" in result.output
 
 
-def test_check_reports_each_agents_context(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_check_reports_each_agents_context(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _check_with(monkeypatch, "sha256:" + "d" * 64)
     result = _invoke(tmp_path, "--check")
     for agent in ("intake", "analyst", "structuralist"):
@@ -516,7 +508,7 @@ def test_check_reports_truncation_rather_than_refusing(
     record = json.loads(frozen.read_text())
     for spec in record["exhibits"]["by_accession"].values():
         spec["document_id"] = "sha256:" + "d" * 64
-        spec["chars"] = 220_000          # BXP-sized
+        spec["chars"] = 220_000  # BXP-sized
     frozen.write_text(json.dumps(record), encoding="utf-8")
     _check_with(monkeypatch, "sha256:" + "d" * 64)
     result = _invoke(tmp_path, "--check", frozen=frozen)
@@ -555,7 +547,7 @@ def test_an_oversized_exhibit_is_truncated_before_the_pipeline_sees_it(
 
     TRUNCATION_NOTES.clear()
     _stub_infra(monkeypatch)
-    huge = "Revenue rose to $124.3 billion. " * 8000     # ~250,000 chars
+    huge = "Revenue rose to $124.3 billion. " * 8000  # ~250,000 chars
 
     def fake_fetch(self, filing):  # type: ignore[no-untyped-def]
         return Document(
@@ -683,3 +675,32 @@ def test_an_agent_cut_off_mid_output_is_warned_per_item(
     assert "WARNING STZ" in out
     assert "intake stopped at its token cap" in out
     assert "cutoff=1" in out
+
+
+def test_a_rescued_item_is_named_per_item_as_it_happens(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """These items sampled differently from the other 354 (ADR 0021). The
+    pre-registered sensitivity check partitions on them, so which ones they are
+    must be visible while the run happens rather than reconstructed afterwards."""
+    from mapf.cli.commands.corpus import _progress
+
+    _progress(
+        2,
+        356,
+        CorpusItem("STZ", "clean", date(2026, 1, 7)),
+        LedgerEntry(
+            ticker="STZ",
+            band="clean",
+            filing_date=date(2026, 1, 7),
+            status="complete",
+            degeneration_retry=True,
+            retried_agents="intake",
+        ),
+        Health(completed=1, degeneration_retry=1),
+    )
+    out = capsys.readouterr().out
+    assert "NOTE STZ" in out
+    assert "intake looped at its cap" in out
+    assert "sensitivity partition" in out
+    assert "retried=1" in out

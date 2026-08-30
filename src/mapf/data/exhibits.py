@@ -48,9 +48,7 @@ DOCUMENT_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{segment}/{name}"
 EXHIBIT_TYPES = ("EX-99.1", "EX-99")
 # Tags arrive HTML-escaped inside the header page, so it is unescaped before this
 # runs. One <DOCUMENT> block per filed document.
-_DOCUMENT_RE = re.compile(
-    r"<TYPE>(?P<type>[^\n<]+).*?<FILENAME>(?P<name>[^\n<]+)", re.DOTALL
-)
+_DOCUMENT_RE = re.compile(r"<TYPE>(?P<type>[^\n<]+).*?<FILENAME>(?P<name>[^\n<]+)", re.DOTALL)
 _SKIP_TAGS = frozenset({"script", "style", "head"})
 MIN_EXHIBIT_CHARS = 200
 
@@ -94,9 +92,7 @@ def html_to_text(raw: bytes) -> str:
 class EdgarExhibits:
     """Fetches EX-99.1 for a filing and returns it as an untrusted `Document`."""
 
-    def __init__(
-        self, *, user_agent: str, client: httpx.Client, throttle: Throttle
-    ) -> None:
+    def __init__(self, *, user_agent: str, client: httpx.Client, throttle: Throttle) -> None:
         self._user_agent = user_agent
         self._client = client
         self._throttle = throttle
@@ -115,12 +111,12 @@ class EdgarExhibits:
                 f"{filing.accession} carries no {'/'.join(EXHIBIT_TYPES)} exhibit"
             )
 
-        url = DOCUMENT_URL.format(
-            cik=filing.cik, segment=filing.path_segment, name=name
-        )
+        url = DOCUMENT_URL.format(cik=filing.cik, segment=filing.path_segment, name=name)
         raw = self._get(url).content
-        text = html_to_text(raw) if name.lower().endswith((".htm", ".html")) else (
-            raw.decode("utf-8", errors="replace")
+        text = (
+            html_to_text(raw)
+            if name.lower().endswith((".htm", ".html"))
+            else (raw.decode("utf-8", errors="replace"))
         )
         if len(text.strip()) < MIN_EXHIBIT_CHARS:
             # A cover page or a stub graphic. Feeding it on would produce a
@@ -129,9 +125,7 @@ class EdgarExhibits:
                 f"{filing.accession} exhibit {name} held {len(text.strip())} characters"
             )
 
-        _logger.debug(
-            "exhibit_fetched", accession=filing.accession, name=name, chars=len(text)
-        )
+        _logger.debug("exhibit_fetched", accession=filing.accession, name=name, chars=len(text))
         # The id hashes the bytes as they arrived (ADR 0005), so it identifies the
         # exhibit rather than our rendering of it.
         return Document(

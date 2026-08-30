@@ -94,9 +94,7 @@ def test_an_unfinished_band_is_refused(tmp_path: Path) -> None:
 def test_a_partially_finished_band_is_still_refused(tmp_path: Path) -> None:
     ledger = Ledger(tmp_path / "ledger.jsonl")
     ledger.append(
-        LedgerEntry(
-            ticker="AAPL", band="clean", filing_date=date(2026, 2, 1), status="complete"
-        )
+        LedgerEntry(ticker="AAPL", band="clean", filing_date=date(2026, 2, 1), status="complete")
     )
     result = _invoke(tmp_path)
     assert result.exit_code == 8
@@ -106,9 +104,7 @@ def test_a_declared_single_pass_is_accepted(tmp_path: Path) -> None:
     """A deliberate stop is a legitimate outcome — provided it was declared."""
     ledger = Ledger(tmp_path / "ledger.jsonl")
     ledger.append(
-        LedgerEntry(
-            ticker="AAPL", band="clean", filing_date=date(2026, 2, 1), status="complete"
-        )
+        LedgerEntry(ticker="AAPL", band="clean", filing_date=date(2026, 2, 1), status="complete")
     )
     result = _invoke(tmp_path, "--declared", "clean_half_1")
     assert result.exit_code == 0

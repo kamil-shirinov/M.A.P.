@@ -189,9 +189,7 @@ def _fit(
         ("garch", lambda: garch(prior, horizon_days=horizon_days)),
         (
             "earnings_scaled_random_walk",
-            lambda: earnings_scaled_random_walk(
-                prior, past_earnings, horizon_days=horizon_days
-            ),
+            lambda: earnings_scaled_random_walk(prior, past_earnings, horizon_days=horizon_days),
         ),
     )
     for name, build in builders:

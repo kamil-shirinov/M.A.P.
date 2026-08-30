@@ -38,9 +38,7 @@ def test_intake_output_fits_the_analyst_window() -> None:
     s = load()
     produced = s.models.intake.visible_budget
     assert produced is not None
-    allowance = prompt_allowance(
-        s.models.analyst.context_tokens, s.models.analyst.max_tokens
-    )
+    allowance = prompt_allowance(s.models.analyst.context_tokens, s.models.analyst.max_tokens)
     assert produced + PROMPT_OVERHEAD["analyst"] <= allowance
 
 
@@ -160,7 +158,7 @@ def test_raising_the_downstream_window_also_resolves_it(tmp_path: Path) -> None:
 
 def test_an_unbounded_output_is_skipped_rather_than_assumed_safe(tmp_path: Path) -> None:
     """It cannot be checked at startup, so the pre-dispatch assertion carries it."""
-    body = (tmp_path / "c.toml")
+    body = tmp_path / "c.toml"
     load([_toml(tmp_path, intake_max=2048)])
     text = body.read_text().replace("max_tokens = 2048\n", "")
     body.write_text(text, encoding="utf-8")
@@ -173,9 +171,7 @@ def test_an_unbounded_output_is_skipped_rather_than_assumed_safe(tmp_path: Path)
 class _Agent:
     """Minimal stand-in exercising only the size guard."""
 
-    def __init__(
-        self, context_tokens: int, max_tokens: int | None, upstream: str | None
-    ) -> None:
+    def __init__(self, context_tokens: int, max_tokens: int | None, upstream: str | None) -> None:
         from mapf.agents.base import LLMAgent
 
         self._guard = LLMAgent.__dict__["_assert_fits"]
@@ -185,7 +181,9 @@ class _Agent:
         self._sampling = SamplingParams(temperature=0.0, max_tokens=max_tokens)
 
     def check(self, prompt: RenderedPrompt) -> None:
-        self._guard(self, prompt)
+        # The guard is sized against the sampling of the call being made, not the
+        # agent's configured sampling — a degeneration retry is a different call.
+        self._guard(self, prompt, self._sampling)
 
 
 def test_an_oversized_prompt_is_refused_before_dispatch() -> None:

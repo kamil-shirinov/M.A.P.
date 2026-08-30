@@ -131,9 +131,7 @@ def test_an_indistinguishable_result_is_not_reported_as_no_difference() -> None:
 
 
 def test_a_significant_result_reports_its_direction_and_sample() -> None:
-    (line,) = summarise(
-        [compare([0.5] * 150, [1.0] * 150, _days(150), name="map", baseline="rw")]
-    )
+    (line,) = summarise([compare([0.5] * 150, [1.0] * 150, _days(150), name="map", baseline="rw")])
     assert "better" in line
     assert "n=150" in line
     assert "date clusters" in line

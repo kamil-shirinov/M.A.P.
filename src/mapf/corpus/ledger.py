@@ -112,6 +112,15 @@ class LedgerEntry(DomainModel):
     output_truncated: bool = False
     truncated_agents: str = ""
 
+    # Whether an agent looped at its cap and was re-run once under a frequency
+    # penalty (ADR 0021). These items were produced under different sampling from
+    # the rest of the corpus, so they are named here as well as in the manifest:
+    # the pre-registered sensitivity check reports the primary result with and
+    # without them, and a partition that needs 356 manifests opened to reconstruct
+    # is one that quietly does not get run.
+    degeneration_retry: bool = False
+    retried_agents: str = ""
+
     @property
     def key(self) -> tuple[str, str, date]:
         return (self.ticker, self.band, self.filing_date)
@@ -159,11 +168,7 @@ class Ledger:
         would consume the failure threshold each pass and eventually halt the run
         on an item that can never succeed.
         """
-        return {
-            e.key
-            for e in self.entries()
-            if e.status == "complete" or is_terminal(e.reason)
-        }
+        return {e.key for e in self.entries() if e.status == "complete" or is_terminal(e.reason)}
 
     def resolved(self) -> dict[tuple[str, str, date], LedgerEntry]:
         """Every item with a terminal outcome, latest entry winning."""

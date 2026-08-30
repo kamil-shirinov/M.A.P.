@@ -107,9 +107,7 @@ def compare(
     differences = model - base
     rng = np.random.default_rng(seed)
     # Blocks of twice the horizon, so two windows that overlap can land together.
-    means = moving_block_bootstrap(
-        differences, days, rng, draws=draws, block_days=horizon_days * 2
-    )
+    means = moving_block_bootstrap(differences, days, rng, draws=draws, block_days=horizon_days * 2)
     tail = (1.0 - confidence) / 2.0 * 100.0
     lower, upper = np.percentile(means, [tail, 100.0 - tail])
     return Comparison(

@@ -162,9 +162,7 @@ def test_the_multiplier_is_near_one_when_earnings_days_are_ordinary() -> None:
     returns, starts = _with_earnings_jumps(1000, jump=0.0)
     history = _history(returns)
     days = [history.dates[s] for s in starts]
-    assert earnings_multiplier(history, days, horizon_days=HORIZON) == pytest.approx(
-        1.0, abs=0.6
-    )
+    assert earnings_multiplier(history, days, horizon_days=HORIZON) == pytest.approx(1.0, abs=0.6)
 
 
 def test_too_few_past_earnings_gives_a_neutral_multiplier() -> None:
@@ -176,9 +174,7 @@ def test_too_few_past_earnings_gives_a_neutral_multiplier() -> None:
 
 def test_earnings_dates_outside_the_history_are_ignored() -> None:
     history = _history(_gaussian(500, 0.2))
-    assert (
-        earnings_multiplier(history, [date(1990, 1, 1)], horizon_days=HORIZON) == 1.0
-    )
+    assert earnings_multiplier(history, [date(1990, 1, 1)], horizon_days=HORIZON) == 1.0
 
 
 def test_the_scaled_walk_is_wider_than_the_plain_one() -> None:

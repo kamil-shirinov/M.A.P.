@@ -54,6 +54,13 @@ class AgentRecord(DomainModel):
     # a whole. Recorded per agent because only the agent knows.
     finish_reason: str | None = None
     output_truncated: bool = False
+    # Whether this agent looped at its cap and was re-run once under a frequency
+    # penalty (ADR 0021). `sampling` above then records the penalised parameters,
+    # because those are the ones that produced the response. Flagged rather than
+    # left to be inferred: the pre-registered sensitivity check partitions the
+    # corpus on it, and it is the only field that marks an item as produced under
+    # different sampling from the rest.
+    degeneration_retry: bool = False
 
     attempts: int = Field(default=1, ge=1)
     # A reasoning build can spend most of its budget here and emit nothing.
@@ -77,7 +84,7 @@ class PriceProvenance(DomainModel):
 class RunManifest(DomainModel):
     # This manifest's own format version. Distinct from, and easily confused with,
     # the forecast's.
-    manifest_version: Literal["1.3.0"] = "1.3.0"
+    manifest_version: Literal["1.4.0"] = "1.4.0"
     # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
     # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
     # to decide. With only `schema_version` here it read the manifest's own version

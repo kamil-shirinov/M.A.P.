@@ -393,3 +393,31 @@ def test_reasoning_tokens_are_recorded_when_the_model_answers() -> None:
         )
     )
     assert provider.complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING).reasoning_tokens == 430
+
+
+def test_an_unset_frequency_penalty_is_absent_from_the_body() -> None:
+    """An ordinary call must be byte-identical to one made before the degeneration
+    retry existed (ADR 0021), or the whole corpus samples differently by accident."""
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json=COMPLETION)
+
+    _provider(handler).complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING)
+    assert "frequency_penalty" not in seen
+
+
+def test_a_frequency_penalty_reaches_the_body_when_set() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
+        return httpx.Response(200, json=COMPLETION)
+
+    _provider(handler).complete(
+        model=MODEL,
+        prompt=PROMPT,
+        sampling=SamplingParams(temperature=0.0, max_tokens=2048, frequency_penalty=0.3),
+    )
+    assert seen["frequency_penalty"] == 0.3

@@ -76,6 +76,11 @@ class SamplingParams(DomainModel):
     seed: int | None = None
     top_p: float | None = Field(default=None, gt=0.0, le=1.0)
     max_tokens: int | None = Field(default=None, ge=1)
+    # Sent only on a degeneration retry (ADR 0021), never on a first attempt, so
+    # an ordinary call carries no penalty at all. It sits in `SamplingParams`
+    # rather than beside it because the cache key hashes this model: a response
+    # produced under a penalty must not be served to a request without one.
+    frequency_penalty: float | None = Field(default=None, ge=0.0, le=2.0)
 
 
 class LLMResponse(DomainModel):
@@ -191,9 +196,7 @@ class FilingSource(Protocol):
         """Distinct filing dates, ascending. Empty is a legitimate answer."""
         ...
 
-    def earnings_filings(
-        self, ticker: str, start: date, end: date
-    ) -> tuple[EarningsFiling, ...]:
+    def earnings_filings(self, ticker: str, start: date, end: date) -> tuple[EarningsFiling, ...]:
         """The same filings with their accession numbers.
 
         Dates alone identify a forecast window; accessions identify the document.

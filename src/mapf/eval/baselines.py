@@ -98,9 +98,7 @@ class History:
 def _require(history: History, minimum: int, name: str) -> NDArray[np.float64]:
     returns = history.log_returns
     if returns.size < minimum:
-        raise BaselineError(
-            f"{name} needs {minimum} returns, history has {returns.size}"
-        )
+        raise BaselineError(f"{name} needs {minimum} returns, history has {returns.size}")
     return returns
 
 
@@ -114,9 +112,7 @@ def random_walk(history: History, *, horizon_days: int) -> Prediction:
     """
     returns = _require(history, MIN_BARS_FOR_VOL, "random_walk")
     daily = float(np.std(returns, ddof=1))
-    return Prediction(
-        mean=0.0, sigma=daily * math.sqrt(horizon_days), name="random_walk"
-    )
+    return Prediction(mean=0.0, sigma=daily * math.sqrt(horizon_days), name="random_walk")
 
 
 def garch(history: History, *, horizon_days: int) -> Prediction:
@@ -186,6 +182,4 @@ def earnings_scaled_random_walk(
     """
     base = random_walk(history, horizon_days=horizon_days)
     factor = earnings_multiplier(history, past_earnings, horizon_days=horizon_days)
-    return Prediction(
-        mean=0.0, sigma=base.sigma * factor, name="earnings_scaled_random_walk"
-    )
+    return Prediction(mean=0.0, sigma=base.sigma * factor, name="earnings_scaled_random_walk")

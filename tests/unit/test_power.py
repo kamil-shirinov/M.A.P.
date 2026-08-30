@@ -184,9 +184,7 @@ def test_every_drawn_block_carries_observations() -> None:
     starts = _clustered_starts()
     rng = np.random.default_rng(1)
     differences = rng.normal(size=starts.size)
-    means = _moving_block_bootstrap(
-        differences, starts, rng, draws=200, block_days=10
-    )
+    means = _moving_block_bootstrap(differences, starts, rng, draws=200, block_days=10)
     # A bootstrap that kept only a handful of blocks per draw would scatter far
     # more widely than the sample's own standard error.
     assert means.std(ddof=1) < 3.0 * differences.std(ddof=1) / math.sqrt(starts.size)
@@ -196,9 +194,7 @@ def test_the_bootstrap_still_recovers_the_sample_mean() -> None:
     starts = _clustered_starts()
     rng = np.random.default_rng(2)
     differences = rng.normal(loc=0.5, size=starts.size)
-    means = _moving_block_bootstrap(
-        differences, starts, rng, draws=400, block_days=10
-    )
+    means = _moving_block_bootstrap(differences, starts, rng, draws=400, block_days=10)
     assert means.mean() == pytest.approx(differences.mean(), abs=0.05)
 
 

@@ -93,17 +93,13 @@ def test_only_item_2_02_filings_are_returned() -> None:
 
 
 def test_non_8k_forms_are_ignored() -> None:
-    adapter = _adapter(
-        _recent([("10-Q", "2025-02-01", "2.02"), ("8-K", "2025-03-01", "2.02")])
-    )
+    adapter = _adapter(_recent([("10-Q", "2025-02-01", "2.02"), ("8-K", "2025-03-01", "2.02")]))
     assert adapter.earnings_dates("AAPL", START, END) == (date(2025, 3, 1),)
 
 
 def test_item_2_02_is_matched_exactly_not_as_a_substring() -> None:
     """`12.02` and `2.021` must not match. A substring test would accept both."""
-    adapter = _adapter(
-        _recent([("8-K", "2025-02-01", "12.02"), ("8-K", "2025-03-01", "2.02")])
-    )
+    adapter = _adapter(_recent([("8-K", "2025-02-01", "12.02"), ("8-K", "2025-03-01", "2.02")]))
     assert adapter.earnings_dates("AAPL", START, END) == (date(2025, 3, 1),)
 
 
@@ -116,9 +112,7 @@ def test_whitespace_around_items_is_tolerated() -> None:
 # Window and ordering
 # ---------------------------------------------------------------------------
 def test_filings_outside_the_window_are_dropped() -> None:
-    adapter = _adapter(
-        _recent([("8-K", "2019-02-01", "2.02"), ("8-K", "2025-02-01", "2.02")])
-    )
+    adapter = _adapter(_recent([("8-K", "2019-02-01", "2.02"), ("8-K", "2025-02-01", "2.02")]))
     assert adapter.earnings_dates("AAPL", START, END) == (date(2025, 2, 1),)
 
 
@@ -258,9 +252,7 @@ def test_a_non_object_response_is_rejected() -> None:
 
 def test_a_malformed_filing_date_does_not_kill_the_ticker() -> None:
     """One bad row must not cost the whole filer; the rest still count."""
-    adapter = _adapter(
-        _recent([("8-K", "not-a-date", "2.02"), ("8-K", "2025-02-01", "2.02")])
-    )
+    adapter = _adapter(_recent([("8-K", "not-a-date", "2.02"), ("8-K", "2025-02-01", "2.02")]))
     assert adapter.earnings_dates("AAPL", START, END) == (date(2025, 2, 1),)
 
 
@@ -323,9 +315,7 @@ def test_the_archive_path_segment_strips_dashes() -> None:
 
 def test_two_filings_on_one_day_stay_distinct() -> None:
     """A date alone cannot identify a filing; an accession can."""
-    adapter = _adapter(
-        _recent([("8-K", "2025-02-01", "2.02"), ("8-K", "2025-02-01", "2.02")])
-    )
+    adapter = _adapter(_recent([("8-K", "2025-02-01", "2.02"), ("8-K", "2025-02-01", "2.02")]))
     filings = adapter.earnings_filings("AAPL", START, END)
     assert len({f.accession for f in filings}) == 2
     # The date-only view still collapses them, which is why it is not the identifier.

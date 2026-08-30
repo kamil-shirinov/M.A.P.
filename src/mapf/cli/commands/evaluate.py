@@ -132,7 +132,7 @@ def evaluate(
                     ),
                 )
         else:
-            (label, count), = versions.most_common()
+            ((label, count),) = versions.most_common()
             typer.secho(f"code       {label} ({count} runs)", fg=typer.colors.GREEN)
 
         typer.secho(

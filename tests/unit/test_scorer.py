@@ -199,7 +199,8 @@ def test_a_confident_correct_forecast_scores_better_than_a_wrong_one() -> None:
     outcome = math.log(window.bars[index + HORIZON].close / spot)
 
     right = _forecast(
-        as_of, spot,
+        as_of,
+        spot,
         scenarios=make_scenario_set(
             weights=(0.1, 0.8, 0.1),
             modifiers=(0.02, math.expm1(outcome), -0.02),
@@ -207,7 +208,8 @@ def test_a_confident_correct_forecast_scores_better_than_a_wrong_one() -> None:
         ),
     )
     wrong = _forecast(
-        as_of, spot,
+        as_of,
+        spot,
         scenarios=make_scenario_set(
             weights=(0.1, 0.8, 0.1), modifiers=(0.30, 0.20, 0.10), vols=(0.10, 0.05, 0.10)
         ),
@@ -224,7 +226,8 @@ def test_the_pit_value_lands_where_the_outcome_did() -> None:
     as_of, spot = window.bars[index].date, window.bars[index].close
     # Outcome is exactly zero; a forecast centred well above it must read low.
     bullish = _forecast(
-        as_of, spot,
+        as_of,
+        spot,
         scenarios=make_scenario_set(
             weights=(0.1, 0.8, 0.1), modifiers=(0.30, 0.20, 0.10), vols=(0.10, 0.05, 0.10)
         ),
@@ -273,9 +276,7 @@ def test_pairing_uses_only_items_both_forecasters_scored() -> None:
     short_window = _realistic_window(n=80, seed=3, ticker="SHRT")
     items = [
         (
-            _forecast(
-                long_window.bars[-HORIZON - 1].date, long_window.bars[-HORIZON - 1].close
-            ),
+            _forecast(long_window.bars[-HORIZON - 1].date, long_window.bars[-HORIZON - 1].close),
             "clean",
         ),
         (

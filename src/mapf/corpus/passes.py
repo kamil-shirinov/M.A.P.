@@ -79,9 +79,7 @@ class PassStatus:
         return max(self.total - self.resolved, 0)
 
 
-def split_passes(
-    items: Sequence[CorpusItem], *, band: str, count: int = 2
-) -> tuple[Pass, ...]:
+def split_passes(items: Sequence[CorpusItem], *, band: str, count: int = 2) -> tuple[Pass, ...]:
     """Partition a band's items into `count` interleaved passes.
 
     `items` must already be in the deterministic plan order; the assignment is
@@ -120,9 +118,7 @@ def status_of(pass_: Pass, ledger: Ledger) -> PassStatus:
             complete += 1
         elif is_terminal(entry.reason):
             terminal += 1
-    return PassStatus(
-        label=pass_.label, total=pass_.size, complete=complete, terminal=terminal
-    )
+    return PassStatus(label=pass_.label, total=pass_.size, complete=complete, terminal=terminal)
 
 
 def require_finished(

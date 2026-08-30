@@ -76,9 +76,7 @@ class EdgarFilings:
         # one day are one window. `earnings_filings` keeps them separate.
         return tuple(sorted({f.filed for f in self.earnings_filings(ticker, start, end)}))
 
-    def earnings_filings(
-        self, ticker: str, start: date, end: date
-    ) -> tuple[EarningsFiling, ...]:
+    def earnings_filings(self, ticker: str, start: date, end: date) -> tuple[EarningsFiling, ...]:
         """Filings with their accession numbers.
 
         Selection only needs dates, but the corpus needs identifiers: a ticker and
@@ -103,9 +101,7 @@ class EdgarFilings:
                 name = archive.get("name")
                 if not name or not _overlaps(archive, start, end):
                     continue
-                found.extend(
-                    _earnings_rows(self._fetch(ARCHIVE_URL.format(name=name)), symbol.cik)
-                )
+                found.extend(_earnings_rows(self._fetch(ARCHIVE_URL.format(name=name)), symbol.cik))
 
         seen: dict[str, EarningsFiling] = {}
         for filing in found:
@@ -152,9 +148,7 @@ def _earnings_rows(block: Any, cik: int) -> tuple[EarningsFiling, ...]:
     items = block.get("items") or []
     accessions = block.get("accessionNumber") or []
     out: list[EarningsFiling] = []
-    for form, filed, item_list, accession in zip(
-        forms, dates, items, accessions, strict=False
-    ):
+    for form, filed, item_list, accession in zip(forms, dates, items, accessions, strict=False):
         if form != FORM_8K:
             continue
         if EARNINGS_ITEM not in {part.strip() for part in str(item_list).split(",")}:
@@ -166,9 +160,7 @@ def _earnings_rows(block: Any, cik: int) -> tuple[EarningsFiling, ...]:
                 )
             )
         except (ValueError, ValidationError):  # noqa: PERF203 - one bad row must not kill the filer
-            _logger.warning(
-                "edgar_unparseable_filing_row", value=filed, accession=accession
-            )
+            _logger.warning("edgar_unparseable_filing_row", value=filed, accession=accession)
     return tuple(out)
 
 

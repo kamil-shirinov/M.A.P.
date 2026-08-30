@@ -16,7 +16,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Any
 
-from mapf.core.ports import Trace, TraceEvent
+from mapf.core.ports import SamplingParams, Trace, TraceEvent
 
 
 def _now() -> datetime:
@@ -88,6 +88,12 @@ class CountingTrace:
         # happened twice unnoticed, so it is counted rather than assumed absent.
         self.finish_reasons: dict[str, str] = {}
         self.truncated_output: set[str] = set()
+        # What actually produced each stage's final response. The agent's own
+        # `sampling` property is the CONFIGURED value, which a degeneration retry
+        # departs from (ADR 0021) — recording the configured one in that case
+        # would put a parameter in the manifest that produced nothing.
+        self.sampling: dict[str, SamplingParams] = {}
+        self.degeneration_retries: set[str] = set()
 
     def record(
         self,
@@ -107,9 +113,24 @@ class CountingTrace:
                 self.reasoning_tokens[stage] = self.reasoning_tokens.get(stage, 0) + int(
                     data["reasoning_tokens"]
                 )
+            if data and data.get("sampling"):
+                params = SamplingParams.model_validate(data["sampling"])
+                self.sampling[stage] = params
+                if params.frequency_penalty is not None:
+                    self.degeneration_retries.add(stage)
+                    # A degeneration retry REPLACES its first attempt: the looped
+                    # output is discarded and the same prompt is re-run, so nothing
+                    # downstream ever sees the fragment. The structuralist's repair
+                    # loop is the opposite — it feeds the bad response back into the
+                    # next prompt — which is why that one stays sticky below.
+                    self.truncated_output.discard(stage)
             if data and data.get("finish_reason"):
                 reason = str(data["finish_reason"])
                 self.finish_reasons[stage] = reason
+                # Sticky. Any attempt that was cut off degraded that call, and a
+                # later repair attempt does not undo it — the repair prompt is
+                # built FROM the truncated response. Only a degeneration retry
+                # clears it, above, and only because it discards that response.
                 if reason == "length":
                     self.truncated_output.add(stage)
             if data and stage not in self.templates:

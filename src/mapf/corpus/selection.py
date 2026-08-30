@@ -188,9 +188,7 @@ def select(
     """
     ordering = seeded_ordering(candidates, criteria.seed)
     digest = sha256("\n".join(ordering).encode()).hexdigest()
-    known = (
-        {t.strip().upper(): cik for t, cik in ciks.items()} if ciks is not None else None
-    )
+    known = {t.strip().upper(): cik for t, cik in ciks.items()} if ciks is not None else None
     seen_ciks: set[int] = set()
     first, second = criteria.bands
     # Measured strictly before either band opens. A screen that overlapped a band
@@ -246,8 +244,7 @@ def select(
                 with_exhibit = [f for f in usable if exhibits.has_exhibit(f)]
                 if len(with_exhibit) < criteria.min_filings_per_band:
                     no_exhibit = (
-                        f"{band.name}: {len(with_exhibit)} of {len(usable)} filings "
-                        f"carry EX-99.1"
+                        f"{band.name}: {len(with_exhibit)} of {len(usable)} filings carry EX-99.1"
                     )
                     break
                 usable = with_exhibit
@@ -263,14 +260,10 @@ def select(
             )
 
         if no_exhibit is not None:
-            rejected.append(
-                Rejection(ticker=ticker, reason="no_exhibit", detail=no_exhibit)
-            )
+            rejected.append(Rejection(ticker=ticker, reason="no_exhibit", detail=no_exhibit))
             continue
         if shortfall is not None:
-            rejected.append(
-                Rejection(ticker=ticker, reason="too_few_filings", detail=shortfall)
-            )
+            rejected.append(Rejection(ticker=ticker, reason="too_few_filings", detail=shortfall))
             continue
 
         if criteria.match_band_counts:
@@ -283,9 +276,7 @@ def select(
         split: Split = "dev" if len(accepted) % 2 == 0 else "holdout"
         if cik is not None:
             seen_ciks.add(cik)
-        accepted.append(
-            TickerPlan(ticker=ticker, cik=cik, split=split, filings=tuple(per_band))
-        )
+        accepted.append(TickerPlan(ticker=ticker, cik=cik, split=split, filings=tuple(per_band)))
 
     return Corpus(
         criteria=criteria,
@@ -293,5 +284,3 @@ def select(
         accepted=tuple(accepted),
         rejected=tuple(rejected),
     )
-
-

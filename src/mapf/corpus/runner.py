@@ -121,6 +121,7 @@ class Health:
     degenerate_spread: int = 0
     budget_exhausted: int = 0
     output_truncated: int = 0
+    degeneration_retry: int = 0
     reasoning_tokens: int = 0
     cache_hits: int = 0
     by_reason: dict[str, int] = field(default_factory=dict)
@@ -368,9 +369,7 @@ def run_band(
         )
 
         if consecutive >= config.max_consecutive_failures:
-            raise CorpusHaltedError(
-                f"{consecutive} consecutive failures", health.by_reason
-            )
+            raise CorpusHaltedError(f"{consecutive} consecutive failures", health.by_reason)
         if health.failed > allowance:
             raise CorpusHaltedError(
                 f"{health.failed} failures exceeds the allowance of {allowance} "
@@ -454,6 +453,10 @@ def _attempt(
                     truncated_agents=",".join(
                         a.alias for a in manifest.agents if a.output_truncated
                     ),
+                    degeneration_retry=any(a.degeneration_retry for a in manifest.agents),
+                    retried_agents=",".join(
+                        a.alias for a in manifest.agents if a.degeneration_retry
+                    ),
                 ),
                 None,
             )
@@ -480,6 +483,7 @@ def _absorb(health: Health, entry: LedgerEntry) -> None:
         health.ungrounded_numerals += entry.ungrounded_numerals
         health.degenerate_spread += int(entry.degenerate_spread)
         health.output_truncated += int(entry.output_truncated)
+        health.degeneration_retry += int(entry.degeneration_retry)
         health.reasoning_tokens += entry.reasoning_tokens
         health.cache_hits += entry.cache_hits
         return

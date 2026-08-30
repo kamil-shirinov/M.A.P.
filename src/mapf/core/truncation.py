@@ -120,9 +120,7 @@ def plan_truncation(original_chars: int, *, budget_tokens: int) -> Truncation:
     )
 
 
-def truncate(
-    text: UntrustedText, *, budget_tokens: int
-) -> tuple[UntrustedText, Truncation]:
+def truncate(text: UntrustedText, *, budget_tokens: int) -> tuple[UntrustedText, Truncation]:
     """Cut a document to head-and-tail if it exceeds `budget_tokens`.
 
     Returns the text unchanged when it already fits, so the rule is a no-op for the

@@ -43,6 +43,9 @@ class ModelSpec(BaseModel):
     # settings, and so it can be frozen with a corpus.
     context_tokens: int
     upstream: str | None = None
+    # The penalty a degeneration retry applies for this agent, or None for no
+    # retry at all (ADR 0021).
+    degeneration_penalty: float | None = None
 
 
 # Who hands this agent its payload. Named so a refusal can say where an oversized
@@ -56,6 +59,7 @@ def _to_spec(agent: AgentName, configured: ModelSettings) -> ModelSpec:
         alias=configured.alias,
         context_tokens=configured.context_tokens,
         upstream=_UPSTREAM.get(agent),
+        degeneration_penalty=configured.degeneration_penalty,
         sampling=SamplingParams(
             temperature=configured.temperature,
             seed=configured.seed,

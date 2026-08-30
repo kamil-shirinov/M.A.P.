@@ -74,9 +74,7 @@ def _digest(mapping: dict[tuple[str, str], str]) -> Callable[[str, str], str]:
     return inner
 
 
-MATCHING = _digest(
-    {("intake", "v2"): "a" * 64, ("scenario_analyst", "v3"): "b" * 64}
-)
+MATCHING = _digest({("intake", "v2"): "a" * 64, ("scenario_analyst", "v3"): "b" * 64})
 
 
 def test_matching_templates_and_models_pass() -> None:
@@ -203,9 +201,11 @@ class _Agent:
         hits: int = 0,
         alias: str = "intake",
         output_truncated: bool = False,
+        degeneration_retry: bool = False,
     ):
         self.reasoning_tokens, self.cache_hits = reasoning, hits
         self.alias, self.output_truncated = alias, output_truncated
+        self.degeneration_retry = degeneration_retry
 
 
 class _Forecast:
@@ -221,9 +221,7 @@ class _Result:
 
 def _healthy() -> _Result:
     return _Result(
-        FakeManifest(
-            fidelity=_Fidelity(), quality=_Quality(), agents=(_Agent(3773, 0), _Agent())
-        )
+        FakeManifest(fidelity=_Fidelity(), quality=_Quality(), agents=(_Agent(3773, 0), _Agent()))
     )
 
 
@@ -238,9 +236,7 @@ class Recorder:
         self.calls: list[dict[str, object]] = []
 
     def __call__(self, request: Any, **kwargs: Any) -> object:
-        self.calls.append(
-            {"ticker": request.ticker, "as_of": request.as_of, **kwargs}
-        )
+        self.calls.append({"ticker": request.ticker, "as_of": request.as_of, **kwargs})
         outcome = self.outcomes.pop(0) if self.outcomes else _healthy()
         if isinstance(outcome, BaseException):
             raise outcome
@@ -546,9 +542,7 @@ def test_a_truncated_final_line_is_skipped_not_raised_on(tmp_path: Path) -> None
     """A process killed mid-append must cost one item, never the whole resume."""
     path = tmp_path / "l.jsonl"
     ledger = Ledger(path)
-    ledger.append(
-        LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="complete")
-    )
+    ledger.append(LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="complete"))
     with path.open("a", encoding="utf-8") as handle:
         handle.write('{"ticker": "B", "band": "cle')  # killed mid-write
     assert [e.ticker for e in ledger.entries()] == ["A"]
@@ -558,9 +552,7 @@ def test_a_truncated_final_line_is_skipped_not_raised_on(tmp_path: Path) -> None
 def test_blank_lines_are_ignored(tmp_path: Path) -> None:
     path = tmp_path / "l.jsonl"
     ledger = Ledger(path)
-    ledger.append(
-        LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="complete")
-    )
+    ledger.append(LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="complete"))
     path.write_text(path.read_text() + "\n\n", encoding="utf-8")
     assert len(list(ledger.entries())) == 1
 
@@ -572,9 +564,7 @@ def test_an_absent_ledger_reads_as_empty(tmp_path: Path) -> None:
 def test_failed_items_are_not_treated_as_done(tmp_path: Path) -> None:
     """A failure must be retried on the next pass, or an outage costs the run."""
     ledger = Ledger(tmp_path / "l.jsonl")
-    ledger.append(
-        LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="failed")
-    )
+    ledger.append(LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="failed"))
     assert ledger.completed() == set()
 
 
@@ -653,9 +643,7 @@ def test_a_transient_failure_is_retried_on_the_next_pass(
 
 def test_resolved_reports_terminal_outcomes(tmp_path: Path) -> None:
     ledger = Ledger(tmp_path / "l.jsonl")
-    ledger.append(
-        LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="complete")
-    )
+    ledger.append(LedgerEntry(ticker="A", band="clean", filing_date=VINTAGE, status="complete"))
     ledger.append(
         LedgerEntry(
             ticker="B",
@@ -679,9 +667,7 @@ def test_resolved_reports_terminal_outcomes(tmp_path: Path) -> None:
     assert resolved[("B", "clean", VINTAGE)].reason == "missing_exhibit"
 
 
-def test_the_progress_hook_sees_every_item(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_the_progress_hook_sees_every_item(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """The runner is a library; the CLI supplies the line that gets watched."""
     seen: list[tuple[int, int, str]] = []
     recorder = Recorder([])
