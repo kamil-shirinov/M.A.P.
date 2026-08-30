@@ -235,10 +235,21 @@ class ModelBudgetExhaustedError(InferenceError):
     *length*.
     """
 
-    def __init__(self, model_id: str, completion_tokens: int, reasoning_tokens: int) -> None:
+    def __init__(
+        self,
+        model_id: str,
+        completion_tokens: int,
+        reasoning_tokens: int,
+        reasoning_text: str = "",
+    ) -> None:
         self.model_id = model_id
         self.completion_tokens = completion_tokens
         self.reasoning_tokens = reasoning_tokens
+        # What the model actually produced before it ran out. Carried on the error
+        # because this is the ONLY place it exists: the call raises before any
+        # response object is built, so without it the failure that most needs
+        # diagnosing is the one that leaves nothing behind (ADR 0027).
+        self.reasoning_text = reasoning_text
         super().__init__(
             f"{model_id} generated {completion_tokens} tokens "
             f"({reasoning_tokens} of them reasoning) and produced no answer: the "

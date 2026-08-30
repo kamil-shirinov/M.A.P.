@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, ClassVar, Protocol, TypeVar
 
-from mapf.core.errors import PromptTooLargeError
+from mapf.core.errors import ModelBudgetExhaustedError, PromptTooLargeError
 from mapf.core.models import TrustedText
 from mapf.core.ports import (
     LLMProvider,
@@ -164,20 +164,74 @@ class LLMAgent:
         attempt: int,
     ) -> LLMResponse:
         self._assert_fits(prompt, sampling)
-        response = self._provider.complete(
-            model=self._model,
-            prompt=prompt,
-            sampling=sampling,
-            json_schema=json_schema,
-            attempt=attempt,
+        try:
+            response = self._provider.complete(
+                model=self._model,
+                prompt=prompt,
+                sampling=sampling,
+                json_schema=json_schema,
+                attempt=attempt,
+            )
+        except ModelBudgetExhaustedError as error:
+            # RECORD, then re-raise. This call produced thousands of tokens and left
+            # nothing behind, because the error is raised while parsing the response
+            # and the trace write sits after it — so the failure that most needs
+            # diagnosing was the only one with no evidence (ADR 0027). Two items'
+            # runaways could not be read afterwards for exactly this reason.
+            self._record(
+                prompt,
+                sampling,
+                attempt,
+                text="",
+                model_id=error.model_id,
+                finish_reason="length",
+                completion_tokens=error.completion_tokens,
+                reasoning_tokens=error.reasoning_tokens,
+                reasoning_text=error.reasoning_text,
+                cache_hit=False,
+            )
+            raise
+        self._record(
+            prompt,
+            sampling,
+            attempt,
+            text=response.text,
+            model_id=response.model_id,
+            finish_reason=response.finish_reason,
+            completion_tokens=response.completion_tokens,
+            reasoning_tokens=response.reasoning_tokens,
+            reasoning_text=response.reasoning_text,
+            cache_hit=response.cache_hit,
+            prompt_tokens=response.prompt_tokens,
         )
-        # Every prompt and every raw response, cache hits included (`CLAUDE.md` §6).
-        # Skipping hits would leave the second run's trace empty and make DoD
-        # criterion 5 unauditable.
+        return response
+
+    def _record(
+        self,
+        prompt: RenderedPrompt,
+        sampling: SamplingParams,
+        attempt: int,
+        *,
+        text: str,
+        model_id: str,
+        finish_reason: str | None,
+        completion_tokens: int | None,
+        reasoning_tokens: int | None,
+        reasoning_text: str | None,
+        cache_hit: bool,
+        prompt_tokens: int | None = None,
+    ) -> None:
+        """Every prompt and every raw response, cache hits included (`CLAUDE.md` §6).
+
+        Skipping hits would leave the second run's trace empty and make DoD
+        criterion 5 unauditable. For a reasoning model the *raw response* includes
+        the reasoning, and recording only its token count made a runaway countable
+        and unreadable.
+        """
         self._trace.record(
             stage=self._stage,
             attempt=attempt,
-            cache_hit=response.cache_hit,
+            cache_hit=cache_hit,
             data={
                 "template": f"{prompt.template_name}.{prompt.template_version}",
                 "template_sha256": prompt.template_sha256,
@@ -186,12 +240,12 @@ class LLMAgent:
                 # first attempt, and without this the trace cannot show which.
                 "sampling": sampling.model_dump(),
                 "messages": [message.model_dump() for message in prompt.messages],
-                "response": response.text,
-                "model_id": response.model_id,
-                "finish_reason": response.finish_reason,
-                "prompt_tokens": response.prompt_tokens,
-                "completion_tokens": response.completion_tokens,
-                "reasoning_tokens": response.reasoning_tokens,
+                "response": text,
+                "model_id": model_id,
+                "finish_reason": finish_reason,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "reasoning_tokens": reasoning_tokens,
+                "reasoning_text": reasoning_text,
             },
         )
-        return response

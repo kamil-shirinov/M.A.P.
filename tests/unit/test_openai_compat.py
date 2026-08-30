@@ -20,6 +20,7 @@ from mapf.core.errors import (
     InferenceStatusError,
     InferenceTimeoutError,
     InferenceUnreachableError,
+    ModelBudgetExhaustedError,
     ModelNotAvailableError,
 )
 from mapf.core.ports import Message, ModelInfo, RenderedPrompt, SamplingParams
@@ -421,3 +422,69 @@ def test_a_frequency_penalty_reaches_the_body_when_set() -> None:
         sampling=SamplingParams(temperature=0.0, max_tokens=2048, frequency_penalty=0.3),
     )
     assert seen["frequency_penalty"] == 0.3
+
+
+def test_reasoning_content_is_captured_not_only_counted() -> None:
+    """Recording the token count alone made a runaway countable and unreadable."""
+    body = {
+        **COMPLETION,
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "answer", "reasoning_content": "why"},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+    response = _provider(_responds(body)).complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING)
+    assert response.reasoning_text == "why"
+
+
+def test_an_exhausted_budget_carries_its_reasoning_on_the_error() -> None:
+    """The only place it exists: the call raises before a response object is built."""
+    body = {
+        **COMPLETION,
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "", "reasoning_content": "loop " * 50},
+                "finish_reason": "length",
+            }
+        ],
+        "usage": {
+            "completion_tokens": 12000,
+            "completion_tokens_details": {"reasoning_tokens": 11997},
+        },
+    }
+    with pytest.raises(ModelBudgetExhaustedError) as caught:
+        _provider(_responds(body)).complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING)
+    assert caught.value.reasoning_text.startswith("loop")
+    assert caught.value.reasoning_tokens == 11997
+
+
+def test_a_backend_naming_the_field_differently_still_works() -> None:
+    body = {
+        **COMPLETION,
+        "choices": [
+            {
+                "message": {"role": "assistant", "content": "answer", "reasoning": "why"},
+                "finish_reason": "stop",
+            }
+        ],
+    }
+    response = _provider(_responds(body)).complete(model=MODEL, prompt=PROMPT, sampling=SAMPLING)
+    assert response.reasoning_text == "why"
+
+
+def test_a_backend_reporting_no_reasoning_records_none() -> None:
+    response = _provider(_responds(COMPLETION)).complete(
+        model=MODEL, prompt=PROMPT, sampling=SAMPLING
+    )
+    assert response.reasoning_text is None
+
+
+def test_a_malformed_message_yields_no_reasoning_rather_than_raising() -> None:
+    """A diagnostic must never be the thing that fails a run."""
+    from mapf.providers.openai_compat import _reasoning_text
+
+    assert _reasoning_text("not a dict") == ""
+    assert _reasoning_text({"reasoning_content": 42}) == ""
+    assert _reasoning_text({"reasoning_content": "   "}) == ""

@@ -92,6 +92,11 @@ class LLMResponse(DomainModel):
     # A reasoning model can burn its whole budget here and emit no answer.
     # Invisible unless recorded, and it looks exactly like a refusal.
     reasoning_tokens: int | None = Field(default=None, ge=0)
+    # The reasoning ITSELF, not only its length. The trace claims to hold "every
+    # prompt and every raw response", and for a reasoning model most of the raw
+    # response was being discarded — so a runaway could be counted and never read
+    # (ADR 0027).
+    reasoning_text: str | None = None
     # Must be recorded even on a hit, or the second run's trace is empty and
     # DoD criterion 5 becomes unauditable.
     cache_hit: bool = False

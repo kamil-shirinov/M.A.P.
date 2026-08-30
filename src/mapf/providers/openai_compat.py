@@ -274,6 +274,7 @@ class OpenAICompatProvider:
         details = details if isinstance(details, dict) else {}
         reasoning_tokens = details.get("reasoning_tokens")
 
+        reasoning_text = _reasoning_text(message)
         finish_reason = first.get("finish_reason")
         if not content.strip() and finish_reason == "length":
             # A reasoning-capable build streams into `reasoning_content` and only
@@ -284,6 +285,7 @@ class OpenAICompatProvider:
                 str(payload.get("model") or model.id),
                 int(usage.get("completion_tokens") or 0),
                 int(reasoning_tokens or 0),
+                reasoning_text,
             )
 
         return LLMResponse(
@@ -295,5 +297,23 @@ class OpenAICompatProvider:
             prompt_tokens=usage.get("prompt_tokens"),
             completion_tokens=usage.get("completion_tokens"),
             reasoning_tokens=reasoning_tokens,
+            reasoning_text=reasoning_text or None,
             cache_hit=False,
         )
+
+
+def _reasoning_text(message: object) -> str:
+    """The model's reasoning, under whichever key this backend uses for it.
+
+    Not vendor coupling in the sense `CLAUDE.md` §3 forbids: nothing branches on
+    which key matched, and an unrecognised one costs a missing diagnostic rather
+    than a wrong answer. The alternative — recording only the token COUNT, which is
+    what happened before — makes a runaway countable and unreadable.
+    """
+    if not isinstance(message, dict):
+        return ""
+    for key in ("reasoning_content", "reasoning"):
+        value = message.get(key)
+        if isinstance(value, str) and value.strip():
+            return value
+    return ""
