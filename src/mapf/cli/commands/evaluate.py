@@ -27,6 +27,7 @@ items were not asked the same question.
 from __future__ import annotations
 
 import json
+import subprocess
 from collections import Counter
 from collections.abc import Callable, Sequence
 from datetime import date
@@ -39,6 +40,7 @@ from mapf.bootstrap import build_earnings_calendar, build_http_client, build_mar
 from mapf.cli.app import app, fail, handle
 from mapf.core.errors import MapError
 from mapf.core.models import PriceWindow
+from mapf.core.provenance import FORECAST_ROOTS, NOT_FORECAST_PATHS
 from mapf.corpus.forecasts import Loaded, load_band, unreferenced_runs
 from mapf.corpus.ledger import Ledger
 from mapf.corpus.passes import (
@@ -197,28 +199,30 @@ def evaluate(
             ((label, count),) = freezes.most_common()
             typer.secho(f"freeze     {label} ({count} runs)", fg=typer.colors.GREEN)
 
-        versions = _code_versions(ledger, runs_dir)
+        versions, example = _code_versions(ledger, runs_dir)
         if not versions:
             typer.secho("code       no manifests found to read", fg=typer.colors.YELLOW)
         elif len(versions) > 1:
             typer.secho(
-                f"code       {len(versions)} distinct commits produced this band:",
+                f"code       {len(versions)} distinct forecast digests produced this band:",
                 fg=typer.colors.YELLOW,
             )
             for label, count in versions.most_common():
                 typer.echo(f"           {label}  {count} runs")
+            for path in _forecast_diff(example):
+                typer.echo(f"           differs: {path}")
             if not allow_mixed_code:
                 refuse(
-                    "this band was produced by more than one code version",
+                    "this band was produced by more than one forecast digest",
                     hint=(
-                        "Sometimes fine, sometimes the explanation for everything. "
-                        "Re-run the affected items, or pass --allow-mixed-code to "
-                        "score anyway with the split recorded above."
+                        "The files listed above are what differ. If they cannot "
+                        "change a forecast, --allow-mixed-code records that "
+                        "judgement; if they can, re-run the affected items."
                     ),
                 )
         else:
             ((label, count),) = versions.most_common()
-            typer.secho(f"code       {label} ({count} runs)", fg=typer.colors.GREEN)
+            typer.secho(f"code       digest {label} ({count} runs)", fg=typer.colors.GREEN)
 
         settings = load()
         forecasts = load_band(ledger, corpus, runs_dir, band)
@@ -323,13 +327,22 @@ def _manifest_of(runs_dir: Path, run_id: object) -> dict[str, object] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
-def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:
-    """Which commits produced the completed runs of this band.
+def _code_versions(ledger: Ledger, runs_dir: Path) -> tuple[Counter[str], dict[str, str]]:
+    """What produced this band's completed runs, keyed by **forecast digest**.
 
-    Reads each run's manifest rather than assuming one version per corpus. Runs
-    predating the field report `unknown`, which is the honest answer for them.
+    The commit is the wrong equality test. Development continues while a corpus
+    runs, so a twelve-night band spans every commit made during it — and a guard
+    that must be overridden on every run is not a guard (ADR 0026). Two runs sharing
+    a digest are forecast-equivalent however many commits separate them.
+
+    Returns the counts and one representative commit per digest, so a differing pair
+    can be diffed and the override made on evidence rather than blind.
+
+    A dirty-tree run has no honest digest and is counted apart rather than grouped
+    with anything: its commit does not describe the files that ran.
     """
     seen: Counter[str] = Counter()
+    example: dict[str, str] = {}
     for entry in ledger.resolved().values():
         if entry.status != "complete" or entry.run_id is None:
             continue
@@ -339,12 +352,47 @@ def _code_versions(ledger: Ledger, runs_dir: Path) -> Counter[str]:
         version = manifest.get("code_version")
         if not isinstance(version, dict):
             version = {}
-        commit = version.get("commit")
-        if commit is None:
-            seen["unknown (predates the field)"] += 1
+        digest, commit = version.get("forecast_digest"), version.get("commit")
+        if version.get("dirty"):
+            label = f"{str(commit)[:12]}+dirty (no digest)"
+        elif digest:
+            label = str(digest)[:12]
+            example.setdefault(label, str(commit))
+        elif commit:
+            label = f"{str(commit)[:12]} (predates the digest)"
         else:
-            seen[f"{commit[:12]}{'+dirty' if version.get('dirty') else ''}"] += 1
-    return seen
+            label = "unknown (predates the field)"
+        seen[label] += 1
+    return seen, example
+
+
+def _forecast_diff(example: dict[str, str]) -> list[str]:
+    """The forecast-producing files that differ between two digests.
+
+    Turns the refusal into evidence. The band's first split was three files of
+    scoring-only additions — a config key, a settings field and a bootstrap function
+    used only by `map evaluate` — which is an override anyone can justify in one
+    glance, and indistinguishable from a real change without this.
+    """
+    commits = [c for c in example.values() if c]
+    if len(commits) != 2:
+        return []
+    out = _git_names(commits[0], commits[1])
+    return [p for p in out if not p.startswith(NOT_FORECAST_PATHS)]
+
+
+def _git_names(left: str, right: str) -> list[str]:
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "diff", "--name-only", left, right, "--", *FORECAST_ROOTS],
+            capture_output=True,
+            text=True,
+            timeout=10.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    return [line for line in result.stdout.splitlines() if line] if result.returncode == 0 else []
 
 
 # ---------------------------------------------------------------------------

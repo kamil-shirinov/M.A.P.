@@ -84,7 +84,7 @@ class PriceProvenance(DomainModel):
 class RunManifest(DomainModel):
     # This manifest's own format version. Distinct from, and easily confused with,
     # the forecast's.
-    manifest_version: Literal["1.5.0"] = "1.5.0"
+    manifest_version: Literal["1.6.0"] = "1.6.0"
     # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
     # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
     # to decide. With only `schema_version` here it read the manifest's own version
@@ -109,9 +109,11 @@ class RunManifest(DomainModel):
     # blame different agents.
     fidelity: TranscriptionFidelity = TranscriptionFidelity()
 
-    # Which code produced this run. A twelve-night corpus that dies and resumes
-    # executes its second half under whatever commit is checked out then, and a
-    # corpus spanning two commits must be visible rather than invisible.
+    # Which code produced this run, and — the field that is actually compared —
+    # a hash over the files that can produce a forecast (ADR 0026). A twelve-night
+    # corpus spans every commit made while it runs, so equality on the commit is a
+    # check that must be overridden every time; equality on the digest is one that
+    # fires only when something a forecast depends on differed.
     code_version: CodeVersion = CodeVersion()
 
     # Which FROZEN RECORD this run executed under. The freeze governs sampling,

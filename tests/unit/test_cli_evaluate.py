@@ -166,12 +166,25 @@ def _manifest(
     dirty: bool = False,
     trace: bool = True,
     freeze: str | None = None,
+    digest: str | None = None,
 ) -> None:
     directory = tmp_path / "runs" / str(run_id)
     directory.mkdir(parents=True, exist_ok=True)
     body: dict[str, object] = {}
     if commit is not None:
-        body["code_version"] = {"commit": commit, "dirty": dirty}
+        version: dict[str, object] = {
+            "commit": commit,
+            "dirty": dirty,
+            # Defaults to a digest derived from the commit, so a fixture that varies
+            # the commit varies the digest too — which is what the equality test now
+            # actually reads (ADR 0026).
+            "forecast_digest": digest if digest is not None else commit[:1] * 64,
+        }
+        if digest == "":
+            # An empty string stands for "the field is absent", which is what a run
+            # written before the digest existed actually looks like.
+            del version["forecast_digest"]
+        body["code_version"] = version
     if freeze is not None:
         body["freeze_version"] = freeze
     (directory / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
@@ -261,7 +274,7 @@ def test_two_commits_refuse_unless_acknowledged(tmp_path: Path) -> None:
     _manifest(tmp_path, ids[1], "b" * 40)
     result = _invoke(tmp_path)
     assert result.exit_code != 0
-    assert "more than one code version" in result.output
+    assert "more than one forecast digest" in result.output
     assert "aaaaaaaaaaaa" in result.output and "bbbbbbbbbbbb" in result.output
 
 
@@ -830,7 +843,7 @@ def test_the_check_reports_every_problem_rather_than_the_first(tmp_path: Path) -
     assert result.exit_code == 2
     assert "2 problem(s) would refuse a scoring run" in result.output
     assert "more than one frozen record" in result.output
-    assert "more than one code version" in result.output
+    assert "more than one forecast digest" in result.output
 
 
 def test_the_check_names_the_sensitivity_members(tmp_path: Path) -> None:
@@ -932,3 +945,98 @@ def test_the_check_names_tickers_edgar_could_not_answer_for(
     )
     result, _ = _checked(tmp_path)
     assert "calendar   unavailable for 1 ticker(s): AAPL" in result.output
+
+
+# ---------------------------------------------------------------------------
+# The forecast digest (ADR 0026)
+# ---------------------------------------------------------------------------
+def test_two_commits_with_one_digest_are_forecast_equivalent(tmp_path: Path) -> None:
+    """The whole point. A twelve-night band spans every commit made while it runs, so
+    equality on the commit is a guard that must be overridden every time — which is
+    not a guard. Equality on what a forecast depends on is."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0", digest="d" * 64)
+    _manifest(tmp_path, ids[1], "b" * 40, freeze="2.3.0", digest="d" * 64)
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "code       digest dddddddddddd (2 runs)" in result.output
+
+
+def test_two_digests_refuse_even_on_one_commit(tmp_path: Path) -> None:
+    """The converse: the digest is what is compared, not a proxy for the commit."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0", digest="d" * 64)
+    _manifest(tmp_path, ids[1], "a" * 40, freeze="2.3.0", digest="e" * 64)
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 2
+    assert "2 distinct forecast digests" in result.output
+
+
+def test_a_dirty_run_is_counted_apart_rather_than_grouped(tmp_path: Path) -> None:
+    """A dirty tree has no honest digest, so it cannot be declared equivalent to
+    anything — grouping it with a clean run would claim exactly that."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0", digest="d" * 64)
+    _manifest(tmp_path, ids[1], "a" * 40, dirty=True, freeze="2.3.0", digest="d" * 64)
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 2
+    assert "+dirty (no digest)" in result.output
+
+
+def test_a_run_predating_the_digest_is_labelled_as_such(tmp_path: Path) -> None:
+    """Distinct from a dirty run and from an unknown commit: this one could be
+    backfilled, and saying so is how someone knows to run the backfill."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0", digest="")
+    _manifest(tmp_path, ids[1], "a" * 40, freeze="2.3.0", digest="d" * 64)
+
+    result = _invoke(tmp_path)
+    assert "predates the digest" in result.output
+
+
+def test_the_refusal_names_the_files_that_differ(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Turns the override into an informed one. The band's first split was three
+    files of scoring-only additions — justifiable in one glance, and
+    indistinguishable from a real change without this."""
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate._git_names",
+        lambda _a, _b: ["config/default.toml", "src/mapf/eval/scorer.py"],
+    )
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0", digest="d" * 64)
+    _manifest(tmp_path, ids[1], "b" * 40, freeze="2.3.0", digest="e" * 64)
+
+    result = _invoke(tmp_path)
+    assert "differs: config/default.toml" in result.output
+    # Excluded paths are filtered even out of the diff, or the evidence would
+    # contradict the digest that produced it.
+    assert "eval/scorer.py" not in result.output
+
+
+def test_a_failed_git_diff_reports_nothing_rather_than_raising(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The diff is evidence for a human, never the thing being decided. Losing it
+    must not turn a refusal into a crash."""
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.subprocess.run",
+        lambda *_a, **_k: (_ for _ in ()).throw(OSError("no git")),
+    )
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0", digest="d" * 64)
+    _manifest(tmp_path, ids[1], "b" * 40, freeze="2.3.0", digest="e" * 64)
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 2
+    assert "2 distinct forecast digests" in result.output

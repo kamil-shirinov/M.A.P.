@@ -892,3 +892,42 @@ share, and what they shared was the network.
 `MissingExhibitError` subclasses `ExhibitError`, so the classifier's `isinstance` order is load-bearing —
 a filing with no EX-99.1 must not be reported as an EDGAR refusal, which would make a permanent absence
 look like something a retry could change.
+
+---
+
+## 31 · The guard that would have been overridden every time
+
+`map evaluate` refused to score a band produced by more than one commit. Sensible, and by the first real
+pre-flight the band already spanned two — thirty-five items in, because development continues while a corpus
+runs and does not stop for twelve nights.
+
+So `--allow-mixed-code` would have been required on **every** scoring run.
+
+**A check that must be overridden every time is not a check.** It is #27 from the other side. There, a
+partition that could never fire read as reassurance; here, a refusal that always fires trains you to wave it
+through — and the run where it means something looks exactly like the eleven before it.
+
+The fix was to notice the guard was asking the wrong question. Not *which commit produced this item* but
+*did anything a forecast depends on differ* — a hash over the forecast-producing files, recorded beside the
+commit ([[decisions/0026-forecast-digest|ADR 0026]]).
+
+### "It can't be done retroactively" was wrong, and the reason matters
+
+I said the 35 existing items could not get a digest. They could. The digest is a pure function of file
+contents at a commit, and every manifest already records its commit — so `git ls-tree` recovers it exactly.
+
+The distinction is between **computing a function of recorded data** and **inferring data that was never
+recorded**. The second is what made deducing a run's identity from timestamps wrong. I had generalised a
+correct rule about inference to a case that was not inference, and the generalisation cost nothing only
+because someone checked it.
+
+### The honest residual
+
+The digest is file-granular. It answers *did any file that can produce a forecast change*, not *did the
+behaviour change* — undecidable without running both.
+
+It is already binding: the band's two groups differ by exactly three files, and the whole difference is
+scoring-side additions that cannot touch a forecast. Tightening the exclusion list until that split vanished
+would be choosing the rule after seeing the result. So the split stands, and the refusal now **names the
+differing files** — which turns the override from a flag you learn to pass into a judgement you can make in
+one glance.
