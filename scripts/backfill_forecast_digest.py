@@ -27,16 +27,17 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from collections import Counter
 from pathlib import Path
 
-from mapf.core.provenance import forecast_digest
+from mapf.core.provenance import forecast_digest, freeze_digest
 from mapf.corpus.ledger import Ledger
 from mapf.settings import load
 
-MANIFEST_VERSION = "1.6.0"
+MANIFEST_VERSION = "1.7.0"
 
 
 def _write_atomically(path: Path, body: str) -> None:
@@ -58,6 +59,32 @@ def _write_atomically(path: Path, body: str) -> None:
         raise
 
 
+def _frozen_at(commit: str) -> dict[str, object] | None:
+    """`corpus/frozen.json` as it stood at a commit.
+
+    The same recovery argument as the code digest: the freeze a run executed under is
+    the one committed alongside the code it recorded, so this reads back data that was
+    written down rather than inferring data that was not.
+    """
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "show", f"{commit}:corpus/frozen.json"],
+            capture_output=True,
+            text=True,
+            timeout=10.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        loaded = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return loaded if isinstance(loaded, dict) else None
+
+
 def main() -> int:
     dry_run = "--dry-run" in sys.argv
     settings = load()
@@ -66,6 +93,7 @@ def main() -> int:
 
     outcomes: Counter[str] = Counter()
     digests: Counter[str] = Counter()
+    freezes: Counter[str] = Counter()
     for entry in ledger.resolved().values():
         if entry.status != "complete" or entry.run_id is None:
             continue
@@ -80,30 +108,40 @@ def main() -> int:
             continue
 
         version = manifest.get("code_version") or {}
-        if version.get("forecast_digest"):
-            outcomes["already recorded"] += 1
-            digests[version["forecast_digest"][:12]] += 1
-            continue
         commit = version.get("commit")
+        wants_code = not version.get("forecast_digest")
+        wants_freeze = not manifest.get("freeze_digest")
+        if not wants_code and not wants_freeze:
+            outcomes["already recorded"] += 1
+            digests[str(version["forecast_digest"])[:12]] += 1
+            continue
         if not commit:
             outcomes["no commit recorded"] += 1
             continue
         if version.get("dirty"):
-            # Stays unknown, deliberately. The commit does not describe what ran.
+            # Stays unknown, deliberately. The commit does not describe what ran, so
+            # neither the code nor the freeze it carried can be recovered from it.
             outcomes["dirty tree — left unknown"] += 1
             continue
 
-        digest = forecast_digest(str(commit))
-        if digest is None:
+        code = forecast_digest(str(commit)) if wants_code else version.get("forecast_digest")
+        if code is None:
             outcomes["commit not in this checkout"] += 1
             continue
 
-        digests[digest[:12]] += 1
+        frozen = _frozen_at(str(commit)) if wants_freeze else None
+        freeze = freeze_digest(frozen) if frozen is not None else manifest.get("freeze_digest")
+
+        digests[str(code)[:12]] += 1
+        if freeze:
+            freezes[str(freeze)[:12]] += 1
         outcomes["backfilled"] += 1
         if dry_run:
             continue
-        version["forecast_digest"] = digest
+        version["forecast_digest"] = code
         manifest["code_version"] = version
+        if freeze:
+            manifest["freeze_digest"] = freeze
         manifest["manifest_version"] = MANIFEST_VERSION
         _write_atomically(path, json.dumps(manifest, indent=2))
 
@@ -115,6 +153,10 @@ def main() -> int:
     print(f"distinct forecast digests across the band: {len(digests)}")
     for digest, count in digests.most_common():
         print(f"  {digest}  {count} runs")
+    if freezes:
+        print(f"distinct freeze digests across the band: {len(freezes)}")
+        for digest, count in freezes.most_common():
+            print(f"  {digest}  {count} runs")
     return 0
 
 

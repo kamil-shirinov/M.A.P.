@@ -6,6 +6,7 @@ half-finished band, so the refusals are the substance rather than error handling
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -187,6 +188,10 @@ def _manifest(
         body["code_version"] = version
     if freeze is not None:
         body["freeze_version"] = freeze
+        # Derived from the version so a fixture varying one varies the other; the
+        # digest is what the equality test reads (ADR 0029). Tests that need two
+        # versions to SHARE governing content set the digest explicitly.
+        body["freeze_digest"] = hashlib.sha256(freeze.encode()).hexdigest()
     (directory / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
     if trace:
         (directory / "trace.jsonl").write_text(_one_run_trace(), encoding="utf-8")
@@ -542,7 +547,7 @@ def test_a_single_freeze_is_reported(tmp_path: Path) -> None:
         _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
     result = _invoke(tmp_path)
     assert result.exit_code == 0
-    assert "freeze     2.3.0 (2 runs)" in result.output
+    assert "(v2.3.0) (2 runs)" in result.output
 
 
 def test_a_band_spanning_two_freezes_refuses(tmp_path: Path) -> None:
@@ -554,8 +559,8 @@ def test_a_band_spanning_two_freezes_refuses(tmp_path: Path) -> None:
     _manifest(tmp_path, ids[1], "a" * 40, freeze="2.3.0")
     result = _invoke(tmp_path)
     assert result.exit_code == 2
-    assert "2 distinct frozen records" in result.output
-    assert "2.2.0" in result.output and "2.3.0" in result.output
+    assert "2 distinct forecast-governing records" in result.output
+    assert "v2.2.0" in result.output and "v2.3.0" in result.output
 
 
 def test_a_mixed_freeze_has_no_override(tmp_path: Path) -> None:
@@ -1040,3 +1045,72 @@ def test_a_failed_git_diff_reports_nothing_rather_than_raising(
     result = _invoke(tmp_path)
     assert result.exit_code == 2
     assert "2 distinct forecast digests" in result.output
+
+
+def test_a_version_bump_that_changes_no_governing_field_does_not_split_the_band(
+    tmp_path: Path,
+) -> None:
+    """The case this was built for: recording the execution order took the freeze
+    from 2.3.0 to 2.4.0 while every field deciding what a model is asked stayed
+    identical. Comparing versions would have refused the band on a restart, with no
+    override — finding #27 from the side it bit last time."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0")
+    _manifest(tmp_path, ids[1], "a" * 40, freeze="2.4.0")
+    for run_id, version in zip(ids, ("2.3.0", "2.4.0"), strict=True):
+        path = tmp_path / "runs" / str(run_id) / "manifest.json"
+        body = json.loads(path.read_text(encoding="utf-8"))
+        body["freeze_version"] = version
+        body["freeze_digest"] = "d" * 64  # same governing content
+        path.write_text(json.dumps(body), encoding="utf-8")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 0
+    assert "dddddddddddd (v2.3.0, v2.4.0)" in result.output
+
+
+def test_a_run_predating_the_freeze_digest_is_labelled_as_such(tmp_path: Path) -> None:
+    """Distinct from a missing freeze entirely: this one can be backfilled from the
+    commit, and saying so is how someone knows to run the backfill."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+        path = tmp_path / "runs" / str(run_id) / "manifest.json"
+        body = json.loads(path.read_text(encoding="utf-8"))
+        del body["freeze_digest"]
+        path.write_text(json.dumps(body), encoding="utf-8")
+
+    result = _invoke(tmp_path)
+    assert "predates the digest" in result.output
+
+
+def test_the_freeze_refusal_names_the_governing_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate._frozen_at",
+        lambda commit: {"models": {"a": commit[:1]}, "horizon_days": 5},
+    )
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.2.0")
+    _manifest(tmp_path, ids[1], "b" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path)
+    assert result.exit_code == 2
+    assert "differs: models" in result.output
+    assert "differs: horizon_days" not in result.output
+
+
+def test_an_unrecoverable_frozen_record_reports_no_fields_rather_than_raising(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The field list is evidence for a reader, never the thing being decided."""
+    monkeypatch.setattr("mapf.cli.commands.evaluate._frozen_at", lambda _c: None)
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.2.0")
+    _manifest(tmp_path, ids[1], "b" * 40, freeze="2.3.0")
+    assert _invoke(tmp_path).exit_code == 2

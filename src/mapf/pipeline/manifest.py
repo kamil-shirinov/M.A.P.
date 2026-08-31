@@ -84,7 +84,7 @@ class PriceProvenance(DomainModel):
 class RunManifest(DomainModel):
     # This manifest's own format version. Distinct from, and easily confused with,
     # the forecast's.
-    manifest_version: Literal["1.6.0"] = "1.6.0"
+    manifest_version: Literal["1.7.0"] = "1.7.0"
     # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
     # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
     # to decide. With only `schema_version` here it read the manifest's own version
@@ -125,6 +125,11 @@ class RunManifest(DomainModel):
     # is distinct from a corpus run that predates the field, which cannot be
     # distinguished from it and is reported as unknown.
     freeze_version: str | None = None
+    # The field that is actually COMPARED. The version moves for reasons that cannot
+    # change a forecast — noting the execution order took it from 2.3.0 to 2.4.0 while
+    # every field deciding what a model is asked stayed identical — so comparing
+    # versions would refuse a band for a difference that is not one (ADR 0029).
+    freeze_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
     # Marks a run that is not reproducible. Phase 2 must either exclude these or
     # report them separately (ADR 0007).

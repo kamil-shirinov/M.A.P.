@@ -24,6 +24,7 @@ from mapf.bootstrap import build_http_client, build_llm_provider, build_run
 from mapf.cli.app import app, fail, handle
 from mapf.core.errors import ExhibitError, MapError
 from mapf.core.models import Document, EarningsFiling
+from mapf.core.provenance import freeze_digest
 from mapf.core.tokens import AgentBudget, check_fit, estimate_tokens
 from mapf.core.truncation import plan_truncation, truncate
 from mapf.corpus.ledger import Ledger, LedgerEntry, is_terminal
@@ -229,6 +230,7 @@ def corpus_run(
                     runs_dir=settings.paths.runs_dir,
                     price_vintage=vintage,
                     freeze_version=_freeze_version(record),
+                    freeze_digest=freeze_digest(record),
                 ),
                 on_progress=_progress,
             )

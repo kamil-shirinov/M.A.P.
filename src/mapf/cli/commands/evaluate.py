@@ -40,7 +40,11 @@ from mapf.bootstrap import build_earnings_calendar, build_http_client, build_mar
 from mapf.cli.app import app, fail, handle
 from mapf.core.errors import MapError
 from mapf.core.models import PriceWindow
-from mapf.core.provenance import FORECAST_ROOTS, NOT_FORECAST_PATHS
+from mapf.core.provenance import (
+    FORECAST_ROOTS,
+    NOT_FORECAST_PATHS,
+    freeze_differences,
+)
 from mapf.corpus.forecasts import Loaded, load_band, unreferenced_runs
 from mapf.corpus.ledger import Ledger
 from mapf.corpus.passes import (
@@ -175,21 +179,25 @@ def evaluate(
         else:
             typer.secho("trace      every completed item has a trace", fg=typer.colors.GREEN)
 
-        freezes = _freeze_versions(ledger, runs_dir, band)
+        freezes, freeze_example = _freeze_versions(ledger, runs_dir, band)
         if len(freezes) > 1:
             typer.secho(
-                f"freeze     {len(freezes)} distinct frozen records produced this band:",
+                f"freeze     {len(freezes)} distinct forecast-governing records "
+                "produced this band:",
                 fg=typer.colors.RED,
             )
             for label, count in freezes.most_common():
                 typer.echo(f"           {label}  {count} runs")
+            for field in _freeze_diff(freeze_example):
+                typer.echo(f"           differs: {field}")
             refuse(
                 "this band was produced under more than one frozen record",
                 hint=(
-                    "The freeze governs sampling, truncation and corpus membership, "
-                    "so these items were not asked the same question. Re-run the "
-                    "items produced under the older record. There is deliberately "
-                    "no override for this one."
+                    "The fields listed above are what differ, and each governs what "
+                    "a model was asked. Re-run the items produced under the older "
+                    "record. There is deliberately no override for this one — a "
+                    "version bump that changes no governing field no longer reaches "
+                    "here (ADR 0029)."
                 ),
             )
         elif freezes:
@@ -298,22 +306,96 @@ def _unauditable(ledger: Ledger, runs_dir: Path, band: str) -> list[str]:
     return out
 
 
-def _freeze_versions(ledger: Ledger, runs_dir: Path, band: str) -> Counter[str]:
-    """Which frozen records produced this band's completed runs.
+def _freeze_versions(
+    ledger: Ledger, runs_dir: Path, band: str
+) -> tuple[Counter[str], dict[str, str]]:
+    """Which frozen records produced this band's completed runs, keyed by **digest**.
+
+    The version is the wrong equality test, for the same reason the commit was
+    (ADR 0026, ADR 0029): it moves for reasons that cannot change a forecast. Noting
+    the execution order took the freeze from 2.3.0 to 2.4.0 while every field
+    deciding what a model is asked stayed identical — and comparing versions would
+    have refused the band on a restart, with no override.
 
     Band-filtered, unlike `_code_versions` below — which is audit finding #4 and is
     deferred, not overlooked.
+
+    Returns the counts and one representative commit per group, so two differing
+    records can be recovered from git and the differing fields named.
     """
     seen: Counter[str] = Counter()
+    example: dict[str, str] = {}
+    versions: dict[str, set[str]] = {}
     for entry in ledger.resolved().values():
         if entry.status != "complete" or entry.band != band or entry.run_id is None:
             continue
         manifest = _manifest_of(runs_dir, entry.run_id)
         if manifest is None:
             continue
-        version = manifest.get("freeze_version")
-        seen[str(version) if version else "unknown (predates the field)"] += 1
-    return seen
+        digest, version = manifest.get("freeze_digest"), manifest.get("freeze_version")
+        code = manifest.get("code_version")
+        if digest:
+            # The KEY is the digest alone. Putting the version in it would split a
+            # group whose governing content is identical — which is the failure this
+            # whole change exists to remove, reintroduced in a display string.
+            label = str(digest)[:12]
+            versions.setdefault(label, set()).add(str(version or "?"))
+            if isinstance(code, dict) and code.get("commit"):
+                example.setdefault(label, str(code["commit"]))
+        elif version:
+            label = f"v{version} (predates the digest)"
+        else:
+            label = "unknown (predates the field)"
+        seen[label] += 1
+    # Versions are rendered beside the digest, never folded into it: a reader wants
+    # to know which record labels share governing content.
+    return (
+        Counter(
+            {
+                (f"{k} (v{', v'.join(sorted(versions[k]))})" if k in versions else k): n
+                for k, n in seen.items()
+            }
+        ),
+        {
+            f"{k} (v{', v'.join(sorted(versions[k]))})" if k in versions else k: v
+            for k, v in example.items()
+        },
+    )
+
+
+def _freeze_diff(example: dict[str, str]) -> list[str]:
+    """Which forecast-governing fields differ between two frozen records.
+
+    Recovered from git by the commit each group ran under, the same way the code
+    digest's file list is: a refusal should hand over what to look at.
+    """
+    commits = [c for c in example.values() if c]
+    if len(commits) != 2:
+        return []
+    records = [_frozen_at(c) for c in commits]
+    if any(r is None for r in records):
+        return []
+    return freeze_differences(records[0] or {}, records[1] or {})
+
+
+def _frozen_at(commit: str) -> dict[str, object] | None:
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "show", f"{commit}:corpus/frozen.json"],
+            capture_output=True,
+            text=True,
+            timeout=10.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        loaded = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    return loaded if isinstance(loaded, dict) else None
 
 
 def _manifest_of(runs_dir: Path, run_id: object) -> dict[str, object] | None:

@@ -139,6 +139,7 @@ def execute(
     today: date | None = None,
     render_chart: bool = True,
     freeze_version: str | None = None,
+    freeze_digest: str | None = None,
 ) -> RunResult:
     """Run the pipeline once and write every artifact.
 
@@ -269,6 +270,7 @@ def execute(
         fidelity=fidelity,
         code_version=code_version(),
         freeze_version=freeze_version,
+        freeze_digest=freeze_digest,
         allow_nondeterministic=allow_nondeterministic,
         package_version=PACKAGE_VERSION,
         python_version=platform.python_version(),

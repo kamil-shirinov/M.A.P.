@@ -1093,3 +1093,36 @@ confidently report one of them.
 obvious the moment the command met a real, busy machine. A pre-flight is a thing you run against reality, so
 its own failure modes only appear there — and this one had been run twice before, both times against an
 idle server.
+
+---
+
+## 36 · The same guard, the same failure, one layer up — and the fix reintroduced it in a label
+
+`map evaluate` refused a band spanning two frozen records, with no override, because two records meant "two
+items were not asked the same question."
+
+Amending the freeze to record the execution order took it from 2.3.0 to 2.4.0. **Every field deciding what a
+model is asked stayed byte-identical.** So the guard would have refused every band from the next restart
+onward — [[Findings & Incidents#27|#27]] from the side it bit last time, and the same defect
+[[decisions/0026-forecast-digest|ADR 0026]] had already fixed for the commit, one layer up and eight commits
+later.
+
+The lesson is not "check the freeze too". It is that **a version number is never the right equality test**,
+because a version increments for editorial reasons and the thing you care about is content. Both times the
+guard compared an identifier that moves for reasons unrelated to what it is guarding.
+
+### Two things the tests caught that review had not
+
+**A field classified as neither.** The split is a governing list and a recorded-only list, and a test asserts
+every field of the real record appears in one of them. It failed immediately: `amends` was in neither, from a
+typo, and a field in neither list is **silently excluded** — the invisible direction, where a real difference
+reads as agreement. Nothing else would have said so.
+
+**The fix reintroducing the bug in a display string.** The group label was built as
+`f"{digest[:12]} (v{version})"` — so two runs with an identical digest under different versions produced two
+*different labels* and were counted as two groups. The refusal fired for exactly the reason it had just been
+built to stop firing.
+
+That one is worth sitting with. The key and the label were the same string because it was convenient. **A
+grouping key that doubles as a display string will eventually be given something display-only**, and the
+guard changes meaning without anyone editing the comparison.

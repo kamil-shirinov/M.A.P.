@@ -19,12 +19,13 @@ lookup per run would record a commit that never produced anything.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from functools import cache
 from pathlib import Path
 
 from pydantic import Field
 
-from mapf.core.hashing import sha256_hex
+from mapf.core.hashing import canonical_json, sha256_hex
 from mapf.core.models import DomainModel
 
 _GIT_TIMEOUT_S = 5.0
@@ -156,3 +157,71 @@ def code_version(root: Path | None = None) -> CodeVersion:
     # any hash taken from it would name code that was not executed.
     digest = None if dirty else forecast_digest(commit, where)
     return CodeVersion(commit=commit, dirty=dirty, forecast_digest=digest)
+
+
+# ---------------------------------------------------------------------------
+# The frozen record, split the same way the code is
+# ---------------------------------------------------------------------------
+# Fields of `corpus/frozen.json` that govern what an item was ASKED, or which
+# population it was drawn from. A band spanning two different values of any of these
+# is a band whose items were not asked the same question (ADR 0029).
+FREEZE_GOVERNING: tuple[str, ...] = (
+    "context_tokens",  # the window, and so the document budget
+    "corpus",  # membership: which items exist at all
+    "degeneration_retry",  # sampling on a retried item
+    "exhibits",  # the document hashes; a change here is a different document
+    "horizon_days",  # in the analyst's prompt, and the target being forecast
+    "kv_cache",  # a server setting invisible to the cache key and the fingerprint
+    "models",  # alias, temperature, budgets, penalty
+    "price_vintage",  # the series, and so the spot price the prompt carries
+    "prompts",  # template content hashes
+    "truncation",  # what the model was shown of an oversized exhibit
+)
+
+# Everything else is recorded and excluded, and each is excluded for a reason that
+# can be stated. The bias is the same one direction as the code digest: over-including
+# costs a visible false refusal, under-including costs an invisible false claim that
+# two items were asked the same question.
+FREEZE_RECORDED_ONLY: tuple[str, ...] = (
+    "amended_on",
+    "amends",  # provenance of the record, not of any forecast
+    "amendment_reason",
+    "changes",  # a changelog of a past edit; the current membership is in `corpus`
+    "context_verification",  # evidence that the probe agreed, not a control
+    "execution",  # band order and retry policy: which items run, not what they are asked
+    "execution_order",  # the attempt order (ADR 0028); cannot reach a forecast
+    "freeze_version",  # the label this digest replaces as the equality test
+    "frozen_on",
+    "note",
+)
+
+
+def freeze_digest(record: Mapping[str, object]) -> str | None:
+    """Hash the forecast-governing fields of a frozen corpus record.
+
+    The freeze version is the wrong equality test for the same reason the commit was
+    (ADR 0026): it moves for reasons that cannot change a forecast. Amending the
+    record to note the execution order bumped it from 2.3.0 to 2.4.0 while every
+    field that decides what a model is asked stayed identical — and a restart would
+    then have split the band across two versions with no override available.
+
+    `None` when the record carries none of the governing fields, which is not a
+    frozen corpus and must not be given a digest two unrelated records could share.
+    """
+    present = {key: record[key] for key in FREEZE_GOVERNING if key in record}
+    if not present:
+        return None
+    return sha256_hex(canonical_json(present).encode("utf-8"))
+
+
+def freeze_differences(left: Mapping[str, object], right: Mapping[str, object]) -> list[str]:
+    """Which governing fields differ between two frozen records.
+
+    Evidence for a reader, exactly as the file list is when two code digests differ:
+    the refusal should hand over what to look at rather than only that something did.
+    """
+    return [
+        key
+        for key in FREEZE_GOVERNING
+        if canonical_json(left.get(key)) != canonical_json(right.get(key))
+    ]
