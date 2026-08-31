@@ -1173,3 +1173,46 @@ a true statement whose form invites more confidence than its evidence supports.
 And the structural fix is not a better number. It is that a margin chosen from a sample must be **backstopped
 by a measurement**, so that when the sample turns out to be unrepresentative the failure is loud and early
 rather than silent and at item 136.
+
+---
+
+## 38 · The judgement that is cheap now and expensive later
+
+The forecast digest refuses a band spanning two code states and hands over the differing files, so the
+override is made on evidence rather than blind. **That still leaves a judgement, and the honesty of a
+judgement depends on when it is made.**
+
+At scoring time it stands between a person and a result they have spent two weeks producing. *"These files
+look like plumbing"* is a much easier sentence to believe under that pressure, and every incentive points
+one way. So every boundary in the clean band was adjudicated now, with no forecast scored anywhere
+([[decisions/0030-code-boundary-adjudication|ADR 0030]]).
+
+The pattern is the same one the two-pass band and the sensitivity partitions rest on: **a decision that is
+free to make honestly beforehand becomes expensive afterwards, so the time to make it is the only variable
+you actually control.**
+
+### "Cannot tell" had to be a permitted answer for the other two to mean anything
+
+One boundary is adjudicable: three files differ and all three are additions consumed only by scoring, so it
+could not have changed what a model was asked. One is not: 34 items came from an uncommitted tree, and the
+files that executed are unrecoverable.
+
+For the second I could reconstruct a plausible story — I know what I was editing, and the committed span on
+either side touches no prompt, no sampling field, no request body, no cache key, no document handling and no
+tokeniser. Every one of those checks passes. **None of it rescues the group**, because the committed span is
+not what ran, and what I remember editing is memory rather than record.
+
+Had "cannot tell" not been available, the pressure would have been to write "could not have changed" and
+lean on the six clean checks. **A verdict set with only two options is a verdict that will be forced**, and
+the third option is what keeps the first two from being rubber stamps.
+
+### The over-inclusion is not the digest being wrong
+
+Worth stating because it will be tempting to read it the other way. Boundary 1's three files —
+`config/default.toml`, `settings/loader.py`, `bootstrap.py` — carry every context window and sampling
+parameter in the project. They belong on the governing side. A diff that turns out to be one new cache key
+is the **price of that correctness**, not evidence the classification is too broad.
+
+The digest answers *did any file that can produce a forecast change*. It was never going to answer *did the
+behaviour change* — that is undecidable without running both — which is exactly why the human judgement
+exists, and why it is written down before anyone has a reason to want a particular answer.
