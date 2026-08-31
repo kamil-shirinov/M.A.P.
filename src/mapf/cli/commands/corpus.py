@@ -136,15 +136,20 @@ def corpus_run(
                 f"{len(exhausted)} retries exhausted) — {len(remaining)} to run",
                 fg=typer.colors.YELLOW,
             )
-        # Named individually, unlike the terminal failures. "This filing has no
-        # exhibit" is a fact about the corpus; "we stopped asking" is a decision,
-        # and a decision that removes an item from the sample should not be a count
-        # (ADR 0024).
-        for key, entry in sorted(exhausted.items()):
-            typer.secho(
-                f"           {key[0]} {key[2]}: {entry.reason} twice — not retried again",
-                fg=typer.colors.YELLOW,
-            )
+            # Named individually, unlike the terminal failures. "This filing has no
+            # exhibit" is a fact about the corpus; "we stopped asking" is a decision,
+            # and a decision that removes an item from the sample should not be a
+            # count (ADR 0024).
+            #
+            # Inside the `if`, and that is load-bearing: this loop once sat between
+            # the `if` and its `else`, which made Python bind the `else` to the FOR
+            # rather than the IF. A for/else runs whenever the loop is not broken out
+            # of — so every resume also printed "nothing recorded".
+            for key, entry in sorted(exhausted.items()):
+                typer.secho(
+                    f"           {key[0]} {key[2]}: {entry.reason} twice — not retried again",
+                    fg=typer.colors.YELLOW,
+                )
         else:
             typer.echo(f"resume     nothing recorded; all {len(items)} items to run")
 
@@ -310,6 +315,7 @@ def _probe_contexts(provider: object, models: object, registry: object) -> None:
     failed, so this compares against reality rather than against `config`.
     """
     disagreements: list[str] = []
+    unmeasured: list[str] = []
     for stage in ("intake", "analyst", "structuralist"):
         spec = registry.spec(stage)  # type: ignore[attr-defined]
         report = probe_context(
@@ -318,10 +324,30 @@ def _probe_contexts(provider: object, models: object, registry: object) -> None:
             agent=stage,
             configured=spec.context_tokens,
         )
-        colour = typer.colors.GREEN if report.agrees else typer.colors.RED
+        if report.inconclusive:
+            colour = typer.colors.YELLOW
+        else:
+            colour = typer.colors.GREEN if report.agrees else typer.colors.RED
         typer.secho(f"context    {report.describe()}", fg=colour)
-        if not report.agrees:
+        if report.inconclusive:
+            unmeasured.append(stage)
+        elif not report.agrees:
             disagreements.append(report.describe())
+
+    # Reported apart from a disagreement, and refused with a different remedy. An
+    # unmeasured window is not a small one, and the fix for it is to stop competing
+    # with whatever is using the server — not to lower a context that may be fine.
+    if unmeasured:
+        raise fail(
+            f"the context window was not measured for {', '.join(unmeasured)}",
+            2,
+            hint=(
+                "The server refused even a tiny prompt, so nothing was learned about "
+                "its windows. A corpus run already in progress is the usual cause: "
+                "the pre-flight and the run compete for the same loaded model. Wait "
+                "for the run, or point --config at an idle server."
+            ),
+        )
     if disagreements:
         raise fail(
             "the server's context windows do not match the configuration",

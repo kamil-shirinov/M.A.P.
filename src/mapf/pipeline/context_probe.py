@@ -53,6 +53,10 @@ _FILLER_TOKEN = " the"
 # which would leave the probe too far below to detect a half-sized server.
 _SCAFFOLD_TOKENS = 256
 _SCAFFOLD_FRACTION = 8
+# A prompt so small that no configured window can reject it. If even this is refused
+# the server is not answering, and the bracket below would read that as "the window is
+# too small" — the same wrong verdict for a completely different cause.
+_CANARY_TOKENS = 64
 # The over-probe sits this far above, comfortably beyond any slop in the filler's
 # tokenisation, so a rejection is unambiguous.
 _OVERSHOOT = 4
@@ -74,6 +78,15 @@ class ContextReport:
     accepts_under: bool
     rejects_over: bool
     reported: int | None = None
+    # False when even a 64-token prompt was refused. The window was never measured:
+    # the server was busy or unwell, and saying TOO SMALL would send someone to lower
+    # a context that is fine.
+    available: bool = True
+
+    @property
+    def measured(self) -> bool:
+        """Whether the probe learned anything at all."""
+        return self.available
 
     @property
     def agrees(self) -> bool:
@@ -86,12 +99,23 @@ class ContextReport:
         return self.accepts_under
 
     @property
+    def inconclusive(self) -> bool:
+        """A refusal that says nothing about the window."""
+        return not self.available
+
+    @property
     def larger_than_configured(self) -> bool:
         """Accepted a prompt well beyond the configured window."""
         return self.accepts_under and not self.rejects_over
 
     def describe(self) -> str:
         named = f", server names {self.reported:,}" if self.reported is not None else ""
+        if not self.available:
+            return (
+                f"{self.agent}: refused even a {_CANARY_TOKENS}-token prompt, so its "
+                "window was not measured — the server is busy or unwell, which a "
+                "corpus run in progress is the usual cause of [UNMEASURED]"
+            )
         if not self.accepts_under:
             return (
                 f"{self.agent}: rejected a prompt of ~{self.under_tokens:,} tokens, "
@@ -170,6 +194,21 @@ def probe_context(
     report = ContextReport(
         agent=agent, configured=configured, accepts_under=False, rejects_over=True
     )
+    # The canary first. A busy server rejects the under-probe exactly as a small
+    # window does, and bracketing cannot tell them apart — so the two are separated
+    # by asking a question no configured window can refuse. Without it a corpus run
+    # in progress makes every agent read TOO SMALL, and the remedy that suggests is
+    # to lower a context that was never the problem.
+    accepted_canary, _ = _accepts(provider, model, _CANARY_TOKENS)
+    if not accepted_canary:
+        return ContextReport(
+            agent=agent,
+            configured=configured,
+            accepts_under=False,
+            rejects_over=True,
+            available=False,
+        )
+
     accepted_under, body = _accepts(provider, model, report.under_tokens)
     if not accepted_under:
         return ContextReport(

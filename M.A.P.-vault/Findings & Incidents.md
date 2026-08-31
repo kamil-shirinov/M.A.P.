@@ -1046,3 +1046,50 @@ is a hybrid — 80 contiguous early items plus an interleaved remainder — stat
 as a clean design. At a halt near 210 all eight months survive with January over-weighted about 1.7×, which
 is a distortion that can be stated and weighted. The prefix lost three months, and no weighting repairs an
 absence.
+
+---
+
+## 35 · Two bugs found by running the pre-flight against reality
+
+Running `map corpus run --check` while the band was in flight — to confirm the freeze amendment landed
+cleanly — produced two lines that should not have been there.
+
+### A `for` loop between an `if` and its `else`
+
+```
+resume     skipping 134 of 356 items (132 complete, 1 terminal, 1 retries exhausted) — 222 to run
+           ALLY 2026-01-21: budget_exhausted twice — not retried again
+resume     nothing recorded; all 356 items to run
+```
+
+Both branches printed. Adding the "name each exhausted item" loop between the `if` block and its `else`
+rebound the `else` to the **loop**, and Python's `for/else` runs whenever the loop is not broken out of —
+which is always. So every resume also announced that nothing had been recorded.
+
+Nothing failed. The counts were right, the ALLY line was right, and a contradiction sat between two correct
+statements. `for/else` is the one Python construct where inserting a loop silently changes what an adjacent
+keyword means.
+
+### A busy server reported as a small one
+
+```
+context    intake: rejected a prompt of ~32,512 tokens, so its window is under the configured 32,768 [TOO SMALL]
+```
+
+All three agents, on the exact windows the running band was succeeding with at that moment.
+
+The probe brackets: send a prompt just under the configured window (must be accepted) and one well over
+(must be rejected). **A busy server rejects the under-probe exactly as a too-small window does**, and
+bracketing cannot separate them. The verdict was not merely wrong — it was wrong in the direction that
+invites a harmful fix, since the printed remedy is *"lower it in config"*, and lowering a context that is
+fine would have re-derived which exhibits fit against a fiction.
+
+The fix is a **canary**: a 64-token prompt no configured window can refuse. If even that is rejected, the
+window was not measured, and the report says `UNMEASURED` with the opposite remedy — stop competing for the
+server. It is [[Findings & Incidents#8|finding #8]] again: a check that cannot distinguish two causes will
+confidently report one of them.
+
+**The general shape, which is the part worth keeping.** Both bugs were invisible to the test suite and
+obvious the moment the command met a real, busy machine. A pre-flight is a thing you run against reality, so
+its own failure modes only appear there — and this one had been run twice before, both times against an
+idle server.

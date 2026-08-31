@@ -105,27 +105,30 @@ def test_the_under_probe_sits_below_the_configured_window() -> None:
     """Scaffolding must not push it over and produce a false 'too small'."""
     server = _Server(32768)
     probe_context(server, MODEL, agent="intake", configured=32768)
-    assert server.sizes[0] < 32768
+    assert server.sizes[1] < 32768
 
 
 def test_the_over_probe_sits_comfortably_above() -> None:
     server = _Server(32768)
     probe_context(server, MODEL, agent="intake", configured=32768)
-    assert server.sizes[1] > 32768 * 2
+    assert server.sizes[2] > 32768 * 2  # sizes: canary, under, over
 
 
 def test_a_rejected_under_probe_skips_the_over_probe() -> None:
-    """Once the window is known too small, the second request tells us nothing and
-    costs a prefill."""
+    """Once the window is known too small, the next request tells us nothing and
+    costs a prefill. The canary still runs first, to establish that the refusal is
+    about the size rather than about the server."""
     server = _Server(1000)
     probe_context(server, MODEL, agent="intake", configured=32768)
-    assert len(server.sizes) == 1
+    assert len(server.sizes) == 2
 
 
-def test_two_requests_when_the_window_is_adequate() -> None:
+def test_three_requests_when_the_window_is_adequate() -> None:
+    """Canary, under, over. The canary is the one that separates a busy server from
+    a small window, and it is cheap enough to pay for on every probe."""
     server = _Server(32768)
     probe_context(server, MODEL, agent="intake", configured=32768)
-    assert len(server.sizes) == 2
+    assert len(server.sizes) == 3
 
 
 def test_each_probe_generates_at_most_one_token() -> None:
@@ -216,3 +219,39 @@ def test_the_bracket_holds_at_any_configured_size(configured: int) -> None:
     assert not probe_context(
         _Server(configured // 2), MODEL, agent="a", configured=configured
     ).agrees
+
+
+# ---------------------------------------------------------------------------
+# A busy server is not a small window
+# ---------------------------------------------------------------------------
+def test_a_server_refusing_everything_is_unmeasured_not_too_small() -> None:
+    """The failure this was found by: `--check` run while a corpus was in flight
+    reported all three agents TOO SMALL, on the very windows the running band was
+    succeeding with. Bracketing cannot tell a busy server from a small one — both
+    reject the under-probe — so it is asked a question no window can refuse."""
+    report = probe_context(_Server(0), MODEL, agent="intake", configured=32768)
+    assert report.inconclusive
+    assert not report.measured
+    assert "UNMEASURED" in report.describe()
+    assert "TOO SMALL" not in report.describe()
+
+
+def test_the_canary_costs_one_extra_request_and_only_when_it_passes() -> None:
+    server = _Server(32768)
+    probe_context(server, MODEL, agent="intake", configured=32768)
+    assert len(server.sizes) == 3  # canary, under, over
+    assert server.sizes[0] < server.sizes[1]
+
+
+def test_a_genuinely_small_window_still_reads_as_too_small() -> None:
+    """The canary must not mask the failure the probe exists for: a server loaded at
+    8,192 accepts a tiny prompt and rejects the under-probe."""
+    report = probe_context(_Server(8192), MODEL, agent="intake", configured=32768)
+    assert not report.inconclusive
+    assert not report.agrees
+    assert "TOO SMALL" in report.describe()
+
+
+def test_an_unmeasured_window_does_not_read_as_agreement() -> None:
+    """The dangerous direction would be treating "no answer" as "fine"."""
+    assert not probe_context(_Server(0), MODEL, agent="a", configured=8192).agrees

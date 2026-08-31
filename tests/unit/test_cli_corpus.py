@@ -724,3 +724,102 @@ def test_an_exhausted_item_is_named_on_resume(tmp_path: Path) -> None:
     result = _invoke(tmp_path, "--check")
     assert "1 retries exhausted" in result.output
     assert "AAPL 2026-02-01: budget_exhausted twice — not retried again" in result.output
+
+
+def test_a_resume_does_not_also_claim_nothing_was_recorded(tmp_path: Path) -> None:
+    """The two resume branches are mutually exclusive. They were not: a `for` loop
+    added between the `if` and its `else` made Python bind the `else` to the loop,
+    and a for/else runs whenever the loop is not broken out of — so every resume
+    printed both lines."""
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="clean",
+            filing_date=date(2026, 2, 1),
+            status="complete",
+            run_id=uuid4(),
+        )
+    )
+    output = _invoke(tmp_path, "--check").output
+    assert "resume     skipping 1 of" in output
+    assert "nothing recorded" not in output
+
+
+def test_an_untouched_band_says_nothing_was_recorded(tmp_path: Path) -> None:
+    output = _invoke(tmp_path, "--check").output
+    assert "nothing recorded" in output
+    assert "resume     skipping" not in output
+
+
+def test_an_unmeasured_context_refuses_with_a_different_remedy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """ "The server would not answer" and "the window is too small" need opposite
+    actions, and the second was being printed for the first. Acting on it would mean
+    lowering a context that was never the problem."""
+    from types import SimpleNamespace
+
+    import typer
+
+    from mapf.cli.commands.corpus import _probe_contexts
+    from mapf.pipeline.context_probe import ContextReport
+
+    monkeypatch.setattr(
+        "mapf.cli.commands.corpus.probe_context",
+        lambda *_a, **k: ContextReport(
+            agent=k["agent"],
+            configured=k["configured"],
+            accepts_under=False,
+            rejects_over=True,
+            available=False,
+        ),
+    )
+    registry = SimpleNamespace(spec=lambda _s: SimpleNamespace(context_tokens=32768))
+    with pytest.raises(typer.Exit) as caught:
+        _probe_contexts(
+            object(), {s: object() for s in ("intake", "analyst", "structuralist")}, registry
+        )
+    assert caught.value.exit_code == 2
+
+
+def test_a_genuinely_small_window_keeps_the_original_remedy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The canary must not mask the failure the probe was built for."""
+    from types import SimpleNamespace
+
+    import typer
+
+    from mapf.cli.commands.corpus import _probe_contexts
+    from mapf.pipeline.context_probe import ContextReport
+
+    monkeypatch.setattr(
+        "mapf.cli.commands.corpus.probe_context",
+        lambda *_a, **k: ContextReport(
+            agent=k["agent"], configured=k["configured"], accepts_under=False, rejects_over=True
+        ),
+    )
+    registry = SimpleNamespace(spec=lambda _s: SimpleNamespace(context_tokens=32768))
+    with pytest.raises(typer.Exit):
+        _probe_contexts(
+            object(), {s: object() for s in ("intake", "analyst", "structuralist")}, registry
+        )
+
+
+def test_agreeing_windows_raise_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from mapf.cli.commands.corpus import _probe_contexts
+    from mapf.pipeline.context_probe import ContextReport
+
+    monkeypatch.setattr(
+        "mapf.cli.commands.corpus.probe_context",
+        lambda *_a, **k: ContextReport(
+            agent=k["agent"], configured=k["configured"], accepts_under=True, rejects_over=True
+        ),
+    )
+    registry = SimpleNamespace(spec=lambda _s: SimpleNamespace(context_tokens=32768))
+    _probe_contexts(
+        object(), {s: object() for s in ("intake", "analyst", "structuralist")}, registry
+    )
