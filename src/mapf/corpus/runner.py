@@ -385,9 +385,11 @@ class RunnerConfig:
     # detectable at scoring time (ADR 0022). Optional only so a caller outside a
     # corpus need not invent one.
     freeze_version: str | None = None
-    # What is compared at scoring time. The version is recorded beside it for a
-    # reader; only this decides whether two items were asked the same question.
+    # What is compared at scoring time. Two of them, because the truncation rule
+    # governs only the items it actually applied to: an untruncated exhibit was asked
+    # the same question whatever the rule says (ADR 0029, amended).
     freeze_digest: str | None = None
+    freeze_digest_truncated: str | None = None
     history_days: int = 730
     horizon_days: int = 5
     attempts: int = 3
@@ -543,7 +545,11 @@ def _attempt(
                 today=config.price_vintage,
                 render_chart=False,
                 freeze_version=config.freeze_version,
-                freeze_digest=config.freeze_digest,
+                freeze_digest=(
+                    config.freeze_digest_truncated
+                    if item.key in TRUNCATION_NOTES
+                    else config.freeze_digest
+                ),
             )
             # Inside the try, so a missing artifact fails the item like any other
             # error. In the `else` clause it would escape the handlers entirely.

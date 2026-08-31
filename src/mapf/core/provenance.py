@@ -196,8 +196,15 @@ FREEZE_RECORDED_ONLY: tuple[str, ...] = (
 )
 
 
-def freeze_digest(record: Mapping[str, object]) -> str | None:
+def freeze_digest(record: Mapping[str, object], *, truncated: bool = True) -> str | None:
     """Hash the forecast-governing fields of a frozen corpus record.
+
+    `truncated` says whether **this run's own document** was cut. When it was not, the
+    truncation rule is excluded: a rule that did not apply cannot have changed what the
+    model was asked, and including it would split a band on a parameter 691 of its 709
+    exhibits never touched. That is the same file-granularity over-inclusion the code
+    digest carries, in a place where the per-item answer happens to be known exactly —
+    so it is used (ADR 0029, amended).
 
     The freeze version is the wrong equality test for the same reason the commit was
     (ADR 0026): it moves for reasons that cannot change a forecast. Amending the
@@ -208,7 +215,10 @@ def freeze_digest(record: Mapping[str, object]) -> str | None:
     `None` when the record carries none of the governing fields, which is not a
     frozen corpus and must not be given a digest two unrelated records could share.
     """
-    present = {key: record[key] for key in FREEZE_GOVERNING if key in record}
+    governing = (
+        FREEZE_GOVERNING if truncated else tuple(k for k in FREEZE_GOVERNING if k != "truncation")
+    )
+    present = {key: record[key] for key in governing if key in record}
     if not present:
         return None
     return sha256_hex(canonical_json(present).encode("utf-8"))

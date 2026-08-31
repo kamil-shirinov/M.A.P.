@@ -87,6 +87,7 @@ def _frozen_at(commit: str) -> dict[str, object] | None:
 
 def main() -> int:
     dry_run = "--dry-run" in sys.argv
+    refresh = "--refresh-freeze" in sys.argv
     settings = load()
     runs_dir = settings.paths.runs_dir
     ledger = Ledger(Path("var/corpus/ledger.jsonl"))
@@ -110,7 +111,9 @@ def main() -> int:
         version = manifest.get("code_version") or {}
         commit = version.get("commit")
         wants_code = not version.get("forecast_digest")
-        wants_freeze = not manifest.get("freeze_digest")
+        # `--refresh-freeze` recomputes a freeze digest that is already present, which
+        # is needed when the SCOPE of the digest changes rather than the record.
+        wants_freeze = refresh or not manifest.get("freeze_digest")
         if not wants_code and not wants_freeze:
             outcomes["already recorded"] += 1
             digests[str(version["forecast_digest"])[:12]] += 1
@@ -130,7 +133,13 @@ def main() -> int:
             continue
 
         frozen = _frozen_at(str(commit)) if wants_freeze else None
-        freeze = freeze_digest(frozen) if frozen is not None else manifest.get("freeze_digest")
+        # Per item: the truncation rule governs only the runs it actually applied to,
+        # so an untruncated exhibit is not moved by a change to it (ADR 0029).
+        freeze = (
+            freeze_digest(frozen, truncated=entry.truncated)
+            if frozen is not None
+            else manifest.get("freeze_digest")
+        )
 
         digests[str(code)[:12]] += 1
         if freeze:

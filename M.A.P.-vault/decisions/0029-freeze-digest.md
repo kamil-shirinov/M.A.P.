@@ -98,6 +98,35 @@ solution to it.
 **All 133 completed items carry one freeze digest** (`941dc7eefda5`), and the record
 the restart will write hashes to the same value. The restart does not split the band.
 
+## Amendment, 2026-08-31 — truncation is scoped to the items it applied to
+
+Lowering the token ratio (ADR 0020 addendum) changed the `truncation` field, and the
+digest as first written moved for **every** item in the band — though only 18 of 709
+exhibits are cut at all, and only 2 completed items were affected.
+
+That is the code digest's file-granularity problem again: a governing field whose
+*actual* effect is narrower than the field. The difference here is that the per-item
+answer is known exactly — `truncation.applies_to` names the affected accessions, and
+the runner knows whether it cut a given document.
+
+So `freeze_digest` takes `truncated`, and excludes the truncation rule when the run's
+own document was not cut. **A rule that did not apply cannot have changed what the
+model was asked.**
+
+Measured across the real amendment:
+
+| | 2.4.0 → 2.5.0 |
+| --- | --- |
+| untruncated items | **same digest** — 133 completed items stay in one group |
+| truncated items | digest differs — 2 items, exactly BXP 2026-01-28 and FCX 2026-01-22 |
+
+The digest now identifies the re-runs by itself rather than needing them listed in a
+commit message.
+
+**The narrowing applies to truncation alone**, and a test asserts every other governing
+field still moves both scopes — a field narrowed silently would be the invisible
+direction.
+
 ## Consequences
 
 - `manifest_version` goes to **1.7.0**; `RunManifest` gains `freeze_digest`.

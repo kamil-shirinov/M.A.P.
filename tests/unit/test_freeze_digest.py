@@ -186,3 +186,48 @@ def test_a_diff_needs_exactly_two_groups_to_be_meaningful() -> None:
 
     assert _freeze_diff({"a": "x"}) == []
     assert _freeze_diff({"a": "x", "b": "y", "c": "z"}) == []
+
+
+# ---------------------------------------------------------------------------
+# Truncation governs only the items it applied to
+# ---------------------------------------------------------------------------
+def test_an_untruncated_item_is_not_moved_by_a_truncation_change() -> None:
+    """691 of 709 exhibits are never cut. A change to the rule cannot have changed
+    what they asked, and including it would split the band on a parameter they never
+    touched — the code digest's file-granularity problem, in a place where the
+    per-item answer is known exactly."""
+    before = _record(truncation={"head_tokens": 24000, "chars_per_token": 3.5})
+    after = _record(truncation={"head_tokens": 24000, "chars_per_token": 3.0})
+    assert freeze_digest(before, truncated=False) == freeze_digest(after, truncated=False)
+
+
+def test_a_truncated_item_is_moved_by_it() -> None:
+    """The control: for an item the rule actually cut, the document differs."""
+    before = _record(truncation={"chars_per_token": 3.5})
+    after = _record(truncation={"chars_per_token": 3.0})
+    assert freeze_digest(before, truncated=True) != freeze_digest(after, truncated=True)
+
+
+def test_the_two_scopes_are_different_digests() -> None:
+    """Otherwise the distinction would be decorative."""
+    r = _record()
+    assert freeze_digest(r, truncated=True) != freeze_digest(r, truncated=False)
+
+
+def test_every_other_governing_field_still_moves_both_scopes() -> None:
+    """Narrowing must apply to truncation alone; anything else narrowed silently
+    would be the invisible direction."""
+    for field in FREEZE_GOVERNING:
+        if field == "truncation":
+            continue
+        changed = _record(**{field: {"altered": True}})
+        assert freeze_digest(_record(), truncated=False) != freeze_digest(changed, truncated=False)
+
+
+def test_the_real_amendment_keeps_untruncated_items_together() -> None:
+    """Freeze 2.4.0 -> 2.5.0 changed only truncation. The 133 untruncated completed
+    items must stay in one group; the 2 truncated ones must not."""
+    before, after = _frozen_at("a42b13f~1"), _frozen_at("a42b13f")
+    assert before is not None and after is not None
+    assert freeze_digest(before, truncated=False) == freeze_digest(after, truncated=False)
+    assert freeze_digest(before, truncated=True) != freeze_digest(after, truncated=True)

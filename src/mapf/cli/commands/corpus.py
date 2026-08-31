@@ -243,7 +243,8 @@ def corpus_run(
                     runs_dir=settings.paths.runs_dir,
                     price_vintage=vintage,
                     freeze_version=_freeze_version(record),
-                    freeze_digest=freeze_digest(record),
+                    freeze_digest=freeze_digest(record, truncated=False),
+                    freeze_digest_truncated=freeze_digest(record, truncated=True),
                 ),
                 on_progress=_progress,
             )
