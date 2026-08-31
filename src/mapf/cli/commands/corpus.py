@@ -26,7 +26,7 @@ from mapf.cli.app import app, fail, handle
 from mapf.core.errors import ExhibitError, MapError
 from mapf.core.models import Document, EarningsFiling
 from mapf.core.ports import LLMProvider, ModelInfo
-from mapf.core.provenance import freeze_digest
+from mapf.core.provenance import code_version, freeze_digest
 from mapf.core.tokens import AgentBudget, check_fit, estimate_tokens
 from mapf.core.truncation import plan_truncation, truncate
 from mapf.corpus.ledger import Ledger, LedgerEntry, is_terminal
@@ -84,6 +84,14 @@ def corpus_run(
     check: bool = typer.Option(
         False, "--check", help="Pre-flight only: verify everything, run no inference."
     ),
+    allow_dirty: bool = typer.Option(
+        False,
+        "--allow-dirty",
+        help=(
+            "Run from an uncommitted tree. Every item it produces records no forecast "
+            "digest and must be reported as its own stratum."
+        ),
+    ),
     frozen: Path = typer.Option(FROZEN, help="The frozen corpus to execute."),
     ledger_path: Path = typer.Option(LEDGER, help="Where item outcomes are recorded."),
     limit: int | None = typer.Option(None, help="Stop after this many items."),
@@ -123,6 +131,33 @@ def corpus_run(
             "freeze     prompts, aliases and sampling match the frozen record",
             fg=typer.colors.GREEN,
         )
+
+        # 1b. The tree, before anything else is spent. An item produced from
+        #     uncommitted files carries no forecast digest, so it can never be proved
+        #     equivalent to any other item — and a band cannot absorb a stratum of
+        #     those (ADR 0019 §8).
+        version = code_version()
+        if version.dirty and not allow_dirty:
+            raise fail(
+                "the working tree has uncommitted changes",
+                2,
+                hint=(
+                    "An item produced from uncommitted files records no forecast "
+                    "digest, so it cannot be shown equivalent to anything and forms a "
+                    "stratum of its own. Commit or stash, then start. If a defect "
+                    "emerges mid-run, STOP the run, commit the fix, and resume — that "
+                    "keeps every item provable. --allow-dirty overrides this and marks "
+                    "every item it produces."
+                ),
+            )
+        if version.dirty:
+            typer.secho(
+                "tree       DIRTY, overridden — every item produced by this run will "
+                "carry no forecast digest and must be reported as its own stratum",
+                fg=typer.colors.RED,
+            )
+        elif version.commit:
+            typer.secho(f"tree       clean at {version.commit[:12]}", fg=typer.colors.GREEN)
 
         # 2. The ledger, so a resume is announced rather than assumed.
         ledger = Ledger(ledger_path)

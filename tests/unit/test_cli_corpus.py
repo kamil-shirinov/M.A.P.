@@ -32,6 +32,23 @@ from tests.unit.test_cli import _config
 
 runner = CliRunner()
 
+
+@pytest.fixture(autouse=True)
+def _clean_tree(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A clean checkout, unless a test says otherwise.
+
+    The launch assertion reads the real repository, so without this the suite would
+    pass or fail depending on whether someone had edits open — a test that depends on
+    the state of the tree it is testing from.
+    """
+    from mapf.core.provenance import CodeVersion
+
+    monkeypatch.setattr(
+        "mapf.cli.commands.corpus.code_version",
+        lambda *_a, **_k: CodeVersion(commit="c" * 40, dirty=False),
+    )
+
+
 MODEL_INFO = ModelInfo(id="m", fingerprint="tag:m", fingerprint_source="tag")
 STORE = FilePromptStore()
 
@@ -1070,3 +1087,60 @@ def test_the_preflight_verifies_and_reports_staleness_end_to_end(
     out = capsys.readouterr().out
     assert seen == ["AAPL 2026-02-01"], "the truncated document must reach the verifier"
     assert "all 1 truncated documents fit the real window" in out
+
+
+# ---------------------------------------------------------------------------
+# A clean tree at launch (ADR 0019 §8)
+# ---------------------------------------------------------------------------
+def test_a_dirty_tree_refuses_the_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An item produced from uncommitted files records no forecast digest, so it can
+    never be shown equivalent to any other item. Thirty-three such items already
+    exist, and a rule enforced by intention is the kind that gets broken."""
+    from mapf.core.provenance import CodeVersion
+
+    monkeypatch.setattr(
+        "mapf.cli.commands.corpus.code_version",
+        lambda *_a, **_k: CodeVersion(commit="a" * 40, dirty=True),
+    )
+    result = _invoke(tmp_path, "--check")
+    assert result.exit_code == 2
+    assert "uncommitted changes" in result.output
+    assert "STOP the run, commit the fix, and resume" in result.output
+
+
+def test_the_override_exists_and_marks_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A refusal with no way through invites deleting the refusal. The override is
+    loud and says what it costs."""
+    from mapf.core.provenance import CodeVersion
+
+    monkeypatch.setattr(
+        "mapf.cli.commands.corpus.code_version",
+        lambda *_a, **_k: CodeVersion(commit="a" * 40, dirty=True),
+    )
+    result = _invoke(tmp_path, "--check", "--allow-dirty")
+    assert "DIRTY, overridden" in result.output
+    assert "its own stratum" in result.output
+
+
+def test_a_clean_tree_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from mapf.core.provenance import CodeVersion
+
+    monkeypatch.setattr(
+        "mapf.cli.commands.corpus.code_version",
+        lambda *_a, **_k: CodeVersion(commit="b" * 40, dirty=False),
+    )
+    assert "tree       clean at bbbbbbbbbbbb" in _invoke(tmp_path, "--check").output
+
+
+def test_a_checkout_without_git_does_not_block_the_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unpacked tarball or a CI image without the repository is an ordinary
+    situation, and none of them is a reason to refuse a run that would succeed."""
+    from mapf.core.provenance import CodeVersion
+
+    monkeypatch.setattr("mapf.cli.commands.corpus.code_version", lambda *_a, **_k: CodeVersion())
+    result = _invoke(tmp_path, "--check")
+    assert "uncommitted changes" not in result.output

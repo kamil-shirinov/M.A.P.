@@ -59,6 +59,33 @@ def _write_atomically(path: Path, body: str) -> None:
         raise
 
 
+def _frozen_by_version() -> dict[str, dict[str, object]]:
+    """Every frozen record in this repository's history, keyed by its version.
+
+    A **dirty-tree** run has no recoverable code digest — the working files are gone —
+    but its freeze digest is recoverable, because the record it used is identified by
+    the `freeze_version` it wrote down and every version of that file is in git. The
+    two are different questions and only one of them is unanswerable.
+    """
+    try:
+        log = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "log", "--format=%H", "--", "corpus/frozen.json"],
+            capture_output=True,
+            text=True,
+            timeout=20.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    out: dict[str, dict[str, object]] = {}
+    for commit in log.stdout.split():
+        record = _frozen_at(commit)
+        version = record.get("freeze_version") if record else None
+        if record is not None and isinstance(version, str):
+            out.setdefault(version, record)
+    return out
+
+
 def _frozen_at(commit: str) -> dict[str, object] | None:
     """`corpus/frozen.json` as it stood at a commit.
 
@@ -92,6 +119,7 @@ def main() -> int:
     runs_dir = settings.paths.runs_dir
     ledger = Ledger(Path("var/corpus/ledger.jsonl"))
 
+    by_version = _frozen_by_version()
     outcomes: Counter[str] = Counter()
     digests: Counter[str] = Counter()
     freezes: Counter[str] = Counter()
@@ -122,9 +150,25 @@ def main() -> int:
             outcomes["no commit recorded"] += 1
             continue
         if version.get("dirty"):
-            # Stays unknown, deliberately. The commit does not describe what ran, so
-            # neither the code nor the freeze it carried can be recovered from it.
-            outcomes["dirty tree — left unknown"] += 1
+            # The CODE digest stays unknown, deliberately: the commit does not describe
+            # the working files that ran. The FREEZE digest does not depend on them —
+            # the record is identified by the version the run wrote down — so it is
+            # recovered rather than abandoned along with it.
+            outcomes["dirty tree — code digest left unknown"] += 1
+            recorded = manifest.get("freeze_version")
+            frozen = by_version.get(str(recorded)) if recorded else None
+            if frozen is None or not wants_freeze:
+                continue
+            freeze = freeze_digest(frozen, truncated=entry.truncated)
+            if not freeze:
+                continue
+            freezes[str(freeze)[:12]] += 1
+            outcomes["freeze digest recovered for a dirty run"] += 1
+            if dry_run:
+                continue
+            manifest["freeze_digest"] = freeze
+            manifest["manifest_version"] = MANIFEST_VERSION
+            _write_atomically(path, json.dumps(manifest, indent=2))
             continue
 
         code = forecast_digest(str(commit)) if wants_code else version.get("forecast_digest")

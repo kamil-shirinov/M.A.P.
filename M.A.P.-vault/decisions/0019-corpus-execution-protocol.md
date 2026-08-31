@@ -256,3 +256,34 @@ score would require amending the freeze, which is a visible, dated, deliberate a
 which is also the default `require_finished` behaviour when `declared` is omitted.
 It is passed explicitly all the same, so the record shows a declaration that was
 made rather than a default that happened to apply.
+
+---
+
+## §8 — The band launches from a clean tree, added 2026-08-31
+
+**The rule.** A band is launched from a committed working tree, and **no commits are
+made while it runs.** If a defect emerges that genuinely requires a code change, the
+run is **stopped**, the change is committed, and the run resumes. Every item then
+carries a forecast digest that proves what produced it.
+
+**Why it is enforced rather than intended.** 33 items of the clean band were produced
+from an uncommitted tree, because development continued against a live run. A dirty
+tree records `code_version.dirty` and **no forecast digest** — the commit does not
+describe the files that executed — so those items can never be shown equivalent to any
+other item. They form a stratum of their own, permanently.
+
+The clean band could absorb that: 33 of 356 is 9%, and their freeze digest was
+recoverable, so they remain scoreable under `--allow-mixed-code`. **The ambiguous band
+is 353 items and the leakage estimate is a difference between the two bands** — a 9%
+unprovable stratum on one side of that comparison is a different proposition from a 9%
+stratum inside one band's own result.
+
+**This was already the instruction and neither of us held to it.** A rule enforced by
+intention is the kind that gets broken by the person who wrote it, in the moment when
+breaking it is convenient — which is exactly when it matters. So `map corpus run`
+refuses to start on an uncommitted tree.
+
+**`--allow-dirty` exists**, and for the reason the determinism override exists (ADR
+0007): a hard block with no way through invites someone in a hurry to delete the check,
+which leaves no trace at all. The override is loud, says what it costs, and marks every
+item the run produces.
