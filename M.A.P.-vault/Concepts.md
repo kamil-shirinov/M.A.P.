@@ -103,6 +103,27 @@ the two-pass corpus continuation is decided on time alone, without looking at an
 
 ---
 
+**Design effect** — the factor by which clustering inflates a variance estimate. Item 2.02 filings land in
+reporting season, so many forecasts share days and overlapping windows; treating them as independent would
+give an interval far too narrow. *Handled by:* a moving-block bootstrap over calendar time rather than an
+i.i.d. one over items.
+
+**Stratum** — a subset of the sample that has to be reported apart because something about how it was
+produced differs. The clean band has three: 135 items adjudicated equivalent, 34 produced from an
+uncommitted tree, and 2 superseded by a truncation change. *The point of naming one* is that pooling it
+silently is the failure; reporting it is not.
+
+**Code boundary adjudication** — deciding, for each pair of adjacent code states in a corpus, whether the
+difference could have changed what a model was asked. Done **before any score exists**, because at scoring
+time the judgement stands between you and a fortnight's work and *"these files look like plumbing"* becomes
+much easier to believe ([[0030-code-boundary-adjudication]]). *"Cannot tell" is a permitted answer* — with
+only two options, the verdict gets forced.
+
+**Repeat rule** — "transient" is a hypothesis about an item, and the ledger already holds the evidence to
+test it. A failure reason that recurs on the same item stops being transient and the item is resolved
+([[0024-repeat-rule]]). *Excludes* shared-infrastructure failures: five items failed together when DNS
+dropped, and what they had in common was the afternoon, not the filing.
+
 ## Software architecture
 
 **Ports and adapters (hexagonal architecture)** — your core logic depends on *interfaces*, never on
@@ -148,6 +169,31 @@ fixpoint — provably terminating because each pass strictly shortens the input.
 inner delimiter can make two outer fragments adjacent and form a new one.
 
 ---
+
+**Forecast digest** — a hash over every file that can produce a forecast, recorded beside the commit
+([[0026-forecast-digest]]). The commit is the wrong equality test: a twelve-night corpus spans every commit
+made while it runs, so comparing commits gives a guard that must be overridden every time — which is not a
+guard. *Two runs sharing a digest are forecast-equivalent however many commits separate them.*
+
+**Freeze digest** — the same idea for the frozen corpus record ([[0029-freeze-digest]]). Ten fields govern
+what an item was asked (models, prompts, contexts, truncation, the retry, the horizon, the price vintage,
+the exhibit hashes, membership, KV cache); the rest are recorded and excluded. *Why it was needed:* an
+amendment that only wrote down the execution order bumped the version while changing nothing a model sees.
+
+**Dirty tree** — a working directory with uncommitted changes. A run launched from one records no forecast
+digest, because the commit does not describe the files that executed, so its items can never be shown
+equivalent to anything. *34 items of the clean band are in that position*, which is why the runner now
+refuses to start on one ([[0019-corpus-execution-protocol]] §8).
+
+**Bracketing probe** — measuring a server's real context window by sending one prompt just under the
+configured size (must be accepted) and one well over (must be rejected), rather than parsing the number out
+of an error message ([[0020-context-window-and-truncation]]). *Works on any backend*, including one that
+says nothing at all — and reading one vendor's phrasing is what `CLAUDE.md` §3 forbids.
+
+**Canary** — a request so small that no configured window could refuse it, sent before the bracket. If even
+that is rejected the server is busy or unwell and the window was never measured. *Without it*, running the
+pre-flight beside a live corpus reported every agent's context as TOO SMALL — on the exact windows the run
+was succeeding with.
 
 ## Finance and data
 
@@ -222,3 +268,24 @@ is reproducible; the analyst runs at 0.7 because reasoning benefits from variety
 
 **OpenAI-compatible API** — the de facto standard HTTP shape that LM Studio, Ollama, vLLM and others all
 implement. Named after who published it first, with no ongoing connection to the company.
+
+**Chars-per-token ratio** — how many characters of text one token holds, used to estimate a document's size
+before sending it. Set at 3.5 on two observations and described as "below anything observed"; measured
+across 135 completed items the real distribution is min 3.017, median 3.887, and **14% of documents fall
+below 3.5**. *One truncated exhibit in twenty was always going to overflow*, and one did
+([[0020-context-window-and-truncation]]). Now 3.0, and — more importantly — **no longer a safety property**:
+the pre-flight measures every cut against the server's own tokeniser, so too high a ratio gives a visible
+refusal and too low one truncates slightly more than needed.
+
+**Degeneration** — a model looping instead of reasoning. Distinguished from genuine verbosity by redundancy:
+one intake output ran to 757 lines of which **22 were unique**, with the last new content at line 27. *Size
+does not predict it* — a larger document produced 543 clean tokens.
+
+**Degeneration retry** — one re-run of a looping call under a frequency penalty, applied only after a first
+attempt was cut off ([[0021-degeneration-retry]]). *Never as a default*, because the same penalty changes
+every well-behaved item: rescuing two items by perturbing the other 354 is the wrong trade.
+
+**Reasoning tokens** — tokens a reasoning model spends thinking before it writes an answer, reported apart
+from the visible output. A model can burn its whole budget here and emit nothing, which **looks exactly like
+a refusal** and is not. *The trap:* the reasoning text itself was never recorded, so a runaway could be
+counted and never read.

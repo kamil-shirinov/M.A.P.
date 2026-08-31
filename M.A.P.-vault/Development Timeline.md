@@ -186,3 +186,170 @@ much harder, so the power table was replaced with the empirical one and the over
 as underpowered.
 
 **Next:** the runner, then twelve or so nights of compute, then scoring.
+
+---
+
+## 7 · First contact with real exhibits
+
+**ADRs from this phase:** [[0020-context-window-and-truncation]]
+
+The runner was built, the pre-flight passed, and the clean band started. It halted inside the hour, nine
+items in, every failure the same: an 8,192-token context window.
+
+Nothing had ever measured a document against a context. Every test to that point ran on a 470-character
+synthetic news file, and a real Item 2.02 exhibit is three orders of magnitude larger — median 31,751
+characters, 219,441 at the largest. **The median exhibit did not fit.** The run was going to fail on 54% of
+the corpus, and it was not unlucky.
+
+Fixing it properly took four passes, and each one is a lesson about trusting a number rather than measuring
+it.
+
+**The memory arithmetic was computed, not estimated.** Llama and Qwen have no sliding-window attention, so
+KV cache scales with every layer; Gemma keeps 40 of 48 layers on a 1,024-token window. A 65,536-token intake
+would peak at 9.54 GB against a wired limit near 10.6 GB. "Might hold" is the wrong property for twelve
+nights, so the answer was a smaller window plus a truncation rule.
+
+**Then the architecture-versus-runtime trap.** The Gemma figure — 0.87 GB at 32k — was derived from what the
+architecture *permits*. llama.cpp allocates full-length KV for every layer regardless, about 336 KB/token,
+so the real number was 11.0 GB and the server refused to load it. **Wrong by 12.6×, and the error was
+believing a capability where a behaviour was needed.**
+
+**So the pre-flight stopped trusting `config` and started measuring the server** — by *bracketing* rather
+than by parsing an error message, because two of three agents rejected the probe without naming a number and
+because reading one vendor's phrasing is exactly what `CLAUDE.md` §3 forbids.
+
+**And truncation got an enforced invariant rather than a margin.** Head 24,000 tokens, tail 4,000, the
+middle elided with a marker — the tail because a guidance table often sits *after* the financial statements,
+and guidance is what moves a five-day window.
+
+---
+
+## 8 · The squeeze between the agents
+
+**ADRs from this phase:** [[0021-degeneration-retry]]
+
+Every agent had been checked against its own limits. **The boundary between them belonged to nobody.**
+
+Intake read a 12,500-token document and emitted ~20,000 tokens — it expanded rather than compressed — and
+the analyst rejected the resulting prompt. Both agents were individually valid; the pipeline they formed was
+not. So the chain got a startup validator: every agent's visible output plus the next one's overhead plus
+its generation budget must fit the next one's context.
+
+That capped intake at 2,048 tokens, which raised the obvious question of what happens if it ever hits the
+cap. **Nothing, was the answer, and nothing is what had been happening.** A `finish_reason` check went in,
+and it fired immediately on two items.
+
+Reading the tails settled what they were. STZ's 18,938-token output was **757 lines of which 22 were
+unique** — 97.1% redundant, last new content at line 27, one four-line block repeated 187 times. Not
+verbosity. A decoding loop.
+
+**Size does not predict it**: ALLY is a *larger* document and produces 543 clean tokens. So a bigger cap was
+never the answer — a cap sized to "what it wants" is meaningless when what it wants is unbounded.
+
+A frequency penalty of 0.3 breaks both loops. It also changes every well-behaved item measured, so it is
+applied **only as a retry** after a truncated first attempt. Rescuing two items by perturbing the other 354
+is the wrong trade; rescuing them without touching the 354 is not.
+
+---
+
+## 9 · The guard audit
+
+**ADRs from this phase:** [[0022-guard-scope]]
+
+`verify_freeze` refuses to start when the live config has drifted from the frozen record. It had been
+passing for weeks. **It compared the model alias and nothing else** — one field of six — so the freeze said
+`intake.max_tokens: null` while every run had been configured at 2,048, and the guard whose whole job is
+noticing that was looking elsewhere.
+
+An under-checking guard has no failure mode of its own. It just keeps returning green. So every guard,
+validator and assertion in `src/` was audited with one question: *what does the name imply, and what does the
+code verify?*
+
+**Fifteen gaps, eleven guards sound.** The findings mattered less than their shape, which came in three
+kinds: **presence standing in for identity** (a trace guard that checks a file exists, not that it is *this
+run's* trace); **a declared number trusted instead of the thing measured**; and **scope narrower than the
+sentence** ("this band" with no band filter).
+
+Seven were fixed immediately, including a trace guard that would have passed the incident it was written
+for, and a band failure allowance that reset on every resume.
+
+---
+
+## 10 · Two digests, and the guards that would have refused everything
+
+**ADRs from this phase:** [[0026-forecast-digest]] · [[0029-freeze-digest]] · [[0030-code-boundary-adjudication]]
+
+`map evaluate` refused a band produced by more than one commit. The first real scoring pre-flight showed the
+band already spanning two, thirty-five items in — **because development continues while a corpus runs, and
+it does not stop for twelve nights.**
+
+So the guard would have needed overriding on every run. **A check that must be overridden every time is not
+a check.** It is the mirror of a partition that can never fire: one trains you to wave it through, the other
+reads as reassurance.
+
+The guard was asking the wrong question. Not *which commit produced this item* but **did anything a forecast
+depends on differ**. A hash over the forecast-producing files answers that exactly, and two runs sharing it
+are equivalent however many commits separate them.
+
+Backfilling it looked impossible and was not: the digest is a pure function of file contents at a commit,
+and every manifest records its commit. **Computing a function of recorded data is not inferring data that
+was never recorded** — the distinction that made an earlier timestamp inference wrong and this right.
+
+The same defect turned up one layer up a day later. Amending the freeze to record the execution order took
+it from 2.3.0 to 2.4.0 while every field governing what a model is asked stayed byte-identical, and the
+freeze check has *no* override. So the frozen record got the same split: ten governing fields, ten recorded
+only, each exclusion with a reason that can be stated.
+
+**A version number is never the right equality test.** Both times the guard compared an identifier that
+moves for reasons unrelated to what it guards.
+
+---
+
+## 11 · The prefix that would have cost four months
+
+**ADRs from this phase:** [[0027-halt-response]] · [[0028-execution-order]]
+
+Projecting the failure rate forward showed the band halting between item 208 and 312. The power answer was
+mild — a halt at 312 costs nothing measurable; one at 208 takes calibration power at the decision-relevant
+*k* from 73% to 53%. The thing beside it was not mild.
+
+`plan()` orders items by filing date, so a halt takes **a prefix of the year**. At item 208 that is January
+to May 5 — May, June, July and August absent entirely.
+
+`passes.py` already contained the argument for why that is unacceptable, written before any of these
+failures. **The protection was designed, reasoned about, and installed on the ambiguous band.** The clean
+band, which carries the primary result, ran straight through. The question *"what does an early stop leave?"*
+had been asked of the band planned to stop early and never of the one that might stop by accident.
+
+I proposed to record it rather than fix it. That was wrong, and the argument against me was one I already
+held: no score exists anywhere, so nothing can be tuned toward a result; applying a documented principle
+where it was missed is the opposite of tuning; and execution order cannot reach a forecast, since `as_of`
+comes from the filing date, the vintage is pinned, sampling has a fixed seed and the cache is content-keyed.
+
+The remainder now runs in a seeded shuffle. The result is a **hybrid** — 80 contiguous early items plus an
+interleaved remainder — stated as that rather than dressed as a clean design.
+
+---
+
+## 12 · Where the run stands
+
+**ADRs from this phase:** [[0023-scoring-adapters]] · [[0024-repeat-rule]] · [[0025-scoring-preflight]]
+
+169 items of the clean band are complete. Scoring is wired end to end and has been exercised on real
+artifacts — `map evaluate --check` runs the whole path and prints **no score**, the same boundary the runner
+holds between health and result, one layer up.
+
+**Three things are already known about the corpus, before a single number is scored:**
+
+- **Two items are unrescuable.** ALLY's analyst burns its entire 12,000-token reasoning budget and produces
+  nothing, twice, against a maximum of 9,487 across every other item. Whether that is a loop or genuinely
+  long reasoning **cannot be determined** — the failure raised before the trace was written, so it recorded
+  nothing at all. That gap is now closed; the next one will be diagnosable.
+- **The band carries three strata.** 135 items adjudicated equivalent, 34 produced from an uncommitted tree
+  and therefore unprovable, and 2 superseded by a truncation change and queued for re-running.
+- **The failure rate projects past the allowance**, and the response to that is pre-registered rather than
+  left to be invented at item 208.
+
+**Next:** the band completes or halts, the analyst runaway gets diagnosed with data that now exists, then
+the ambiguous band under [[0019-corpus-execution-protocol]] §8 — clean tree, no commits while it runs.
+

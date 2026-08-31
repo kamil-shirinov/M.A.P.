@@ -36,6 +36,11 @@ finish that sentence.
 **Reading order if you're catching up:** Start Here → [[Development Timeline]] → [[Findings & Incidents]]
 → then ADRs as they come up, with [[Concepts]] open beside you.
 
+The Timeline now runs to twelve sections; §7 onward is the corpus actually meeting real data, and is where
+most of the interesting failures are. If you only read one other thing, read the three lessons at the top of
+[[Findings & Incidents]] — they generalise past this project. [[Guard Audit]] is the systematic version of
+the same idea: what a check's name claims against what it verifies.
+
 ---
 
 ## The four phases
@@ -43,9 +48,11 @@ finish that sentence.
 **Phase 1 — The Machine.** *Complete.* Nine modules, 727+ tests, a working end-to-end pipeline.
 Produced no knowledge, by design.
 
-**Phase 2 — The Evidence.** *In progress.* A pre-registered corpus of 727 forecasts over 120
-companies, baselines to beat, and proper scoring. This is where the project becomes a quantitative
-result rather than a demo.
+**Phase 2 — The Evidence.** *In progress — the clean band is executing.* A pre-registered corpus of
+709 forecasts over 120 companies, baselines to beat, and proper scoring. The machinery is complete:
+three baselines, a Monte Carlo mixture, scoring rules, and `map evaluate` wired end to end and
+exercised on real artifacts. **169 items are done and no forecast has been scored yet** — that
+separation is deliberate, so nothing seen mid-run can inform a decision about continuing.
 
 **Phase 3 — The Calibration.** Fit a correction to the measured miscalibration, then measure the
 correction. Contains the only genuinely trained models in the project.
