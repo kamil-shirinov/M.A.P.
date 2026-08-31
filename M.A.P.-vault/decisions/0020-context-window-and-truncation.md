@@ -187,6 +187,66 @@ The truncated text stays `UntrustedText` through the transformation. Returning a
 string would push re-labelling onto every caller, and a caller that forgot would
 silently launder filed text into trusted text.
 
+## Addendum, 2026-08-31 — the margin was falsified, and the reasoning behind it was the defect
+
+**PRU 2026-04-14 overflowed intake's window after truncation.** Cut to 98,121 characters,
+estimated at ~28,035 tokens against a 29,968-token budget, and refused by the server.
+
+The table above says the margin "covers ratio error down to about 3.3 characters per
+token, which is already below anything observed (3.7 and 4.0 from real rejections)".
+That claim rested on **two** data points. It is now falsified with 135:
+
+| | min | p05 | median | max |
+| --- | --- | --- | --- | --- |
+| intake prompt, chars/token, measured on 135 completed items | **3.017** | 3.285 | 3.887 | 5.095 |
+
+- **19 of 135 items (14%) tokenise below the assumed 3.5.**
+- **8 of 135 (6%) fall below 3.3** — the value called "below anything observed".
+- A 98,121-character cut fits only if the true ratio is **≥ 3.274**, so roughly one
+  truncated exhibit in twenty was always going to overflow. PRU is not bad luck; it is
+  the 6% arriving.
+
+**The estimator is not conservative.** `estimate_tokens` divides by the ratio, so a
+*higher* ratio predicts *fewer* tokens. At 3.5 the gate under-estimates for 14% of
+documents. It sits near the middle of the distribution when a refusal gate needs to sit
+at or below its floor. The ADR reasoned about the direction of the error correctly and
+then chose a value from the wrong end of a two-point sample.
+
+### What it costs to move
+
+| ratio | exhibits truncated | cut to | completed items needing a re-run |
+| --- | --- | --- | --- |
+| 3.5 (current) | 12 | 98,121 | — |
+| 3.3 | 14 | 92,521 | 2 |
+| 3.2 | 16 | 89,721 | 2 |
+| **3.0** | **18** | **84,121** | **2** — BXP 2026-01-28, FCX 2026-01-22 |
+
+### The remedy is both halves, and the second is the one that matters
+
+**Lower the ratio to 3.0**, grounded in 135 measurements rather than two, and re-run the
+two affected completed items. The truncation sensitivity partition grows from 12 exhibits
+to 18 and that is a change to a pre-registered partition, so it is recorded as one.
+
+**And verify the cut against the real tokeniser in the pre-flight**, because lowering the
+ratio alone is *structurally the same reasoning that just failed* — a margin chosen from
+the range observed so far. Better informed at 135 points than at 2, and still an
+extrapolation: a 136th document below 3.0 fails identically and just as silently.
+
+**No new dependency is needed.** The server reports `prompt_tokens` on every response, so
+a completion capped at one token returns the exact count — the same mechanism the context
+probe already uses (§4). Twelve to eighteen prefill calls in `map corpus run --check`,
+a few minutes, once.
+
+**Verify and refuse, never verify and shrink.** Cutting until the server says it fits
+would make the frozen document depend on a server-side tokeniser, which is precisely the
+objection that rejected Q8 KV quantisation in this ADR: a setting invisible to the cache
+key and the model fingerprint that silently changes what the model sees. The cut stays a
+pure function of the ratio — deterministic, reproducible, recorded — and the pre-flight
+measures whether that function's output actually fits.
+
+That is this ADR's own §4 principle applied one level down: **the configuration states a
+number and the pre-flight measures the server, rather than trusting the number.**
+
 ## Consequences
 
 - `context_tokens` joins the configuration per agent and is frozen with the corpus,

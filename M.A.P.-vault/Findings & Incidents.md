@@ -1126,3 +1126,50 @@ built to stop firing.
 That one is worth sitting with. The key and the label were the same string because it was convenient. **A
 grouping key that doubles as a display string will eventually be given something display-only**, and the
 guard changes meaning without anyone editing the comparison.
+
+---
+
+## 37 · "Below anything observed" — with two observations
+
+PRU overflowed intake's window *after* truncation. The document was cut to 98,121 characters, estimated at
+~28,035 tokens against a 29,968-token budget, and the server refused it.
+
+[[decisions/0020-context-window-and-truncation|ADR 0020]] had priced exactly this and dismissed it: the
+margin "covers ratio error down to about 3.3 characters per token, **which is already below anything
+observed** (3.7 and 4.0 from real rejections)."
+
+Two observations. Both from rejected oversized prompts — which is a biased sample, because a document is
+more likely to be rejected when it tokenises *densely*, so the two points came from the part of the
+distribution most likely to be atypical. Measured across 135 completed items:
+
+| min | p05 | median | max |
+| --- | --- | --- | --- |
+| **3.017** | 3.285 | 3.887 | 5.095 |
+
+**14% of documents tokenise below the assumed 3.5, and 6% below the 3.3 that was "below anything
+observed."** A 98,121-character cut fits only if the true ratio is ≥ 3.274. So about one truncated exhibit
+in twenty was always going to fail. PRU is not bad luck; it is the 6% arriving on schedule.
+
+### The estimator pointed the right way and then took the wrong value
+
+`estimate_tokens` divides by the ratio, so a **higher** ratio predicts **fewer** tokens. ADR 0020 knew this
+— it says the gate "uses the low end of that range, because financial prose tokenises worse than ordinary
+English." The reasoning about direction was right. The value was the low end *of two points*, which landed
+near the middle of the real distribution.
+
+A refusal gate needs to sit at or below the floor of what it gates. 3.5 sits at roughly the 12th percentile
+from the wrong side.
+
+### The lesson is about the phrase, not the number
+
+**"Below anything observed" is a claim about your sample, written as a claim about the world.** It is only
+as strong as the number of observations behind it, and that number was not in the sentence. Had it read
+"below both of the two ratios observed so far", nobody would have leaned on it.
+
+The repair that generalises: when a margin is justified by an observed range, **state n in the same
+sentence**. It is the same defect as [[Findings & Incidents#The third lesson: a true sentence can still mislead|#33]] —
+a true statement whose form invites more confidence than its evidence supports.
+
+And the structural fix is not a better number. It is that a margin chosen from a sample must be **backstopped
+by a measurement**, so that when the sample turns out to be unrepresentative the failure is loud and early
+rather than silent and at item 136.
