@@ -1,9 +1,9 @@
 {
-  "freeze_version": "2.4.0",
+  "freeze_version": "2.5.0",
   "frozen_on": "2026-08-14",
   "amended_on": "2026-08-31",
-  "amends": "5f679fc",
-  "amendment_reason": "Records the EXECUTION ORDER, which was implicit and is now a property of the frozen record. plan() orders a band by (filing_date, ticker) and the runner executed in that order, so a halt took a PREFIX OF THE YEAR rather than a sample of it -- at item 208 of the clean band, May through August absent entirely. passes.py already contained the argument for why that is unacceptable, written before any failure in this run: a calendar-contiguous subsample confounds 'we stopped early' with 'we only measured the first half of the year'. That protection had been installed on the ambiguous band; the clean band, which carries the primary result, ran straight through. THE ORDER CANNOT CHANGE ANY FORECAST. as_of derives from the item's filing date, the price vintage is pinned, sampling carries a fixed seed, and the cache is keyed on content. It determines exactly one thing: which subset survives a halt. That is why this is amendable mid-run at all, and it is also why no completed item is affected and no cache key changes. A seeded shuffle rather than a stride, so that ANY PREFIX IS AN UNBIASED RANDOM SAMPLE of the remainder. The whole band is shuffled and then filtered by what is already complete, so the order is a function of the corpus and the seed alone and a resume continues it rather than drawing a fresh one. plan() IS UNCHANGED. It defines pass membership, which is pre-registered in ADR 0019 and computed at scoring time; execution order and pass membership are now separate concerns and this touches only the first. THE RESULT IS A HYBRID AND IS RECORDED AS ONE: 80 items of the clean band had already run in date order and are kept. The clean band is therefore 80 contiguous early items plus an interleaved remainder -- at a halt near item 210 all eight months survive with January over-weighted about 1.7x, against a prefix that lost three months completely. The ambiguous band has not started and receives an interleaved order from its first item. Truncation, sampling, contexts and the degeneration retry are all untouched, and no exhibit hash changes.",
+  "amends": "b654466",
+  "amendment_reason": "Corrects the characters-per-token estimate from 3.5 to 3.0 and records the post-truncation verification. PRU 2026-04-14 overflowed intake's window AFTER truncation: cut to 98,121 chars, estimated at ~28,035 tokens against a 29,968 budget, and refused. ADR 0020 had priced this and dismissed it -- the margin covers ratio error down to about 3.3 chars/token, 'which is already below anything observed'. That rested on TWO data points, both from rejected oversized prompts, which is a biased sample because a document is likelier to be rejected when it tokenises densely. Measured across 135 completed items the distribution is min 3.017, p05 3.285, median 3.887, max 5.095: 14% fall below 3.5 and 6% below 3.3. A 98,121-char cut fits only if the true ratio is at least 3.274, so roughly one truncated exhibit in twenty was always going to fail. THE RATIO IS NO LONGER A SAFETY PROPERTY. map corpus run --check now measures every truncated document against the server's own tokeniser -- one completion capped at a single token returns an exact prompt_tokens count, needing no new dependency -- and refuses before the run if any still exceeds the budget, naming the ratio that would have fitted. So too high a ratio gives a visible refusal and too low one truncates slightly more than needed; neither fails silently. That is why 3.0 is chosen as a good working value backed by 135 measurements rather than asserted to be below every remaining document, which would be a fourth instance of the error being corrected. VERIFY AND REFUSE, NEVER VERIFY AND SHRINK. Cutting until the server says it fits would make the artifact depend on a server-side tokeniser -- the Q8 KV objection one level worse, since the same corpus on a different build would produce different documents under the same frozen record. The cut stays a pure function of the ratio. CONSEQUENCES FOR THE RECORD: truncation now applies to 18 exhibits rather than 12, and the cut is 84,121 chars rather than 98,121. The ADR 0020 sensitivity partition grows from 12 to 18 accordingly. That growth is driven by a MEASUREMENT OF TOKENISATION and by nothing about a result: no score exists anywhere, not one forecast has been scored, so there is no outcome it could have been grown toward. Two completed items were built on a document this rule would no longer produce -- BXP 2026-01-28 and FCX 2026-01-22 -- and are to be re-run. Contexts, sampling, models, prompts, membership and the execution order are all untouched, and no exhibit hash changes.",
   "changes": {
     "dropped": [
       "BRK-A",
@@ -44605,62 +44605,98 @@
     "rule": "head_tail_v1",
     "head_tokens": 24000,
     "tail_tokens": 4000,
-    "chars_per_token_estimate": 3.5,
+    "chars_per_token_estimate": 3.0,
     "template_reserve_tokens": 800,
     "document_budget_tokens": 29968,
     "invariant": "result is re-estimated and shrunk until it is under budget",
     "source_hash_semantics": "exhibits.by_accession hashes the FULL document EDGAR served; truncation is recorded here, never folded into the hash",
     "sensitivity_check": "primary result reported with and without BXP, FCX and PRU regardless of outcome (ADR 0020, pre-registered)",
     "applies_to": {
-      "0001037540-26-000003": {
-        "elided_chars": 121441,
-        "kept_chars": 98121
+      "0000016875-25-000016": {
+        "elided_chars": 14473,
+        "kept_chars": 84120
       },
-      "0001037540-26-000015": {
-        "elided_chars": 113903,
-        "kept_chars": 98121
+      "0000016875-25-000030": {
+        "elided_chars": 19669,
+        "kept_chars": 84120
       },
-      "0001037540-26-000031": {
-        "elided_chars": 113431,
-        "kept_chars": 98121
+      "0000016875-26-000013": {
+        "elided_chars": 6024,
+        "kept_chars": 84119
       },
-      "0001656423-25-000006": {
-        "elided_chars": 117621,
-        "kept_chars": 98121
-      },
-      "0001656423-25-000030": {
-        "elided_chars": 115886,
-        "kept_chars": 98121
-      },
-      "0001656423-25-000043": {
-        "elided_chars": 113329,
-        "kept_chars": 98121
-      },
-      "0000831259-26-000006": {
-        "elided_chars": 33879,
-        "kept_chars": 98120
-      },
-      "0000831259-26-000033": {
-        "elided_chars": 24367,
-        "kept_chars": 98120
+      "0000016875-26-000024": {
+        "elided_chars": 17483,
+        "kept_chars": 84120
       },
       "0000831259-25-000028": {
-        "elided_chars": 26175,
-        "kept_chars": 98120
+        "elided_chars": 40175,
+        "kept_chars": 84120
       },
       "0000831259-25-000048": {
-        "elided_chars": 29532,
-        "kept_chars": 98120
+        "elided_chars": 43532,
+        "kept_chars": 84120
       },
-      "0001137774-26-000087": {
-        "elided_chars": 7272,
-        "kept_chars": 98119
+      "0000831259-26-000006": {
+        "elided_chars": 47879,
+        "kept_chars": 84120
+      },
+      "0000831259-26-000021": {
+        "elided_chars": 12465,
+        "kept_chars": 84120
+      },
+      "0000831259-26-000033": {
+        "elided_chars": 38367,
+        "kept_chars": 84120
+      },
+      "0001037540-26-000003": {
+        "elided_chars": 135441,
+        "kept_chars": 84121
+      },
+      "0001037540-26-000015": {
+        "elided_chars": 127903,
+        "kept_chars": 84121
+      },
+      "0001037540-26-000031": {
+        "elided_chars": 127431,
+        "kept_chars": 84121
+      },
+      "0001051470-25-000085": {
+        "elided_chars": 6406,
+        "kept_chars": 84119
       },
       "0001137774-25-000013": {
-        "elided_chars": 17196,
-        "kept_chars": 98120
+        "elided_chars": 31196,
+        "kept_chars": 84120
+      },
+      "0001137774-26-000087": {
+        "elided_chars": 21272,
+        "kept_chars": 84120
+      },
+      "0001656423-25-000006": {
+        "elided_chars": 131621,
+        "kept_chars": 84121
+      },
+      "0001656423-25-000030": {
+        "elided_chars": 129886,
+        "kept_chars": 84121
+      },
+      "0001656423-25-000043": {
+        "elided_chars": 127329,
+        "kept_chars": 84121
       }
-    }
+    },
+    "ratio_basis": "measured on 135 completed items: min 3.017, p05 3.285, median 3.887, max 5.095. Not a guarantee -- the guarantee is the post-truncation verification below.",
+    "verification": {
+      "rule": "server_prompt_tokens_v1",
+      "where": "map corpus run --check, before any inference",
+      "mechanism": "one completion capped at 1 token; the response reports prompt_tokens",
+      "on_failure": "refuse, naming the ratio that would have fitted (floored)",
+      "never": "shrink to fit -- the artifact must not depend on a server-side tokeniser"
+    },
+    "stale_items_to_rerun": [
+      "BXP 2026-01-28",
+      "FCX 2026-01-22"
+    ]
   },
   "context_verification": "bracketed against the running server (ADR 0020 section 4); configured values are checked, never trusted",
   "degeneration_retry": {
