@@ -246,6 +246,18 @@ def verify_freeze(
                         f"{agent}: {field} is {live[field]!r}, frozen as {frozen_value!r}"
                     )
 
+    # The execution seed is a top-level field rather than a per-agent one, and it is
+    # checked here for the same reason every other frozen value is: the record holds
+    # a number, the code holds a number, and nothing else puts them side by side
+    # (finding #26). It changes no forecast — only which subset survives a halt —
+    # which is exactly the kind of value that drifts unnoticed.
+    order = frozen.get("execution_order")
+    if isinstance(order, Mapping) and "seed" in order and order["seed"] != EXECUTION_SEED:
+        mismatches.append(
+            f"execution seed is {EXECUTION_SEED}, frozen as {order['seed']!r}; "
+            "a resume would attempt items in a different order from the record"
+        )
+
     if mismatches:
         raise FreezeMismatchError(
             "live configuration differs from the frozen corpus — every cache key is "

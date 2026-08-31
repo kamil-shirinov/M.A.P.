@@ -125,3 +125,54 @@ def test_a_hybrid_band_still_covers_every_month() -> None:
     # Bounded distortion, not an absence. The prefix order dropped months entirely,
     # which no weighting repairs.
     assert over < 2.0
+
+
+# ---------------------------------------------------------------------------
+# The seed is checked against the record, not assumed to match it
+# ---------------------------------------------------------------------------
+def test_a_drifted_execution_seed_refuses_the_run() -> None:
+    """Finding #26 in a new place: the record holds a number, the code holds a
+    number, and without this nothing puts them side by side. It changes no forecast,
+    only which subset survives a halt — which is what makes it easy to miss."""
+    import pytest
+
+    from mapf.corpus.runner import FreezeMismatchError, verify_freeze
+
+    frozen = {
+        "prompts": {"intake": {"template": "intake.v2.md", "version": "v2", "sha256": "a" * 64}},
+        "models": {},
+        "execution_order": {"seed": EXECUTION_SEED + 1},
+    }
+    with pytest.raises(FreezeMismatchError, match="execution seed"):
+        verify_freeze(frozen, live_digest=lambda *_: "a" * 64, live_models={})
+
+
+def test_a_matching_execution_seed_passes() -> None:
+    from mapf.corpus.runner import verify_freeze
+
+    frozen = {
+        "prompts": {"intake": {"template": "intake.v2.md", "version": "v2", "sha256": "a" * 64}},
+        "models": {},
+        "execution_order": {"seed": EXECUTION_SEED},
+    }
+    verify_freeze(frozen, live_digest=lambda *_: "a" * 64, live_models={})
+
+
+def test_a_freeze_predating_the_field_is_not_refused() -> None:
+    """An older record may say less than the code. It may never disagree."""
+    from mapf.corpus.runner import verify_freeze
+
+    frozen = {
+        "prompts": {"intake": {"template": "intake.v2.md", "version": "v2", "sha256": "a" * 64}},
+        "models": {},
+    }
+    verify_freeze(frozen, live_digest=lambda *_: "a" * 64, live_models={})
+
+
+def test_the_real_frozen_record_agrees_with_the_code() -> None:
+    """The assertion that was living in a shell command until it was written down."""
+    import json
+    from pathlib import Path as _Path
+
+    record = json.loads(_Path("corpus/frozen.json").read_text(encoding="utf-8"))
+    assert record["execution_order"]["seed"] == EXECUTION_SEED
