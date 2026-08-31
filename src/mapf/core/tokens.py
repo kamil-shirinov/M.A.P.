@@ -22,9 +22,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-# Low end of the measured range. Fewer chars per token means more tokens, which is
-# the conservative direction for a gate that must not let a doomed item through.
-CHARS_PER_TOKEN = 3.5
+# Below the low end of the MEASURED distribution, not of a two-point sample. Fewer
+# chars per token means more estimated tokens, which is the conservative direction for
+# a gate that must not let a doomed item through.
+#
+# It was 3.5, justified as "below anything observed" on the strength of two rejected
+# oversized prompts — a biased sample, because a document is likelier to be rejected
+# when it tokenises densely. Across 135 completed items the real distribution is
+# min 3.017, p05 3.285, median 3.887, max 5.095: **14% fall below 3.5**, and PRU
+# overflowed after truncation because of it (ADR 0020 addendum).
+#
+# **With the post-truncation verification in `--check`, this number is no longer a
+# safety property.** Too high produces a visible pre-flight refusal; too low truncates
+# slightly more than necessary. Neither fails silently, which is why 3.0 does not have
+# to be provably below every remaining document — asserting that it was would be a
+# fourth instance of the error this replaces.
+CHARS_PER_TOKEN = 3.0
 
 # Everything in an agent's window that is not the document: the rendered template,
 # the quarantine delimiters, the chat scaffolding.

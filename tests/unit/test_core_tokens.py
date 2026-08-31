@@ -106,9 +106,16 @@ def test_the_largest_corpus_exhibit_does_not_fit_32k() -> None:
     assert check_fit(estimate_tokens(219_441), budget).fits is False
 
 
-def test_the_largest_corpus_exhibit_fits_64k() -> None:
+def test_the_largest_corpus_exhibit_does_not_even_fit_64k() -> None:
+    """This asserted the opposite at the old 3.5 ratio, and the correction
+    strengthens ADR 0020's conclusion rather than weakening it.
+
+    At the measured 3.0 the largest exhibit is ~73,000 tokens, so Option 1 — a 65,536
+    window and no truncation at all — would not have held it either. The option was
+    rejected on memory footprint; it also does not solve the problem.
+    """
     budget = [AgentBudget(agent="intake", context_tokens=65_536, max_tokens=None)]
-    assert check_fit(estimate_tokens(219_441), budget).fits is True
+    assert check_fit(estimate_tokens(219_441), budget).fits is False
 
 
 def test_a_document_exactly_at_the_budget_fits() -> None:

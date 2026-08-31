@@ -227,3 +227,72 @@ def probe_context(
         rejects_over=not accepted_over,
         reported=parse_reported_context(over_body) if over_body else None,
     )
+
+
+@dataclass(frozen=True)
+class TokenCount:
+    """What the server says a document actually costs, and what that implies."""
+
+    label: str
+    chars: int
+    tokens: int
+    budget: int
+
+    @property
+    def fits(self) -> bool:
+        return self.tokens <= self.budget
+
+    @property
+    def ratio(self) -> float:
+        """The document's real characters per token."""
+        return self.chars / self.tokens if self.tokens else 0.0
+
+    @property
+    def fitting_ratio(self) -> float:
+        """The estimator ratio that WOULD have cut this document short enough.
+
+        A refusal that names its own remedy is one decision; a refusal that does not
+        is an investigation. The cut length is `budget × ratio` less the marker, so a
+        document overflowing at ratio *r* needs the estimator set at or below its own
+        true ratio — which the server has just reported.
+        """
+        return self.ratio
+
+
+def measure_tokens(
+    provider: LLMProvider, model: ModelInfo, text: str, *, label: str, budget: int
+) -> TokenCount:
+    """Ask the server how many tokens a document really is.
+
+    **The tokeniser we already have.** Every completion response reports
+    `prompt_tokens`, so a call capped at one generated token returns an exact count
+    for the price of a prefill — the same mechanism the context bracket above uses,
+    and no new dependency for a vocabulary we would otherwise have to guess at.
+
+    Used to verify the output of the truncation rule rather than to produce it. The
+    cut stays a pure function of the configured ratio, so a document is reproducible
+    from the record alone; letting the server's tokeniser decide how much to keep
+    would make the frozen document depend on a server-side setting, which is the
+    objection that rejected Q8 KV quantisation (ADR 0020).
+    """
+    prompt = RenderedPrompt(
+        template_name="token_probe",
+        template_version="v1",
+        template_sha256="0" * 64,
+        messages=(Message(role="user", content=text),),
+    )
+    try:
+        response = provider.complete(
+            model=model,
+            prompt=prompt,
+            sampling=SamplingParams(temperature=0.0, max_tokens=1),
+        )
+        tokens = response.prompt_tokens or 0
+    except ModelBudgetExhaustedError:
+        # Reaching generation proves the prompt fitted, but the count is not in hand.
+        tokens = 0
+    except InferenceStatusError:
+        # Refused. Over budget by an amount the server did not name; recorded as
+        # exactly over so the caller reports a refusal rather than a false pass.
+        tokens = budget + 1
+    return TokenCount(label=label, chars=len(text), tokens=tokens, budget=budget)

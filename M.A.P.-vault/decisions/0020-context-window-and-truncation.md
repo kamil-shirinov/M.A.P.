@@ -221,11 +221,44 @@ then chose a value from the wrong end of a two-point sample.
 | 3.2 | 16 | 89,721 | 2 |
 | **3.0** | **18** | **84,121** | **2** — BXP 2026-01-28, FCX 2026-01-22 |
 
+### The reframe, which is the argument for the pair rather than either half
+
+**With verification in place the ratio stops being a safety property and becomes an
+efficiency one.**
+
+| the ratio is | consequence |
+| --- | --- |
+| too high | a **visible pre-flight refusal**, naming the document and the ratio that would have fitted |
+| too low | slightly more truncation than strictly necessary |
+
+Neither fails silently, and that is the whole point. It is why **3.0 does not have to
+be provably below all ~570 remaining documents.** Asserting that it was would be a
+*fourth* instance of "a margin chosen from the observed range" — the error made in this
+ADR with n=2, in the analyst reasoning budget, and in the `budget_exhausted`
+classification. Three times is a pattern; committing to it a fourth time while writing
+the correction would be remarkable.
+
+So 3.0 is chosen as **a good working value backed by 135 measurements**, not as a
+guarantee. The guarantee is the verification, and the ratio only has to be close
+enough that the verification rarely fires.
+
 ### The remedy is both halves, and the second is the one that matters
 
 **Lower the ratio to 3.0**, grounded in 135 measurements rather than two, and re-run the
-two affected completed items. The truncation sensitivity partition grows from 12 exhibits
-to 18 and that is a change to a pre-registered partition, so it is recorded as one.
+two affected completed items.
+
+**The truncation sensitivity partition grows from 12 exhibits to 18, and that is recorded
+here, dated 2026-08-31, with its cause.** It is a change to a pre-registered partition, so
+the reason it is legitimate has to be stated rather than assumed: the growth is driven by
+a **measurement of tokenisation**, not by anything about a result. **No score exists
+anywhere** — not one forecast has been scored — so there is no outcome the partition could
+have been grown toward. Written down now so that it cannot later look as though it
+followed from seeing something.
+
+A third check the pre-flight now performs falls out of this: a completed item whose
+exhibit the *current* rule would cut differently is reported as **stale**. Changing the
+ratio changes what the model was shown, and an item scored on a document the rule would
+no longer produce is a silent inconsistency that nothing else would surface.
 
 **And verify the cut against the real tokeniser in the pre-flight**, because lowering the
 ratio alone is *structurally the same reasoning that just failed* — a margin chosen from
@@ -237,12 +270,31 @@ a completion capped at one token returns the exact count — the same mechanism 
 probe already uses (§4). Twelve to eighteen prefill calls in `map corpus run --check`,
 a few minutes, once.
 
-**Verify and refuse, never verify and shrink.** Cutting until the server says it fits
-would make the frozen document depend on a server-side tokeniser, which is precisely the
-objection that rejected Q8 KV quantisation in this ADR: a setting invisible to the cache
-key and the model fingerprint that silently changes what the model sees. The cut stays a
-pure function of the ratio — deterministic, reproducible, recorded — and the pre-flight
-measures whether that function's output actually fits.
+**Verify and refuse, never verify and shrink**, and the reason descends directly from
+this ADR's rejection of Q8 KV quantisation.
+
+Q8 was rejected partly because it is *"a server-side setting invisible to the cache key
+and the model fingerprint"* — outputs would change while keys stayed identical. Cutting
+a document until the server's tokeniser says it fits has exactly that shape, one level
+worse: **the artifact itself would depend on a server-side setting.** The same corpus on
+a different build, or after a model reload, would produce different documents under the
+same frozen record, and `Document.id` would no longer mean what ADR 0005 says it means.
+
+So the cut stays a pure function of the configured ratio — deterministic, reproducible
+from the record alone, recorded — and the pre-flight *measures* whether that function's
+output actually fits. **A document whose content depends on a server-side tokeniser is
+not reproducible**, and no amount of verification would make it so.
+
+### The refusal names its own remedy
+
+The pre-flight reports the ratio each over-budget document *would* have fitted at,
+floored rather than rounded — 3.105 rounded up to 3.11 would name a value that still
+does not fit, and a suggestion has to be right in one direction only. The named value is
+the densest document's, not the first's, so acting on it does not refuse again on the
+next run.
+
+A refusal that carries its own next step is one decision. A refusal that does not is an
+investigation.
 
 That is this ADR's own §4 principle applied one level down: **the configuration states a
 number and the pre-flight measures the server, rather than trusting the number.**

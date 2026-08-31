@@ -13,7 +13,8 @@ unintended resume is visible rather than silent.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+import math
+from collections.abc import Callable, Mapping
 from datetime import date
 from pathlib import Path
 from uuid import UUID
@@ -24,6 +25,7 @@ from mapf.bootstrap import build_http_client, build_llm_provider, build_run
 from mapf.cli.app import app, fail, handle
 from mapf.core.errors import ExhibitError, MapError
 from mapf.core.models import Document, EarningsFiling
+from mapf.core.ports import LLMProvider, ModelInfo
 from mapf.core.provenance import freeze_digest
 from mapf.core.tokens import AgentBudget, check_fit, estimate_tokens
 from mapf.core.truncation import plan_truncation, truncate
@@ -41,7 +43,7 @@ from mapf.corpus.runner import (
 from mapf.corpus.selection import Corpus
 from mapf.data.exhibits import EdgarExhibits
 from mapf.data.symbols import Throttle
-from mapf.pipeline.context_probe import probe_context
+from mapf.pipeline.context_probe import TokenCount, measure_tokens, probe_context
 from mapf.prompts.loader import FilePromptStore
 from mapf.settings import ModelRegistry, load
 from mapf.settings.loader import Settings
@@ -181,7 +183,18 @@ def corpus_run(
                     for stage in ("intake",)
                 ]
                 _probe_contexts(provider, models, registry)
-                _preflight(record, band, items, exhibits, by_key, vintage, budgets)
+
+                _preflight(
+                    record,
+                    band,
+                    items,
+                    exhibits,
+                    by_key,
+                    vintage,
+                    budgets,
+                    verifier=_verifier(provider, models["intake"]),
+                    ledger=ledger,
+                )
                 return
 
             intake_budget = AgentBudget(
@@ -371,8 +384,16 @@ def _preflight(
     by_key: dict[tuple[str, date], tuple[str, int]],
     vintage: date,
     budgets: list[AgentBudget] | None = None,
+    verifier: Callable[[str, str, int], TokenCount] | None = None,
+    ledger: Ledger | None = None,
 ) -> None:
-    """Re-hash every exhibit against the frozen record and report. No inference."""
+    """Re-hash every exhibit against the frozen record and report.
+
+    `verifier` measures the truncation rule's OUTPUT against the server's own
+    tokeniser (ADR 0020 addendum). Without it the gate trusts a characters-per-token
+    ratio, and a document below that ratio overflows at run time with nothing having
+    said so — which is how PRU failed at item 136.
+    """
     frozen_hashes = record.get("exhibits")
     known: dict[str, dict[str, object]] = {}
     if isinstance(frozen_hashes, dict):
@@ -384,6 +405,7 @@ def _preflight(
     missing: list[str] = []
     changed: list[str] = []
     unrecorded: list[str] = []
+    cuts: list[tuple[str, str, int]] = []
     for n, item in enumerate(items, 1):
         accession, cik = by_key[(item.ticker, item.filing_date)]
         try:
@@ -398,11 +420,22 @@ def _preflight(
             unrecorded.append(accession)
         elif expected != document.id:
             changed.append(f"{item.ticker} {item.filing_date} {accession}")
+        if budgets:
+            tight = min(b.document_budget for b in budgets)
+            cut, _ = truncate(document.text, budget_tokens=tight)
+            if cut is not document.text:
+                cuts.append((f"{item.ticker} {item.filing_date}", cut, tight))
         if n % 50 == 0:
             typer.echo(f"           {n}/{len(items)}")
 
     if budgets:
         _report_fit(record, items, by_key, budgets)
+    if verifier is not None and cuts:
+        _verify_cuts(cuts, verifier)
+    if ledger is not None and budgets:
+        _report_stale_truncation(
+            ledger, band, by_key, record, min(b.document_budget for b in budgets)
+        )
     typer.echo(f"vintage    {vintage} (pinned)")
     for label, rows, colour in (
         ("unfetchable", missing, typer.colors.RED),
@@ -418,6 +451,105 @@ def _preflight(
     typer.secho("check      pre-flight complete; no inference ran", fg=typer.colors.GREEN)
     if missing or changed:
         raise typer.Exit(6)
+
+
+def _verifier(provider: LLMProvider, model: ModelInfo) -> Callable[[str, str, int], TokenCount]:
+    """Bind the token measurement to the agent that actually reads the document.
+
+    A named function rather than a closure at the call site, so the wiring — *which*
+    model a document is measured against — is a thing a test can assert rather than
+    two lines only a live server ever reaches.
+    """
+
+    def verify(label: str, text: str, budget: int) -> TokenCount:
+        return measure_tokens(provider, model, text, label=label, budget=budget)
+
+    return verify
+
+
+def _verify_cuts(
+    cuts: list[tuple[str, str, int]], verifier: Callable[[str, str, int], TokenCount]
+) -> None:
+    """Measure each truncated document against the server's own tokeniser.
+
+    The ratio decides how much to cut; this decides whether that was enough. With it
+    in place the ratio stops being a safety property and becomes an efficiency one —
+    set too high it produces a refusal here, set too low it truncates slightly more
+    than necessary, and neither outcome is silent.
+    """
+    typer.echo(f"tokens     verifying {len(cuts)} truncated documents against the tokeniser")
+    over = [m for label, text, budget in cuts if not (m := verifier(label, text, budget)).fits]
+    if not over:
+        typer.secho(
+            f"tokens     all {len(cuts)} truncated documents fit the real window",
+            fg=typer.colors.GREEN,
+        )
+        return
+    typer.secho(
+        f"tokens     {len(over)} truncated documents still exceed the budget",
+        fg=typer.colors.RED,
+    )
+    for m in over:
+        typer.echo(
+            f"           {m.label:<22}{m.tokens:>7,} tokens of {m.budget:,} "
+            f"— tokenises at {m.ratio:.3f} chars/token"
+        )
+    # The remedy, named. A refusal that carries its own next step is one decision; a
+    # refusal that does not is an investigation.
+    # FLOORED, not rounded. The cut length is proportional to the ratio, so rounding
+    # 3.105 up to 3.11 would name a remedy that still does not fit — a suggestion
+    # that has to be right in one direction only.
+    worst = math.floor(min(m.fitting_ratio for m in over) * 100) / 100
+    raise fail(
+        f"{len(over)} truncated documents do not fit the real context",
+        6,
+        hint=(
+            f"Lower CHARS_PER_TOKEN to {worst:.2f} or below and amend the freeze; the "
+            "cut length is proportional to it, so this is the value that would have "
+            "fitted the densest of them."
+        ),
+    )
+
+
+def _report_stale_truncation(
+    ledger: Ledger,
+    band: str,
+    by_key: dict[tuple[str, date], tuple[str, int]],
+    record: dict[str, object],
+    budget: int,
+) -> None:
+    """Completed items whose document the CURRENT rule would no longer produce.
+
+    Changing the ratio changes what was shown to the model. An item scored on a
+    document the rule would not produce today is a silent inconsistency in the
+    corpus, and nothing else would report it.
+    """
+    frozen = record.get("exhibits")
+    sizes: dict[str, int] = {}
+    if isinstance(frozen, dict) and isinstance(raw := frozen.get("by_accession"), dict):
+        sizes = {a: int(v.get("chars", 0)) for a, v in raw.items()}
+
+    stale: list[str] = []
+    for key, entry in sorted(ledger.resolved().items()):
+        if entry.status != "complete" or entry.band != band:
+            continue
+        located = by_key.get((entry.ticker, entry.filing_date))
+        chars = sizes.get(located[0]) if located else None
+        if not chars:
+            continue
+        now = plan_truncation(chars, budget_tokens=budget)
+        removed = now.removed_chars if now.applied else 0
+        if removed != entry.elided_chars:
+            stale.append(f"{key[0]} {key[2]}: was {entry.elided_chars:,} elided, now {removed:,}")
+    if stale:
+        typer.secho(
+            f"stale      {len(stale)} completed item(s) were built on a document the "
+            "current rule would not produce",
+            fg=typer.colors.YELLOW,
+        )
+        for row in stale[:10]:
+            typer.echo(f"           {row}")
+        typer.echo("           re-run these; their forecasts read a different document")
 
 
 def _report_fit(

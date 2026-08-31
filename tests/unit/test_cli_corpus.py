@@ -23,6 +23,7 @@ from mapf.cli.app import app
 from mapf.cli.commands.corpus import _progress
 from mapf.core.errors import InferenceStatusError, MissingExhibitError
 from mapf.core.models import Document, UntrustedText
+from mapf.core.ports import ModelInfo
 from mapf.corpus.ledger import Ledger, LedgerEntry
 from mapf.corpus.runner import CorpusHaltedError, CorpusItem, Health
 from mapf.data.exhibits import EdgarExhibits
@@ -30,6 +31,8 @@ from mapf.prompts.loader import FilePromptStore
 from tests.unit.test_cli import _config
 
 runner = CliRunner()
+
+MODEL_INFO = ModelInfo(id="m", fingerprint="tag:m", fingerprint_source="tag")
 STORE = FilePromptStore()
 
 
@@ -823,3 +826,247 @@ def test_agreeing_windows_raise_nothing(monkeypatch: pytest.MonkeyPatch) -> None
     _probe_contexts(
         object(), {s: object() for s in ("intake", "analyst", "structuralist")}, registry
     )
+
+
+# ---------------------------------------------------------------------------
+# The pre-flight's verification and staleness reports (ADR 0020 addendum)
+# ---------------------------------------------------------------------------
+def _count(label: str, chars: int, tokens: int, budget: int = 29_968):  # type: ignore[no-untyped-def]
+    from mapf.pipeline.context_probe import TokenCount
+
+    return TokenCount(label=label, chars=chars, tokens=tokens, budget=budget)
+
+
+def test_the_verifier_passes_when_every_cut_fits(capsys: pytest.CaptureFixture[str]) -> None:
+    from mapf.cli.commands.corpus import _verify_cuts
+
+    _verify_cuts(
+        [("BXP 2026-01-28", "x" * 84_121, 29_968)],
+        lambda label, text, budget: _count(label, len(text), 25_000, budget),
+    )
+    assert "all 1 truncated documents fit the real window" in capsys.readouterr().out
+
+
+def test_the_verifier_refuses_and_names_the_ratio_that_would_have_fitted(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """PRU exactly: cut by the rule, still over, and the remedy is the number the
+    server has just reported."""
+    import typer
+
+    from mapf.cli.commands.corpus import _verify_cuts
+
+    with pytest.raises(typer.Exit):
+        _verify_cuts(
+            [("PRU 2026-04-14", "x" * 98_121, 29_968)],
+            lambda label, text, budget: _count(label, len(text), 31_600, budget),
+        )
+    captured = capsys.readouterr()
+    everything = captured.out + captured.err
+    assert "PRU 2026-04-14" in everything
+    assert "3.105 chars/token" in everything
+    assert "Lower CHARS_PER_TOKEN to 3.10 or below" in everything
+
+
+def test_the_named_remedy_is_the_densest_document_not_the_first(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Fixing only the first would refuse again on the next run."""
+    import typer
+
+    from mapf.cli.commands.corpus import _verify_cuts
+
+    with pytest.raises(typer.Exit):
+        _verify_cuts(
+            [("A", "x" * 90_000, 29_968), ("B", "x" * 90_000, 29_968)],
+            lambda label, text, budget: _count(
+                label, len(text), 30_000 if label == "A" else 32_000, budget
+            ),
+        )
+    captured = capsys.readouterr()
+    assert "to 2.81 or below" in captured.out + captured.err
+
+
+def test_a_completed_item_built_on_a_different_cut_is_reported_stale(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Changing the ratio changes what the model was shown. An item scored on a
+    document the rule would no longer produce is a silent inconsistency."""
+    from mapf.cli.commands.corpus import _report_stale_truncation
+
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="clean",
+            filing_date=date(2026, 2, 1),
+            status="complete",
+            run_id=uuid4(),
+            truncated=True,
+            elided_chars=121_441,
+        )
+    )
+    record: dict[str, object] = {"exhibits": {"by_accession": {"acc": {"chars": 219_441}}}}
+    _report_stale_truncation(
+        ledger, "clean", {("AAPL", date(2026, 2, 1)): ("acc", 1)}, record, 29_968
+    )
+    out = capsys.readouterr().out
+    assert "1 completed item(s) were built on a document the current rule would not produce" in out
+    assert "was 121,441 elided" in out
+
+
+def test_an_item_whose_cut_is_unchanged_is_not_reported(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from mapf.cli.commands.corpus import _report_stale_truncation
+    from mapf.core.truncation import plan_truncation
+
+    now = plan_truncation(219_441, budget_tokens=29_968)
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="clean",
+            filing_date=date(2026, 2, 1),
+            status="complete",
+            run_id=uuid4(),
+            truncated=True,
+            elided_chars=now.removed_chars,
+        )
+    )
+    record: dict[str, object] = {"exhibits": {"by_accession": {"acc": {"chars": 219_441}}}}
+    _report_stale_truncation(
+        ledger, "clean", {("AAPL", date(2026, 2, 1)): ("acc", 1)}, record, 29_968
+    )
+    assert "stale" not in capsys.readouterr().out
+
+
+def test_the_named_ratio_is_floored_not_rounded(capsys: pytest.CaptureFixture[str]) -> None:
+    """3.105 rounded to 3.11 names a remedy that still does not fit. The cut length
+    is proportional to the ratio, so the suggestion has to be right in one direction
+    only."""
+    import typer
+
+    from mapf.cli.commands.corpus import _verify_cuts
+
+    with pytest.raises(typer.Exit):
+        _verify_cuts(
+            [("PRU", "x" * 98_121, 29_968)],
+            lambda label, text, budget: _count(label, len(text), 31_600, budget),
+        )
+    captured = capsys.readouterr()
+    assert "to 3.10 or below" in captured.out + captured.err
+
+
+def test_the_verifier_is_wired_to_the_intake_model() -> None:
+    """The document is measured against the agent that actually reads it."""
+    from mapf.cli.commands.corpus import _verifier
+
+    seen: dict[str, object] = {}
+
+    class _P:
+        def complete(self, **kwargs: object) -> object:
+            seen.update(kwargs)
+            raise RuntimeError("stop here")
+
+    verify = _verifier(_P(), MODEL_INFO)  # type: ignore[arg-type]
+    with pytest.raises(RuntimeError):
+        verify("X", "abc", 100)
+    assert seen["model"] is MODEL_INFO
+
+
+def test_a_stale_check_skips_items_with_no_recorded_size(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An exhibit absent from the frozen record has no size to compare against, and
+    guessing one would invent a staleness that may not exist."""
+    from mapf.cli.commands.corpus import _report_stale_truncation
+
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="clean",
+            filing_date=date(2026, 2, 1),
+            status="complete",
+            run_id=uuid4(),
+            truncated=True,
+            elided_chars=999,
+        )
+    )
+    record: dict[str, object] = {"exhibits": {"by_accession": {}}}
+    _report_stale_truncation(ledger, "clean", {}, record, 29_968)
+    assert "stale" not in capsys.readouterr().out
+
+
+def test_a_stale_check_ignores_the_other_band(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from mapf.cli.commands.corpus import _report_stale_truncation
+
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="ambiguous",
+            filing_date=date(2025, 2, 1),
+            status="complete",
+            run_id=uuid4(),
+            truncated=True,
+            elided_chars=1,
+        )
+    )
+    record: dict[str, object] = {"exhibits": {"by_accession": {"acc": {"chars": 219_441}}}}
+    _report_stale_truncation(
+        ledger, "clean", {("AAPL", date(2025, 2, 1)): ("acc", 1)}, record, 29_968
+    )
+    assert "stale" not in capsys.readouterr().out
+
+
+def test_the_preflight_verifies_and_reports_staleness_end_to_end(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Exercises the wiring: `_preflight` cuts oversized documents, hands each to the
+    verifier, and compares completed items against the current rule."""
+    from mapf.cli.commands.corpus import _preflight
+    from mapf.core.models import Document, UntrustedText
+    from mapf.core.tokens import AgentBudget
+    from mapf.pipeline.context_probe import TokenCount
+
+    accession = "0000000001-26-000001"
+    big = "x" * 300_000
+    doc = Document(
+        id="sha256:" + "a" * 64,
+        source="edgar",
+        text=UntrustedText(big),
+        fetched_at=datetime(2026, 2, 2, tzinfo=UTC),
+    )
+
+    class _Exhibits:
+        def fetch(self, filing: object) -> Document:
+            return doc
+
+    seen: list[str] = []
+
+    def verify(label: str, text: str, budget: int) -> TokenCount:
+        seen.append(label)
+        return TokenCount(label=label, chars=len(text), tokens=budget - 1, budget=budget)
+
+    items = (CorpusItem("AAPL", "clean", date(2026, 2, 1)),)
+    record: dict[str, object] = {
+        "exhibits": {"by_accession": {accession: {"chars": 300_000, "document_id": doc.id}}}
+    }
+    _preflight(
+        record,
+        "clean",
+        items,
+        _Exhibits(),  # type: ignore[arg-type]
+        {("AAPL", date(2026, 2, 1)): (accession, 1)},
+        date(2026, 8, 14),
+        [AgentBudget(agent="intake", context_tokens=32_768, max_tokens=2048)],
+        verifier=verify,
+        ledger=Ledger(tmp_path / "ledger.jsonl"),
+    )
+    out = capsys.readouterr().out
+    assert seen == ["AAPL 2026-02-01"], "the truncated document must reach the verifier"
+    assert "all 1 truncated documents fit the real window" in out

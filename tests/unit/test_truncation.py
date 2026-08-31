@@ -140,7 +140,13 @@ def test_the_record_describes_both_outcomes() -> None:
 
 
 def test_the_corpus_boundary_is_where_expected() -> None:
-    """At a 32,768 context the rule bites above roughly 105k characters, which is
-    what puts BXP, FCX and PRU inside it and everything else outside."""
-    assert plan_truncation(100_000, budget_tokens=BUDGET).applied is False
-    assert plan_truncation(110_000, budget_tokens=BUDGET).applied is True
+    """At a 32,768 context and the measured 3.0 chars/token, the rule bites above
+    roughly 90k characters — 12 exhibits at the old 3.5, 18 now.
+
+    The boundary moved because the ratio was measured rather than extrapolated from
+    two points (ADR 0020 addendum), and it moved in the direction that truncates more
+    than strictly necessary: the safe direction, now that the pre-flight verifies the
+    cut against the real tokeniser.
+    """
+    assert plan_truncation(85_000, budget_tokens=BUDGET).applied is False
+    assert plan_truncation(95_000, budget_tokens=BUDGET).applied is True
