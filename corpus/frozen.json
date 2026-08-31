@@ -1,9 +1,9 @@
 {
-  "freeze_version": "2.3.0",
+  "freeze_version": "2.4.0",
   "frozen_on": "2026-08-14",
-  "amended_on": "2026-08-29",
-  "amends": "2a54331",
-  "amendment_reason": "Records the degeneration retry (ADR 0021) and corrects two sampling values that had drifted out of this record. PRECEDES ALL INFERENCE -- the clean band has not started, the ledger and the LLM cache are being cleared, and no forecast has been scored. (1) THE RETRY. Two items stopped intake at its cap; the tails are decoding loops, not long documents -- STZ was 757 lines of which 22 were unique, 97.1% redundant, one block repeated 187 times, last new content at line 27. A frequency penalty of 0.3 breaks both loops. It is applied ONLY as a retry after a truncated first attempt, and ONLY to intake, because at 0.3 it also changes every well-behaved item measured (one nearly doubled, one shrank a fifth) and perturbing 354 items to rescue 2 is the wrong trade. A first call carries no penalty and is byte-identical on the wire to one made before this existed. The deciding argument is band asymmetry, not the count: intake runs at temperature 0, so degeneration is a property of the document rather than the ticker, and failing these items would remove one clean item each from STZ and FCX while their ambiguous siblings survive -- unbalancing the panel on the same-ticker axis the band design exists to protect. The sensitivity check is pre-registered in ADR 0021: the primary result is reported with and without every retried item, declared before any item has run. (2) THE DRIFT. intake.max_tokens was recorded here as null but has been configured at 2048 since the cap was introduced, and analyst.max_visible_tokens was never recorded at all. Nothing detected either, because verify_freeze compared only the model alias. It now compares every field this record names, which is the same correction as probing the server instead of trusting a configured context window. Neither value is being CHANGED by this amendment -- the record is being corrected to state what the run will actually execute at. TRUNCATION IS UNTOUCHED: the head-and-tail rule, its 24,000/4,000 parameters and the twelve exhibits it applies to are all unchanged, and the document budget still derives from intake's window, which stays at 32,768.",
+  "amended_on": "2026-08-31",
+  "amends": "5f679fc",
+  "amendment_reason": "Records the EXECUTION ORDER, which was implicit and is now a property of the frozen record. plan() orders a band by (filing_date, ticker) and the runner executed in that order, so a halt took a PREFIX OF THE YEAR rather than a sample of it -- at item 208 of the clean band, May through August absent entirely. passes.py already contained the argument for why that is unacceptable, written before any failure in this run: a calendar-contiguous subsample confounds 'we stopped early' with 'we only measured the first half of the year'. That protection had been installed on the ambiguous band; the clean band, which carries the primary result, ran straight through. THE ORDER CANNOT CHANGE ANY FORECAST. as_of derives from the item's filing date, the price vintage is pinned, sampling carries a fixed seed, and the cache is keyed on content. It determines exactly one thing: which subset survives a halt. That is why this is amendable mid-run at all, and it is also why no completed item is affected and no cache key changes. A seeded shuffle rather than a stride, so that ANY PREFIX IS AN UNBIASED RANDOM SAMPLE of the remainder. The whole band is shuffled and then filtered by what is already complete, so the order is a function of the corpus and the seed alone and a resume continues it rather than drawing a fresh one. plan() IS UNCHANGED. It defines pass membership, which is pre-registered in ADR 0019 and computed at scoring time; execution order and pass membership are now separate concerns and this touches only the first. THE RESULT IS A HYBRID AND IS RECORDED AS ONE: 80 items of the clean band had already run in date order and are kept. The clean band is therefore 80 contiguous early items plus an interleaved remainder -- at a halt near item 210 all eight months survive with January over-weighted about 1.7x, against a prefix that lost three months completely. The ambiguous band has not started and receives an interleaved order from its first item. Truncation, sampling, contexts and the degeneration retry are all untouched, and no exhibit hash changes.",
   "changes": {
     "dropped": [
       "BRK-A",
@@ -44683,5 +44683,26 @@
       "STZ": "757 lines, 22 unique, 97.1% redundant, 187x most-repeated line",
       "FCX": "53 lines, 21 unique, 60% redundant, ~22-line repeating block"
     }
+  },
+  "execution_order": {
+    "rule": "seeded_shuffle_v1",
+    "seed": 20260830,
+    "applies_to": [
+      "clean",
+      "ambiguous"
+    ],
+    "scope": "attempt order only; plan() and pass membership are unchanged",
+    "property": "any prefix is an unbiased random sample of the items not yet run",
+    "clean_band_hybrid": {
+      "contiguous_prefix_items": 80,
+      "note": "already executed in date order before this amendment; kept, not re-run",
+      "effect": "early months over-represented ~1.7x at a mid-band halt; all 8 months present"
+    },
+    "cannot_affect": [
+      "as_of (from the filing date)",
+      "price vintage (pinned)",
+      "sampling (fixed seed)",
+      "cache keys (content-addressed)"
+    ]
   }
 }
