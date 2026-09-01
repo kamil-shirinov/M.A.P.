@@ -13,9 +13,51 @@
 
 ## Current phase
 
-**Phase 1** — provider layer, three agents, schema, cache, market data, CLI, tests.
+**Phase 2 — the evidence.** Phase 1 closed long ago; the definition of done below is kept
+as a record of what it required, not as a live checklist.
 
-Nothing from Phase 2+ gets built until every criterion below passes.
+### Where things actually are, 2026-09-01
+
+**The clean band is complete: 351 of 356, five failures, transcription fidelity 1.0.**
+
+| | |
+| --- | --- |
+| complete | 351 |
+| failed | 5 — ACGL, ALLY, WH *(analyst runaway)*; ATI, JAZZ *(intake runaway)* |
+| **forecasts scored** | **none** |
+| truncated exhibits | 9, across four companies |
+| degeneration retries | 11 |
+| produced from an uncommitted tree | **208** — no code digest, reported as its own stratum |
+| freeze | 2.6.0 |
+
+**Scoring is built and unrun.** `map evaluate` works end to end and has been exercised on
+real artifacts through `--check`, which prints no score. Three baselines, the Monte Carlo
+mixture, CRPS/Brier/log score, the leakage estimate and both pre-registered sensitivity
+partitions are all in place.
+
+**Next, in order:**
+
+1. **The ambiguous band**, under [[0019-corpus-execution-protocol]] §8 — launched from a
+   clean tree, **no commits while it runs**. That rule exists because breaking it produced
+   the 208-item stratum above.
+2. **The analyst-runaway screen** — `scripts/analyst_runaway_replay.py`, ACGL 2026-02-09
+   against 2026-04-28. Input redundancy is already falsified; this tests whether the
+   *reasoning* degenerates. Run it only when no band is executing.
+3. **Scoring**, once both bands are in and `map evaluate --check` is clean.
+
+**Do not** run `map evaluate` before the ambiguous band completes. The leakage estimate is
+the headline number and it needs both bands.
+
+### Open questions carried into scoring
+
+- **`ungrounded=151`** across the band — recorded as an open question, not a finding. The
+  hypothesis is that the model restates its own emitted fields rather than fabricating
+  company facts; **untested**, and writing an untested mechanism into Findings is the
+  error of entry #2. Named test: partition the flagged numerals by whether they match a
+  value the forecast itself emitted.
+- **The analyst runaway** — content, not size. See above.
+- **Differential exclusion** — whether the three excluded items differ systematically from
+  the 351 kept is untested. The excluded set is not assumed random.
 
 ### Phase 1 definition of done
 

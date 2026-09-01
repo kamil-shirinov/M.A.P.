@@ -289,3 +289,31 @@ every well-behaved item: rescuing two items by perturbing the other 354 is the w
 from the visible output. A model can burn its whole budget here and emit nothing, which **looks exactly like
 a refusal** and is not. *The trap:* the reasoning text itself was never recorded, so a runaway could be
 counted and never read.
+
+**Characters-per-token ratio** — see *Models and inference*. Worth repeating here because
+it is the parameter that moved: it converts a document's length into an estimate of what
+it will cost a model, and a **refusal gate must sit at or below the floor of what it
+gates**, not near the middle of it.
+
+**Positive control** — a case where a measure *must* separate, run to prove the measure
+can separate at all. A null result from a measure with no dynamic range says nothing, and
+looks identical to a null from a measure that works. *Used in:* the redundancy
+falsification, where the corpus's largest exhibit was measured against its smallest before
+the null was believed.
+
+**Screen versus comparison** — a design that can establish something is *present* is not
+automatically one that can establish two things *differ*. Five draws per arm surface a
+per-draw probability of 0.3 with 83% chance, but 2-of-5 against 0-of-5 is p = 0.44 and
+indistinguishable from chance. *Stated in advance* so a partial result is not read as a
+verdict.
+
+**Natural experiment** — two cases that differ in the thing you care about and match on
+everything else, found rather than constructed. *The corpus has one:* ACGL 2026-02-09
+failed and ACGL 2026-04-28 passed, **35 characters apart**, same company, same filing
+type, adjacent quarters.
+
+**Supersession record** — the append-only way to invalidate an entry: a new line saying
+*this item was invalidated by amendment X*, rather than deleting the old one. *Not yet
+built* — the current mechanism deletes lines, which erased one item's genuine failure
+history ([[Findings & Incidents]] #39).
+

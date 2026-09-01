@@ -353,3 +353,77 @@ holds between health and result, one layer up.
 **Next:** the band completes or halts, the analyst runaway gets diagnosed with data that now exists, then
 the ambiguous band under [[0019-corpus-execution-protocol]] §8 — clean tree, no commits while it runs.
 
+---
+
+## 13 · The clean band, executed
+
+**ADRs from this phase:** [[0020-context-window-and-truncation]] · [[0028-execution-order]] · [[0030-code-boundary-adjudication]]
+
+**351 of 356 complete, five failures, fidelity 1.0.** It took three runs.
+
+The first halted in its first hour on an 8,192-token context, which is §7. The second ran
+for days and ended at 349 with seven failures. The third was not a run so much as a
+correction: nine items re-executed after the truncation basis turned out to have moved
+underneath the band.
+
+### What made it survivable
+
+Three fixes, each from a failure the band produced rather than one anticipated:
+
+- **The context and the chain.** Windows verified by bracketing the server instead of
+  trusting `config`, a truncation rule for the twelve — later eighteen — exhibits that
+  did not fit, and a startup validator for the boundary *between* agents, which had
+  belonged to nobody until intake emitted 20,000 tokens into a 16,384-token window.
+- **The degeneration retry.** Intake looped rather than expanded on two documents, 97%
+  and 60% redundant. A frequency penalty applied *only* as a retry rescued them without
+  perturbing the other 354.
+- **The repeat rule.** "Transient" became a hypothesis the ledger tests: a reason that
+  recurs on the same item resolves it, so the band stopped burning fifteen minutes a pass
+  on items that could never succeed.
+
+### The seasonal prefix
+
+Mid-run, projecting the failure rate forward showed the band halting between items 208
+and 312. The power cost was mild. **The calendar cost was not**: `plan()` orders by filing
+date, so a halt takes a *prefix of the year* — at 208, May through August absent
+entirely.
+
+`passes.py` already carried the argument against exactly that, written before any of it
+happened, and the protection had been installed on the ambiguous band. The clean band —
+the one carrying the primary result — ran straight through. The remainder was re-ordered
+into a seeded shuffle, leaving a **hybrid**: 80 contiguous early items plus an interleaved
+remainder, recorded as that rather than dressed as a clean design.
+
+### The basis that moved underneath it
+
+After the band finished, PRU overflowed its context *after* truncation. The cut is derived
+from an assumed characters-per-token ratio, and 3.5 had been justified as "below anything
+observed" — on two data points. Measured across 135 completed items: **14% of documents
+fall below it**, and a 98,121-character cut needs a true ratio of 3.274 to fit. One
+truncated exhibit in twenty was always going to fail.
+
+Correcting the ratio to 3.0 changed what nine items were shown. Six were genuinely stale,
+and **three of those were invisible to the freeze digest** because they had fit whole at
+3.5 — a content hash records the input that *was* used and cannot represent one that
+*would* have been used. The staleness check found them; the digest structurally could not.
+
+The ratio is no longer a safety property: `--check` now measures every cut against the
+server's own tokeniser, so too high a ratio produces a visible refusal and too low one
+truncates slightly more than needed.
+
+### Final counts
+
+| | |
+| --- | --- |
+| complete | **351** |
+| failed | **5** — ACGL, ALLY, WH (analyst runaway), ATI, JAZZ (intake runaway) |
+| transcription fidelity | **1.0** — no unparseable, no divergent |
+| truncated exhibits | 9, across four companies |
+| degeneration retries | 11 |
+| produced from an uncommitted tree | **208** |
+
+**No forecast has been scored.**
+
+**Next:** the ambiguous band, under [[0019-corpus-execution-protocol]] §8 — launched from
+a clean tree, no commits while it runs.
+

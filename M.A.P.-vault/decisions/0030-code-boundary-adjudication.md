@@ -23,9 +23,16 @@ Three code states produced the 169 completed items of the clean band:
 
 | digest | commit | items |
 | --- | --- | --- |
-| `fd5154ed7e9b` | `0d78326` | 15 |
-| `ef4c60c0c74a` | `318250f` | 120 |
-| *none* | `4f57a82`, **dirty tree** | 34 |
+| `ef4c60c0c74a` | `318250f` | 119 |
+| `fd5154ed7e9b` | `0d78326` | 14 |
+| *none* | **dirty tree** | **208** |
+| `65277e701c9a` | post-band re-runs | 9 |
+| `24453884817e` | post-band re-run | 1 |
+
+**Correction, 2026-09-01: the dirty stratum is 208, not 34.** The figure reported while
+the band was running was a snapshot at item 136; development continued against the live
+run for days afterwards. **59% of the completed band was produced from an uncommitted
+tree** — not 9%. Recorded as measured.
 
 ---
 
@@ -59,11 +66,40 @@ correctness. **The digest is not wrong; it is coarse in the direction chosen on 
 
 ### Boundary 2 · `ef4c60c0c74a` → the dirty group (120 → 34 items)
 
-**Verdict: cannot tell. Reported as a separate stratum.**
+**Verdict: cannot tell. Reported as a separate stratum of 208 items.**
 
-The 34 items were produced from an **uncommitted tree**, so the files that executed are
-not recoverable. This is the answer the record has to carry, and it is not the same as
+The items were produced from an **uncommitted tree**, so the files that executed are not
+recoverable. This is the answer the record has to carry, and it is not the same as
 "probably fine".
+
+### Two claims that were being blurred, separated — and the second is falsified
+
+The defence of this stratum rested on two sentences that were run together. They are
+different claims and only one survives:
+
+> **(a) The code behind these 208 items is not reconstructible from a commit.**
+> True, unrecoverable, and stated. `code_version.dirty` records that the commit does not
+> describe the working files.
+>
+> **(b) The forecast-governing surface was verified frozen at every launch.**
+> **This is false as stated, and the truncation drift is what falsifies it.**
+> `verify_freeze` compared prompts, model aliases and the execution seed. It did **not**
+> compare the truncation block, so `chars_per_token_estimate` moved from 3.5 to 3.0
+> under the same `head_tail_v1` label while every launch reported the freeze as matching
+> ([[../Findings & Incidents#39]]). The surface was *partially* verified, and the part
+> that was not verified is exactly the part that drifted.
+
+**(b) was the reason (a) was tolerable**, so it has to be withdrawn as stated and
+replaced with what is actually true:
+
+> Prompts, model aliases and the execution seed were verified at every launch. Truncation
+> was not, and it drifted — affecting **six of 351 completed items**, all identified, all
+> re-run on the corrected basis. No other governing field is known to have moved, and
+> none can be proved not to have.
+
+**The stratum is large; the demonstrated forecast-relevant drift inside it is small and
+has been corrected.** Both sentences belong in the record, and neither should be read
+without the other.
 
 What *is* adjudicable is the committed span `318250f → 4f57a82`, thirteen commits and
 twelve forecast-governing files. Every path by which code can reach a model was checked

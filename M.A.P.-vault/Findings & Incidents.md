@@ -1352,3 +1352,51 @@ and **a single re-issue is one draw, not a reproduction.** Five draws surface a 
 runaway probability of 0.3 or more with 83% chance and cannot distinguish 0.05 from zero;
 that is written into the script above the code, so the result is read against what it
 could have shown.
+
+---
+
+## 42 · The basis moved underneath a finished band
+
+The clean band ended at 349 of 356. Then PRU overflowed its context **after** truncation —
+cut to 98,121 characters, estimated at 28,035 tokens against a 29,968 budget, and refused.
+
+Correcting the ratio from 3.5 to 3.0 was straightforward ([[Findings & Incidents#37|#37]]).
+Working out **what it had already changed** was not.
+
+**The reported stale set went 2 → 5 → 6, and each correction came from someone asking a
+better question rather than from a check firing.**
+
+- **2** — what the staleness check had reported when it last ran, at item 136. The band
+  then ran for days.
+- **5** — items whose *freeze digest* differed. Wrong instrument.
+- **6** — what the staleness check said when actually re-run against the finished band.
+
+The three the digest missed — FCX 2026-04-23, CP 2026-04-29, CP 2026-07-29 — **fit whole
+at 3.5 and are truncated at 3.0.** They recorded `elided=0`, took the untruncated digest,
+and sat in the majority group looking identical to 340 untouched items.
+
+### Why a digest structurally could not have found them
+
+**A content hash records the input that was used. It cannot represent an input that would
+have been used under a different parameter.** Those three had no truncation to hash — the
+drift never touched them — so there was nothing for a hash to differ about. **A digest
+detects a parameter change only where the parameter bit.**
+
+The instrument that found them asks the other question: *what would the current rule
+produce for this item, and does it match what was recorded?* That is a comparison against
+a counterfactual, and no amount of hashing gets there.
+
+Both tools were already built. The mistake was reaching for the one that was fresh in mind
+rather than the one that answered the question — and it was caught only because the count
+was challenged twice.
+
+### What it cost, and what it did not
+
+Nine items re-run: six stale, two relabelled whose prompts were byte-identical and
+**verified present in the response cache** before running, and PRU. PRU passed, so failures
+fell to five.
+
+**No forecast was scored under a mixed basis**, which is the whole reason this was worth
+stopping for. The corpus is now on one truncation basis, and `head_tail_v1` carries its
+parameters so two bases can never again share a name.
+
