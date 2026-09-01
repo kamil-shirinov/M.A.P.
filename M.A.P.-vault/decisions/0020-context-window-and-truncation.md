@@ -299,6 +299,53 @@ investigation.
 That is this ADR's own §4 principle applied one level down: **the configuration states a
 number and the pre-flight measures the server, rather than trusting the number.**
 
+## Addendum, 2026-09-01 — the re-run set, and a pre-commitment about PRU
+
+The corrected basis was applied and the band finished. Reconciling what it touched
+found **six** stale items, not the two identified earlier, and the reason the earlier
+count was short is recorded in [[../Findings & Incidents#39]]: three of them ran
+**untruncated** at 3.5, so they carried the untruncated freeze digest and sat in the
+majority group. A content digest records the input that *was* used; it cannot represent
+the input that *would* have been used under a different parameter.
+
+**The re-run set is nine**, and every item qualifies on **document size** — the
+property the ratio change acts on — not on its outcome:
+
+| | items |
+| --- | --- |
+| stale: the rule now cuts them differently | FCX 2026-04-23, BXP 2026-04-28, CP 2026-04-29, FCX 2026-07-23, BXP 2026-07-28, CP 2026-07-29 |
+| already correct, re-run only because `rule_id` moves their freeze digest | BXP 2026-01-28, FCX 2026-01-22 |
+| failed under the old basis | PRU 2026-04-14 |
+
+**The two relabelled items cost nothing and change nothing.** Their prompts are
+byte-identical, and every call — seven across the two, including BXP's degeneration
+retry at `attempt=1` — was confirmed present in the response cache by reconstructing
+its key from the recorded trace. They will replay, not resample. Had they missed the
+cache, two valid forecasts would have been replaced by two different ones at
+temperature 0.7, and that would have needed deciding rather than assuming.
+
+### The pre-commitment on PRU, written before it runs
+
+PRU 2026-04-14 is 105,272 characters. It sits inside the band the ratio change moves
+and qualifies exactly as CP and FCX do. It also happens to be the item whose failure
+exposed the defect, which is why the commitment is written down first:
+
+> **If PRU succeeds under the corrected basis it is scored**, and the clean band's
+> failures fall from six to five. **If it fails again it stays a failure and gets no
+> further retry** — no third attempt, no parameter moved to accommodate it.
+
+Included on document size, judged on neither outcome. Recorded now because "the item
+that motivated the fix also happens to pass under it" is a sentence that needs its
+decision rule fixed in advance.
+
+### The ambiguous band cannot repeat this
+
+Nine of its exhibits are truncated under the corrected basis — BXP ×3, CP ×2, FCX ×2,
+CCI, PRU — and all nine are already in the frozen record's `applies_to`. The band has
+not started, so every one is cut at
+`head_tail_v1(head=24000,tail=4000,ratio=3.0)` from its first attempt. There is no
+old-basis item to become stale.
+
 ## Consequences
 
 - `context_tokens` joins the configuration per agent and is frozen with the corpus,
