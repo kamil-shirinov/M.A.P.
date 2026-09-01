@@ -43,7 +43,9 @@ from mapf.core.models import PriceWindow
 from mapf.core.provenance import (
     FORECAST_ROOTS,
     NOT_FORECAST_PATHS,
+    code_version,
     freeze_differences,
+    freeze_digest,
 )
 from mapf.corpus.forecasts import Loaded, load_band, unreferenced_runs
 from mapf.corpus.ledger import Ledger
@@ -65,6 +67,9 @@ from mapf.settings.loader import Settings
 
 FROZEN = Path("corpus/frozen.json")
 LEDGER = Path("var/corpus/ledger.jsonl")
+# Committed, so the git history is the proof the holdout was spent once — the same
+# argument that makes the frozen corpus commit the proof it was pre-registered.
+HOLDOUT_LEDGER = Path("corpus/holdout_spend.jsonl")
 
 
 @app.command()
@@ -85,6 +90,14 @@ def evaluate(
         False,
         "--allow-mixed-code",
         help="Score even though runs executed under different commits.",
+    ),
+    split: str = typer.Option(
+        ...,
+        "--split",
+        help=(
+            "Which half of the panel to score: dev or holdout. REQUIRED and without a "
+            "default, so the holdout cannot be scored by omission."
+        ),
     ),
     check: bool = typer.Option(
         False,
@@ -140,6 +153,15 @@ def evaluate(
                 2,
                 hint=f"Bands: {', '.join(b.name for b in corpus.criteria.bands)}",
             )
+
+        splits = sorted({p.split for p in corpus.accepted})
+        if split not in splits:
+            raise fail(f"unknown split {split!r}", 2, hint=f"Splits: {', '.join(splits)}")
+
+        # The holdout is spendable once, and the refusal happens BEFORE anything is
+        # computed. A number that exists has been seen (ADR 0031).
+        if split == "holdout" and not check:
+            _refuse_if_holdout_spent(HOLDOUT_LEDGER)
 
         ledger = Ledger(ledger_path)
         items = plan(corpus, band)
@@ -233,7 +255,7 @@ def evaluate(
             typer.secho(f"code       digest {label} ({count} runs)", fg=typer.colors.GREEN)
 
         settings = load()
-        forecasts = load_band(ledger, corpus, runs_dir, band)
+        forecasts = load_band(ledger, corpus, runs_dir, band, split)
         typer.secho(
             f"loaded     {len(forecasts)} forecasts, from the ledger and not by "
             f"scanning {runs_dir}/",
@@ -252,13 +274,16 @@ def evaluate(
             # does not avoid producing them, because a path that skipped the
             # computation would not be exercising the one that matters.
             scores = _score(forecasts, settings, calendar, strict=not check)
+            # BEFORE anything is printed. See `_record_holdout_spend`.
+            if split == "holdout" and not check:
+                _record_holdout_spend(HOLDOUT_LEDGER, band=band, items=scores.n, record=record)
             if check:
                 _structural(scores, forecasts, calendar, refuse)
             else:
                 _report(scores, band, calendar)
                 other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
                 if other is not None:
-                    _leakage(other, corpus, ledger, runs_dir, settings, calendar, scores)
+                    _leakage(other, corpus, ledger, runs_dir, settings, calendar, scores, split)
 
         _sensitivity(scores, forecasts, counts_only=check)
 
@@ -283,6 +308,63 @@ def evaluate(
         raise typer.Exit(8) from error
     except MapError as error:
         raise handle(error) from error
+
+
+def _refuse_if_holdout_spent(path: Path) -> None:
+    """The holdout is spendable exactly once, and the record is what enforces it.
+
+    A holdout protects against a result chosen after seeing it. That protection is
+    gone the moment the numbers are looked at a second time with a changed model
+    in between, and *intending* to look once is not a mechanism — this project has
+    now watched a rule enforced by intention fail twice (ADR 0019 §8).
+
+    The record is committed, so the git history is the proof it was spent once, in
+    exactly the way the frozen corpus commit is the proof the corpus was
+    pre-registered. An absence here is checkable; a promise is not.
+    """
+    if not path.is_file():
+        return
+    spent = [line for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not spent:
+        return
+    first = json.loads(spent[0])
+    raise fail(
+        f"the holdout was already scored on {first.get('scored_on')}",
+        9,
+        hint=(
+            f"Recorded in {path}: code {str(first.get('forecast_digest'))[:12]}, freeze "
+            f"{first.get('freeze_version')}, calibration "
+            f"{first.get('calibration') or 'none fitted'}. A holdout scored twice is not "
+            "a holdout. If a genuinely new question needs it, that is a decision to "
+            "write down and defend, not a flag to pass."
+        ),
+    )
+
+
+def _record_holdout_spend(path: Path, *, band: str, items: int, record: dict[str, object]) -> None:
+    """Append the spend BEFORE any number is shown.
+
+    The ordering is the point: the spend happens when the numbers are seen, so a
+    crash between computing and displaying must leave the holdout spent rather than
+    apparently intact. Erring the other way would let a repeated run be justified as
+    "the last one did not finish".
+    """
+    version = code_version()
+    entry = {
+        "scored_on": date.today().isoformat(),
+        "band": band,
+        "items": items,
+        "commit": version.commit,
+        "forecast_digest": version.forecast_digest,
+        "freeze_version": record.get("freeze_version"),
+        "freeze_digest": freeze_digest(record, truncated=False),
+        # Phase 3 has fitted nothing yet, and the first spend should say so rather
+        # than leave the field absent and ambiguous.
+        "calibration": None,
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry) + "\n")
 
 
 def _unauditable(ledger: Ledger, runs_dir: Path, band: str) -> list[str]:
@@ -641,6 +723,7 @@ def _leakage(
     settings: Settings,
     calendar: EdgarEarningsCalendar,
     scores: BandScores,
+    split: str,
 ) -> None:
     """The headline number, reported only when both bands are actually finished.
 
@@ -661,7 +744,7 @@ def _leakage(
             fg=typer.colors.YELLOW,
         )
         return
-    theirs = _score(load_band(ledger, corpus, runs_dir, other), settings, calendar)
+    theirs = _score(load_band(ledger, corpus, runs_dir, other, split), settings, calendar)
     if not theirs.items:
         return
     estimate = leakage(scores.crps(), theirs.crps())

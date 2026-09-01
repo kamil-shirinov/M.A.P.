@@ -113,13 +113,29 @@ def _check(forecast: Forecast, ticker: str, filing_date: date, run_id: str) -> N
         )
 
 
-def load_band(ledger: Ledger, corpus: Corpus, runs_dir: Path, band: str) -> tuple[Loaded, ...]:
+def load_band(
+    ledger: Ledger, corpus: Corpus, runs_dir: Path, band: str, split: str
+) -> tuple[Loaded, ...]:
     """Every completed forecast of one band, in the frozen plan's order.
 
     Plan order rather than ledger order, so the scored set is a deterministic
     function of the corpus rather than of the sequence a resume happened to take.
     """
-    frozen = {item.key: item for item in plan(corpus, band)}
+    # The split is a property of the TICKER, fixed at selection and frozen with the
+    # corpus (ADR 0018): a ticker in `dev` is in `dev` in both bands, or the confound
+    # the panel design removes reappears one level down.
+    #
+    # Filtering here rather than after scoring is deliberate. A holdout item that
+    # reaches `score_band` produces a number, and a number that exists has been seen
+    # — reporting selectively would leave the holdout's results in memory, which is
+    # exactly what not spending it is meant to prevent (ADR 0031).
+    in_split = {p.ticker for p in corpus.accepted if p.split == split}
+    if not in_split:
+        raise ForecastLoadError(
+            f"no ticker in the frozen corpus carries split {split!r}; "
+            f"splits present: {sorted({p.split for p in corpus.accepted})}"
+        )
+    frozen = {item.key: item for item in plan(corpus, band) if item.ticker in in_split}
     resolved = ledger.resolved()
 
     completed = [
@@ -127,13 +143,20 @@ def load_band(ledger: Ledger, corpus: Corpus, runs_dir: Path, band: str) -> tupl
         for key, entry in sorted(resolved.items())
         if entry.status == "complete" and entry.band == band
     ]
-    unknown = [f"{key[0]} {key[2]}" for key, entry in completed if key not in frozen]
+    # Membership is checked against the WHOLE plan, not this split's slice. An item of
+    # the other split is not "absent from the frozen corpus" — it is simply not being
+    # scored here — but an item absent from both splits still has to be refused, and
+    # filtering by split before this check would have swallowed it.
+    everything = {item.key for item in plan(corpus, band)}
+    unknown = [f"{key[0]} {key[2]}" for key, _ in completed if key not in everything]
     if unknown:
         raise UnknownItemError(unknown)
 
     # A completed item that names no run cannot be located, and skipping it would
     # shrink the scored sample by exactly the items whose bookkeeping is broken.
-    anonymous = [f"{key[0]} {key[2]}" for key, entry in completed if entry.run_id is None]
+    anonymous = [
+        f"{key[0]} {key[2]}" for key, entry in completed if entry.run_id is None and key in frozen
+    ]
     if anonymous:
         raise ForecastLoadError(
             f"{len(anonymous)} completed item(s) record no run id, so their forecasts "

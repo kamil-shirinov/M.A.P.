@@ -128,6 +128,7 @@ def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ig
             str(tmp_path / "ledger.jsonl"),
             "--runs-dir",
             str(tmp_path / "runs"),
+            *(() if "--split" in args else ("--split", "dev")),
             *args,
         ],
     )
@@ -1114,3 +1115,99 @@ def test_an_unrecoverable_frozen_record_reports_no_fields_rather_than_raising(
     _manifest(tmp_path, ids[0], "a" * 40, freeze="2.2.0")
     _manifest(tmp_path, ids[1], "b" * 40, freeze="2.3.0")
     assert _invoke(tmp_path).exit_code == 2
+
+
+# ---------------------------------------------------------------------------
+# The split filter (ADR 0031)
+# ---------------------------------------------------------------------------
+def test_the_split_is_required_and_has_no_default(tmp_path: Path) -> None:
+    """The holdout must not be scoreable by omission, so there is nothing to omit."""
+    result = runner.invoke(
+        app,
+        [
+            "evaluate",
+            "--frozen",
+            str(_frozen(tmp_path)),
+            "--ledger-path",
+            str(tmp_path / "ledger.jsonl"),
+            "--runs-dir",
+            str(tmp_path / "runs"),
+        ],
+    )
+    assert result.exit_code != 0
+    assert "--split" in result.output
+
+
+def test_an_unknown_split_is_a_sentence(tmp_path: Path) -> None:
+    result = _invoke(tmp_path, "--split", "test")
+    assert result.exit_code == 2
+    assert "unknown split" in result.output
+
+
+def test_scoring_the_other_split_finds_nothing_of_this_one(tmp_path: Path) -> None:
+    """The fixture corpus is all `dev`, so a holdout run must load zero items rather
+    than silently scoring the dev half."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+    result = _invoke(tmp_path, "--split", "holdout")
+    assert result.exit_code == 2
+    assert "unknown split 'holdout'" in result.output
+    assert "Splits: dev" in result.output
+
+
+def test_a_holdout_run_refuses_once_the_record_exists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """And it refuses BEFORE loading anything, so no holdout number is computed."""
+    spend = tmp_path / "spend.jsonl"
+    spend.write_text(json.dumps({"scored_on": "2026-09-01"}) + "\n", encoding="utf-8")
+    monkeypatch.setattr("mapf.cli.commands.evaluate.HOLDOUT_LEDGER", spend)
+    frozen = _frozen_with_holdout(tmp_path)
+    result = _invoke(tmp_path, "--split", "holdout", frozen=frozen)
+    assert result.exit_code == 9
+    assert "already scored" in result.output
+
+
+def test_the_check_does_not_spend_the_holdout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`--check` prints no score, so it cannot spend what it never shows."""
+    spend = tmp_path / "spend.jsonl"
+    monkeypatch.setattr("mapf.cli.commands.evaluate.HOLDOUT_LEDGER", spend)
+    _invoke(tmp_path, "--split", "holdout", "--check", frozen=_frozen_with_holdout(tmp_path))
+    assert not spend.exists()
+
+
+def _frozen_with_holdout(tmp_path: Path) -> Path:
+    """The fixture corpus is all `dev`; these tests need a holdout ticker to exist."""
+    body = json.loads(_frozen(tmp_path).read_text(encoding="utf-8"))
+    body["corpus"]["accepted"][0]["split"] = "holdout"
+    path = tmp_path / "frozen_holdout.json"
+    path.write_text(json.dumps(body), encoding="utf-8")
+    return path
+
+
+def test_a_holdout_run_records_the_spend_before_printing_a_score(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ordering is the point: a crash between computing and displaying must leave
+    the holdout spent, not apparently intact."""
+    spend = tmp_path / "spend.jsonl"
+    monkeypatch.setattr("mapf.cli.commands.evaluate.HOLDOUT_LEDGER", spend)
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path, "--split", "holdout", frozen=_frozen_with_holdout(tmp_path))
+    assert result.exit_code == 0
+    entry = json.loads(spend.read_text(encoding="utf-8").strip())
+    assert entry["band"] == "clean"
+    assert entry["items"] == 2
+    assert entry["calibration"] is None
+
+    # And the record is what makes a second run impossible.
+    again = _invoke(tmp_path, "--split", "holdout", frozen=_frozen_with_holdout(tmp_path))
+    assert again.exit_code == 9

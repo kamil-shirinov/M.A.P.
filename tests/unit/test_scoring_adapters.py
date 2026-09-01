@@ -102,7 +102,7 @@ def test_a_completed_item_loads_from_its_ledger_entry(tmp_path: Path) -> None:
     run_id = uuid4()
     ledger = _ledger(tmp_path, run_id=run_id)
     _store(tmp_path, run_id)
-    loaded = load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+    loaded = load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
     assert [item.forecast.ticker for item in loaded] == ["AAPL"]
     assert [item.entry.filing_date for item in loaded] == [CLEAN]
 
@@ -116,7 +116,7 @@ def test_a_pre_corpus_capture_on_disk_is_never_loaded(tmp_path: Path) -> None:
     _store(tmp_path, run_id)
     _store(tmp_path, "first-capture-v2")
 
-    loaded = load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+    loaded = load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
     assert len(loaded) == 1
     assert list(unreferenced_runs(ledger, tmp_path / "runs")) == ["first-capture-v2"]
 
@@ -124,13 +124,13 @@ def test_a_pre_corpus_capture_on_disk_is_never_loaded(tmp_path: Path) -> None:
 def test_an_item_absent_from_the_frozen_corpus_refuses(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path, ticker="MSFT")
     with pytest.raises(UnknownItemError, match="absent from the frozen corpus"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_the_refusal_names_the_offending_items(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path, filing_date=date(2026, 7, 7))
     with pytest.raises(UnknownItemError, match="2026-07-07"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_a_completed_item_with_no_run_id_refuses(tmp_path: Path) -> None:
@@ -138,12 +138,12 @@ def test_a_completed_item_with_no_run_id_refuses(tmp_path: Path) -> None:
     is broken, which is a selection effect rather than a smaller sample."""
     ledger = _ledger(tmp_path, run_id=None)
     with pytest.raises(ForecastLoadError, match="record no run id"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_a_terminal_failure_is_absent_rather_than_unscoreable(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path, status="failed", reason="missing_exhibit", run_id=None)
-    assert load_band(ledger, _corpus(), tmp_path / "runs", "clean") == ()
+    assert load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev") == ()
 
 
 def test_a_forecast_for_another_ticker_refuses(tmp_path: Path) -> None:
@@ -151,7 +151,7 @@ def test_a_forecast_for_another_ticker_refuses(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path, run_id=run_id)
     _store(tmp_path, run_id, ticker="MSFT")
     with pytest.raises(ForecastMismatchError, match="item-to-run mapping is broken"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_a_forecast_dated_before_its_filing_refuses(tmp_path: Path) -> None:
@@ -161,7 +161,7 @@ def test_a_forecast_dated_before_its_filing_refuses(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path, run_id=run_id)
     _store(tmp_path, run_id, as_of=CLEAN - timedelta(days=1))
     with pytest.raises(ForecastMismatchError, match="not within"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_a_forecast_far_after_its_filing_refuses(tmp_path: Path) -> None:
@@ -169,7 +169,7 @@ def test_a_forecast_far_after_its_filing_refuses(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path, run_id=run_id)
     _store(tmp_path, run_id, as_of=CLEAN + timedelta(days=60))
     with pytest.raises(ForecastMismatchError, match="not within"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_an_older_schema_fails_to_parse_rather_than_being_coerced(tmp_path: Path) -> None:
@@ -179,13 +179,13 @@ def test_an_older_schema_fails_to_parse_rather_than_being_coerced(tmp_path: Path
     directory.mkdir(parents=True)
     (directory / "forecast.json").write_text('{"schema_version": "1.0.0"}', encoding="utf-8")
     with pytest.raises(ForecastLoadError, match="not a readable v2 forecast"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_a_missing_forecast_file_refuses(tmp_path: Path) -> None:
     ledger = _ledger(tmp_path)
     with pytest.raises(ForecastLoadError, match="not a readable v2 forecast"):
-        load_band(ledger, _corpus(), tmp_path / "runs", "clean")
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")
 
 
 def test_unreferenced_runs_is_empty_when_the_directory_is_absent(tmp_path: Path) -> None:
@@ -373,3 +373,18 @@ def test_a_fitted_multiplier_is_recorded_on_the_item() -> None:
     )
     assert item.earnings_multiplier is not None
     assert item.earnings_multiplier > 0.0
+
+
+def test_a_split_no_ticker_carries_is_refused(tmp_path: Path) -> None:
+    """Loading zero items and reporting a clean run would be worse than refusing:
+    an empty result reads as "nothing was wrong"."""
+    ledger = _ledger(tmp_path)
+    with pytest.raises(ForecastLoadError, match="no ticker in the frozen corpus"):
+        load_band(ledger, _corpus(), tmp_path / "runs", "clean", "holdout")
+
+
+def test_the_split_selects_only_its_own_tickers(tmp_path: Path) -> None:
+    run_id = uuid4()
+    ledger = _ledger(tmp_path, run_id=run_id)
+    _store(tmp_path, run_id)
+    assert len(load_band(ledger, _corpus(), tmp_path / "runs", "clean", "dev")) == 1
