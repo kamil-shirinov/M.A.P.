@@ -346,6 +346,57 @@ not started, so every one is cut at
 `head_tail_v1(head=24000,tail=4000,ratio=3.0)` from its first attempt. There is no
 old-basis item to become stale.
 
+## Addendum, 2026-09-01 — the truncated set is five companies, and cannot be a sensitivity analysis
+
+Eighteen truncated items sounds like a subset of a 120-company corpus. It is not:
+
+| company | items | elision |
+| --- | --- | --- |
+| **BXP** | 6 | 60.3 – 61.7% |
+| **FCX** | 5 | 12.9 – 36.3% |
+| **CP** | 4 | 6.7 – 19.0% |
+| **PRU** | 2 | 20.2 – 27.1% |
+| **CCI** | 1 | 7.1% |
+
+**Five companies of 120, and BXP alone is a third of the set** — every one of its six
+filings elided at ~60%, because a REIT's earnings release carries property-level tables
+that nothing else in the corpus has.
+
+### Why the pre-registered sensitivity check must be withdrawn as stated
+
+This ADR pre-registered *"the primary result reported both with and without BXP, FCX and
+PRU"*. That framing is sound — it names companies. **A truncated-versus-untruncated
+split is not**, and would have been the natural way to run it:
+
+> Truncation status is **perfectly confounded with company identity.** Removing the
+> truncated items removes five specific companies, so any difference is a difference
+> between *those five companies* and the other 115 — a REIT, a copper miner, a railway,
+> an insurer and a tower operator — and not between truncated and untruncated inputs.
+> There is no within-company contrast anywhere in the design: no company appears on both
+> sides.
+
+The check therefore stays exactly as ADR 0020 wrote it — a **leave-these-companies-out**
+robustness report — and is never described as measuring an effect of truncation.
+
+### What is reported instead: the gradient, described and not tested
+
+Elision fraction is continuous and spans an order of magnitude. Clean band, nine items:
+
+| | | |
+| --- | --- | --- |
+| lowest | CP 2026-04-29 | **6.7%** |
+| highest | BXP 2026-01-28 | **61.7%** |
+
+Reported per item alongside the result, so a reader can see whether the heavily-elided
+items sit anywhere unusual.
+
+**This describes the gradient. It does not test it.** Eighteen items across both bands,
+clustered into five companies with BXP contributing a third at one end of the range, is
+not a sample anything can be regressed on — the effective n is closer to five than to
+eighteen, and the design has no within-company variation to separate elision from
+company. Any slope fitted here would be a company effect wearing a continuous variable's
+clothes. Stating that now is cheaper than being asked it later.
+
 ## Consequences
 
 - `context_tokens` joins the configuration per agent and is frozen with the corpus,
