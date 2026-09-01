@@ -1318,6 +1318,16 @@ frozen record:
 the wrong way. Two of six failing documents are more compressible than their sibling;
 one of six has more repeated 8-grams.
 
+**A null is worthless unless the measure had range, so that was checked before the result
+was believed.** Across the twelve documents the measures vary by 5× to 47× the
+failure/pass gap, so they are not saturated. And a positive control — the corpus's
+largest exhibit (BXP, 219,441 chars) against its smallest (IREN, 652) — separates on all
+three, with gaps of 0.192, 0.503 and 0.122 against within-set spreads of 0.065, 0.094 and
+0.070. So the wording is **"not detected by measures with demonstrated range"**, which is
+a falsification. Had the control failed it would have been *"measures inadequate,
+hypothesis untested"*, and the twelve-document result would have been void — the
+distinction being exactly [[Findings & Incidents#8|#8]]'s vacuous positive control.
+
 ### Two lessons, and the second is the sharper one
 
 **Measure the cheap thing first.** The replay is hours of a 12B model. The document

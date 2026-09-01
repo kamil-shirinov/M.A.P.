@@ -31,6 +31,20 @@ lines 51.8% vs 51.9%, repeated 8-grams 9.5% vs 10.9% — mildly the WRONG way on
 three. So the question here is whether the model's own REASONING degenerates, not
 whether its input did.
 
+THIS IS A SCREEN, NOT A COMPARISON
+
+Five draws per arm can establish that a runaway is PRESENT in one document. It cannot
+establish that two documents DIFFER. Two-sided Fisher exact, failure k/5 against sibling
+0/5:
+
+    5/5 vs 0/5 -> p = 0.008      4/5 vs 0/5 -> p = 0.048
+    3/5 vs 0/5 -> p = 0.167      2/5 vs 0/5 -> p = 0.444
+
+**Only a near-total separation reaches conventional significance.** A plausible partial
+result — 2 of 5 against 0 of 5 — is indistinguishable from chance, and the comparative
+claim needs more draws than this design provides. Report k/n for both arms and let the
+reader see which case they are in; do not convert it into a verdict.
+
 WHY n DRAWS AND NOT ONE
 
 The analyst samples at temperature 0.7. A single re-issue is one draw, not a

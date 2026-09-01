@@ -269,8 +269,44 @@ fetched and measured directly. No inference, hashes verified against the frozen 
 direction is mildly opposite.** Only 2 of 6 failing documents are more compressible than
 their sibling; only 1 of 6 has more repeated 8-grams.
 
-So *"the document is repetitive and the model gets stuck in it"* is **wrong**, and it was
-worth twelve HTTP requests to find that out rather than hours of replay.
+### A null is only informative if the measure had range, so both were checked
+
+**Spread across the twelve.** A group gap of 0.005 could mean two groups that genuinely
+do not differ, or a measure saturated by HTML table structure with nothing left to move.
+Those look identical in a mean:
+
+| measure | min | median | max | spread | group gap |
+| --- | --- | --- | --- | --- | --- |
+| gzip ratio | 0.268 | 0.303 | 0.334 | **0.065** | 0.005 |
+| duplicate-line | 0.471 | 0.517 | 0.565 | **0.094** | 0.002 |
+| repeated 8-gram | 0.068 | 0.110 | 0.138 | **0.070** | 0.014 |
+
+The twelve documents vary among themselves by **5× to 47× the failure/pass gap**. The
+measures are not saturated.
+
+**Positive control** — the corpus's largest exhibit against its smallest, a pair that
+must differ if the measures work at all:
+
+| | chars | gzip | dup-line | rep-8gram |
+| --- | --- | --- | --- | --- |
+| BXP 2026-01-28 (property tables) | 219,441 | 0.264 | 57.4% | 29.3% |
+| IREN 2025-08-28 | 652 | 0.457 | 7.1% | 41.5% |
+| **control gap** | | **0.192** | **0.503** | **0.122** |
+
+Every gap exceeds the twelve-document spread, so **all three measures have demonstrated
+range.** This is [[../Findings & Incidents#8]]'s guard: a check that can pass vacuously is
+worse than no check.
+
+**One caveat, recorded rather than smoothed.** `rep-8gram` is *higher* on the 652-character
+document — with so few 8-grams, boilerplate dominates. Its range is demonstrated but its
+interpretation on very short documents is unsound. It is not a concern for the twelve,
+which all sit between 32k and 51k characters, and gzip and dup-line behave on the control
+exactly as redundancy measures should.
+
+**Verdict: not detected by measures with demonstrated range.** That is a falsification of
+the input hypothesis, not an untested one. Had the control failed, the correct wording
+would have been *"measures inadequate, hypothesis untested"* and the twelve-document
+result would have been void.
 
 **What this does not settle.** It measures the **input**. The [ADR 0021](0021-degeneration-retry.md)
 intake diagnosis measured the **output** — 757 lines of which 22 were unique — and that
