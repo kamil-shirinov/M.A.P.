@@ -165,10 +165,30 @@ directions:
 | **removed** | ACGL 2026-02-09, ALLY 2026-01-21, WH 2026-04-29 | ran away twice, resolved by the repeat rule, absent from the sample |
 | **left a trace** | CHD 2026-07-31 | ran away once, succeeded on the next draw — its forecast is a resample |
 
-**The bound on the conditioning is the runaway rate: 7 of ~357 attempts that reached the
-analyst, 1.96%.** That is the fraction of draws the sample is conditioned against, and
-it is what a reader needs in order to judge whether the conditioning matters. It is
-reported with the result.
+### The bound is two rates, not one
+
+They answer different questions and only both together bound anything:
+
+| | figure | denominator |
+| --- | --- | --- |
+| **per-attempt runaway rate** | **7 / 358 = 1.96%** | ledger entries that reached the analyst — larger than 356 because ACGL, ALLY, WH and CHD each reached it twice |
+| **per-item exclusion rate** | **3 / 356 = 0.84%** | corpus items, of which ACGL, ALLY and WH were removed |
+
+Two of the 358 were served from the response cache on a re-run rather than drawn afresh;
+on fresh draws alone the rate is 7/356 = 1.97%, so the distinction does not move it.
+
+**A rate on its own invites the assumption that the exclusion is random, and it is not
+known to be.** What is known:
+
+- **Ruled out as a size effect.** Five of the six runaway documents have a same-company,
+  same-template sibling that is larger and terminated normally, and every failure but
+  ALLY's sits between the 53rd and 73rd percentile of corpus document size.
+- **Differential exclusion on content: untested.** Whether the three removed items differ
+  systematically from the 351 kept is exactly what the redundancy analysis will answer,
+  and it has not been run. Until then the excluded set is **not** assumed random.
+- **No sector clustering is visible** — insurance, banking, hotels — but n = 3 supports
+  no claim in either direction and is recorded only so nobody reads its absence as
+  evidence.
 
 **The DNS four are not part of this.** CP, ELV, LVS and WAL failed before any model call
 completed — the exhibit fetch failed — so their retry produced a *first* successful draw,
@@ -201,13 +221,20 @@ diagnosis of intake — 757 lines of which 22 were unique — is the shape to lo
 
 ### This table is the control group for the diagnosis
 
-**Recorded here so it is not rediscovered when the diagnostic runs.** When
-`scripts/ally_reasoning_replay.py` and the redundancy analysis are run on the recorded
-reasoning, the question is not "is this document long" — that is settled — but whether
-the reasoning repeats. **Each failing document has a same-company, same-template,
-larger-or-equal sibling that terminated normally**, and those siblings are the control:
-if the failing document's reasoning is redundant and the sibling's is not, the diagnosis
-is degeneration on that content. If both look alike, it is not.
+**Recorded here so it is not rediscovered when the diagnostic runs**, which is now
+`scripts/analyst_runaway_replay.py` and is built around **ACGL rather than ALLY**:
+
+    ACGL 2026-02-09   39,253 chars   FAILED
+    ACGL 2026-04-28   39,218 chars   passed
+
+**Thirty-five characters apart**, same company, same filing type, adjacent quarters,
+opposite outcomes. Nothing else in the corpus separates content from size so cleanly, and
+it is the strongest natural experiment available.
+
+**ALLY is deliberately not the primary case.** It is the one failure that is its own
+company's largest document, so the sibling comparison has no sibling for it — designing
+around ALLY would have meant designing around the single item where the control does not
+exist. It stays a case to explain once the mechanism is known.
 
 ## Consequences
 
