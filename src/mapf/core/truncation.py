@@ -32,7 +32,26 @@ from mapf.core.tokens import CHARS_PER_TOKEN, estimate_tokens
 HEAD_TOKENS = 24_000
 TAIL_TOKENS = 4_000
 
+# The name that appears INSIDE the document, in the elision marker. Deliberately
+# bare: it is text the model reads, and changing it would change the input to every
+# truncated item for no reason a forecast could notice.
 RULE = "head_tail_v1"
+
+
+def rule_id() -> str:
+    """The identifier the RECORD carries: the rule and the parameters it ran with.
+
+    `head_tail_v1` was the same string at 3.5 characters per token and at 3.0, which
+    cut the same documents to 98,121 and 84,121 characters — **the identifier did not
+    change when its parameter did**, so two incompatible bases were labelled
+    identically and a corpus could mix them while every record agreed.
+
+    A version suffix would not have helped: the point is not that someone forgot to
+    bump it, but that a name maintained by hand can disagree with the parameters it
+    names. This one is computed from them, so it cannot.
+    """
+    return f"{RULE}(head={HEAD_TOKENS},tail={TAIL_TOKENS},ratio={CHARS_PER_TOKEN})"
+
 
 # Each shrink step cuts head and tail together by this much, preserving the 6:1
 # shape rather than eroding the head alone — at a small budget the fixed tail can

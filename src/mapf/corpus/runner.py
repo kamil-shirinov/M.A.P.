@@ -52,6 +52,8 @@ from mapf.core.errors import (
 from mapf.core.hashing import new_run_id
 from mapf.core.models import Document
 from mapf.core.ports import DividendSource, MarketDataProvider
+from mapf.core.tokens import CHARS_PER_TOKEN
+from mapf.core.truncation import HEAD_TOKENS, RULE, TAIL_TOKENS, rule_id
 from mapf.corpus.ledger import FailureReason, Ledger, LedgerEntry
 from mapf.corpus.selection import Corpus
 from mapf.pipeline.run import TRACE_FILE, Agents, RunRequest, execute
@@ -245,6 +247,28 @@ def verify_freeze(
                     mismatches.append(
                         f"{agent}: {field} is {live[field]!r}, frozen as {frozen_value!r}"
                     )
+
+    # The truncation block, compared whole. The chars-per-token ratio lives here and
+    # was never compared: `head_tail_v1` named a 3.5 basis and a 3.0 basis
+    # identically, so a corpus could carry both while every record agreed and the
+    # startup banner said the freeze matched. That banner was accurate about prompts,
+    # aliases and sampling, and read as a statement about the freeze — the third time
+    # a partial check has been taken for a complete one (finding #26, #33).
+    frozen_truncation = frozen.get("truncation")
+    if isinstance(frozen_truncation, Mapping):
+        live_truncation = {
+            "rule": RULE,
+            "rule_id": rule_id(),
+            "head_tokens": HEAD_TOKENS,
+            "tail_tokens": TAIL_TOKENS,
+            "chars_per_token_estimate": CHARS_PER_TOKEN,
+        }
+        for field, value in live_truncation.items():
+            if field in frozen_truncation and frozen_truncation[field] != value:
+                mismatches.append(
+                    f"truncation.{field} is {value!r}, frozen as {frozen_truncation[field]!r}; "
+                    "the rule would cut every oversized exhibit differently"
+                )
 
     # The execution seed is a top-level field rather than a per-agent one, and it is
     # checked here for the same reason every other frozen value is: the record holds

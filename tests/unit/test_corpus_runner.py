@@ -898,3 +898,45 @@ def test_a_missing_exhibit_still_outranks_both() -> None:
     checks is load-bearing: a filing with no EX-99.1 must not be reported as an EDGAR
     refusal, which would make it look like something a retry could change."""
     assert _reason_for(MissingExhibitError("no EX-99.1")) == "missing_exhibit"
+
+
+def test_a_drifted_truncation_ratio_refuses_the_run() -> None:
+    """The gap that let a 3.5 basis and a 3.0 basis coexist: the ratio is in the
+    frozen record and was never compared, while the banner said the freeze matched."""
+    from mapf.core.truncation import rule_id
+
+    frozen = {
+        "prompts": {"intake": {"template": "intake.v2.md", "version": "v2", "sha256": "a" * 64}},
+        "models": {},
+        "truncation": {"rule_id": rule_id(), "chars_per_token_estimate": 3.5},
+    }
+    with pytest.raises(FreezeMismatchError, match="chars_per_token_estimate"):
+        verify_freeze(frozen, live_digest=lambda *_: "a" * 64, live_models={})
+
+
+def test_a_matching_truncation_block_passes() -> None:
+    from mapf.core.tokens import CHARS_PER_TOKEN
+    from mapf.core.truncation import HEAD_TOKENS, RULE, TAIL_TOKENS, rule_id
+
+    frozen = {
+        "prompts": {"intake": {"template": "intake.v2.md", "version": "v2", "sha256": "a" * 64}},
+        "models": {},
+        "truncation": {
+            "rule": RULE,
+            "rule_id": rule_id(),
+            "head_tokens": HEAD_TOKENS,
+            "tail_tokens": TAIL_TOKENS,
+            "chars_per_token_estimate": CHARS_PER_TOKEN,
+        },
+    }
+    verify_freeze(frozen, live_digest=lambda *_: "a" * 64, live_models={})
+
+
+def test_a_freeze_predating_the_rule_id_is_not_refused() -> None:
+    """An older record may say less than the code. It may never disagree."""
+    frozen = {
+        "prompts": {"intake": {"template": "intake.v2.md", "version": "v2", "sha256": "a" * 64}},
+        "models": {},
+        "truncation": {"rule": "head_tail_v1"},
+    }
+    verify_freeze(frozen, live_digest=lambda *_: "a" * 64, live_models={})

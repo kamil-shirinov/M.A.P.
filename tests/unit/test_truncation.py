@@ -150,3 +150,38 @@ def test_the_corpus_boundary_is_where_expected() -> None:
     """
     assert plan_truncation(85_000, budget_tokens=BUDGET).applied is False
     assert plan_truncation(95_000, budget_tokens=BUDGET).applied is True
+
+
+# ---------------------------------------------------------------------------
+# The identifier carries its parameters
+# ---------------------------------------------------------------------------
+def test_the_rule_id_names_every_parameter_that_changes_the_cut() -> None:
+    """`head_tail_v1` was the same string at 3.5 chars/token and at 3.0, which cut
+    the same document to 98,121 and 84,121 characters. The identifier did not change
+    when its parameter did, so two incompatible bases were labelled identically."""
+    from mapf.core.truncation import rule_id
+
+    identifier = rule_id()
+    assert "24000" in identifier and "4000" in identifier and "3.0" in identifier
+
+
+def test_two_ratios_cannot_share_an_identifier(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The property that matters. A hand-maintained version suffix can disagree with
+    the parameters it names; one computed from them cannot."""
+    from mapf.core import truncation
+
+    at_three = truncation.rule_id()
+    monkeypatch.setattr(truncation, "CHARS_PER_TOKEN", 3.5)
+    assert truncation.rule_id() != at_three
+
+
+def test_the_marker_inside_the_document_keeps_the_bare_name() -> None:
+    """The marker is text the model reads. Putting the parameters in it would change
+    the input to every truncated item for no reason a forecast could notice — and the
+    head and tail counts it already states carry them anyway."""
+    from mapf.core.models import UntrustedText
+    from mapf.core.truncation import RULE, truncate
+
+    cut, _ = truncate(UntrustedText("x" * 300_000), budget_tokens=BUDGET)
+    assert f"elided by {RULE}:" in cut
+    assert "ratio=" not in cut
