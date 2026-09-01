@@ -236,6 +236,48 @@ company's largest document, so the sibling comparison has no sibling for it — 
 around ALLY would have meant designing around the single item where the control does not
 exist. It stays a case to explain once the mechanism is known.
 
+## Addendum, 2026-09-01 (later) — PRU, and a measurement that falsifies the input hypothesis
+
+### PRU is ambiguous and is recorded as ambiguous
+
+PRU 2026-04-14 succeeded under the corrected basis, so by the pre-commitment above it is
+scored and the clean band's failures fall to five. **What it does not do is support the
+size conclusion**, and it sits in mild tension with it:
+
+- The corrected basis handed PRU **~21,000 fewer characters** than the old one. That is a
+  **within-document** input-volume effect, whereas "size is ruled out" was established
+  **across documents**, by same-company siblings. The two are different claims and only
+  the second is supported.
+- It is **one draw at temperature 0.7**. A lucky redraw produces exactly this observation,
+  and PRU had failed only once, so nothing distinguishes the two explanations.
+
+Stated precisely: **ruled out as the sole across-document explanation; within-document
+input volume untested; PRU is n = 1 and ambiguous.**
+
+### The input-redundancy hypothesis is falsified, measured before any replay
+
+All twelve documents — six failures and a passing same-company sibling for each — were
+fetched and measured directly. No inference, hashes verified against the frozen record.
+
+| metric | failures | siblings |
+| --- | --- | --- |
+| gzip ratio (lower = more redundant) | 0.306 | **0.300** |
+| duplicate-line fraction | 51.8% | 51.9% |
+| repeated 8-gram fraction | 9.5% | **10.9%** |
+
+**Document redundancy does not separate the two groups, and on two of three measures the
+direction is mildly opposite.** Only 2 of 6 failing documents are more compressible than
+their sibling; only 1 of 6 has more repeated 8-grams.
+
+So *"the document is repetitive and the model gets stuck in it"* is **wrong**, and it was
+worth twelve HTTP requests to find that out rather than hours of replay.
+
+**What this does not settle.** It measures the **input**. The [ADR 0021](0021-degeneration-retry.md)
+intake diagnosis measured the **output** — 757 lines of which 22 were unique — and that
+remains entirely open for the analyst. The falsified claim is that redundant input causes
+the runaway; the claim that the *reasoning* degenerates is untouched and is what the
+replay now exists to test.
+
 ## Consequences
 
 - On halting: run `scripts/ally_reasoning_replay.py` and the redundancy analysis over

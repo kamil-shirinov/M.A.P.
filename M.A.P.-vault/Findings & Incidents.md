@@ -1295,3 +1295,50 @@ of recording this now rather than after: the comparison is a failing document ag
 its own company's passing sibling, on redundancy rather than length. If the failure's
 reasoning repeats and the sibling's does not, it is degeneration on that content. If
 both look alike, it is not — and that would be a finding too.
+
+---
+
+## 41 · Twelve HTTP requests that killed an hours-long experiment
+
+The analyst runaway looked like the intake runaway, so the hypothesis was the same:
+these documents are repetitive and the model gets stuck in them. The plan was to replay
+the failing prompts and count repeated lines in the reasoning.
+
+**Measuring the documents first took minutes and falsified it.** Six failing exhibits
+and a passing same-company sibling for each, fetched directly, hashes checked against the
+frozen record:
+
+| | failures | siblings |
+| --- | --- | --- |
+| gzip ratio *(lower = more redundant)* | 0.306 | **0.300** |
+| duplicate-line fraction | 51.8% | 51.9% |
+| repeated 8-gram fraction | 9.5% | **10.9%** |
+
+**Redundancy does not separate the two groups**, and on two of three measures it leans
+the wrong way. Two of six failing documents are more compressible than their sibling;
+one of six has more repeated 8-grams.
+
+### Two lessons, and the second is the sharper one
+
+**Measure the cheap thing first.** The replay is hours of a 12B model. The document
+measurement is twelve HTTP requests and no inference. They test different links in the
+same causal chain, and the cheap one sat upstream — had it come back positive, the replay
+would have been confirmation rather than discovery; coming back negative, it saved the
+hours outright.
+
+**And a falsified hypothesis has to be scoped precisely or it destroys more than it
+should.** What is dead is *"redundant input causes the runaway"*. What is untouched is
+*"the reasoning degenerates"* — the [[decisions/0021-degeneration-retry|ADR 0021]]
+intake finding measured the model's **output** (757 lines, 22 unique), and nothing here
+measured any output at all. The two claims are one word apart and it would have been easy
+to write "the degeneration hypothesis is dead" and abandon the right experiment for the
+wrong reason.
+
+### What the replay became
+
+Not "is this input repetitive" — answered — but "does this model's reasoning repeat", at
+five draws per document rather than one, because the analyst samples at temperature 0.7
+and **a single re-issue is one draw, not a reproduction.** Five draws surface a per-draw
+runaway probability of 0.3 or more with 83% chance and cannot distinguish 0.05 from zero;
+that is written into the script above the code, so the result is read against what it
+could have shown.

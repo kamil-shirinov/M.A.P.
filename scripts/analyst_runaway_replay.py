@@ -23,6 +23,38 @@ ALLY is deliberately NOT the primary case: it is the one failure that is its own
 company's largest document, so the sibling comparison has no sibling. It is a case to
 explain once the mechanism is known, not the case to design around.
 
+THE INPUT HYPOTHESIS IS ALREADY FALSIFIED — DO NOT RE-TEST IT
+
+All twelve documents were measured directly (ADR 0027, addendum 2026-09-01). Document
+redundancy does not separate failures from siblings: gzip 0.306 vs 0.300, duplicate
+lines 51.8% vs 51.9%, repeated 8-grams 9.5% vs 10.9% — mildly the WRONG way on two of
+three. So the question here is whether the model's own REASONING degenerates, not
+whether its input did.
+
+WHY n DRAWS AND NOT ONE
+
+The analyst samples at temperature 0.7. A single re-issue is one draw, not a
+reproduction: the prompt rebuild is deterministic and the response is not, so a runaway
+firing on some fraction of draws looks absent in a sample of one.
+
+Both members of a pair go through the SAME uncached path, with `attempt` varied so that
+a cache placed in front later cannot collapse n draws into one.
+
+WHAT n = 5 CAN AND CANNOT DETECT, stated before it runs. If a document's true per-draw
+runaway probability is p, the chance of seeing at least one in five draws is
+1 - (1 - p)^5:
+
+    p = 0.5 -> 97%      p = 0.3 -> 83%      p = 0.2 -> 67%
+    p = 0.1 -> 41%      p = 0.05 -> 23%
+
+So five draws reliably surface a p of 0.3 or more and **cannot distinguish p = 0.05 from
+p = 0**. A failing document that does not run away in five draws is evidence of a low
+rate, never of none.
+
+The output is the runaway FREQUENCY per document (k of n) and the reasoning-length
+distribution — not a verdict. A verdict from one draw is what this design exists to
+avoid.
+
 WHAT THE RESULT DECIDES
 
 - **The failure's reasoning is redundant and the sibling's is not** — degeneration on
@@ -58,6 +90,9 @@ from mapf.settings import ModelRegistry, load
 # The pair. Failure first, so the comparison reads in the order it is argued.
 PAIR = (("ACGL", date(2026, 2, 9), "FAILED"), ("ACGL", date(2026, 4, 28), "passed"))
 SECONDARY = (("WH", date(2026, 4, 29), "FAILED"), ("WH", date(2026, 7, 22), "passed"))
+
+# Five draws per document. See the header for what that can and cannot detect.
+DRAWS = 5
 
 
 def _intake_output(runs: pathlib.Path, ticker: str, filing: date) -> str | None:
@@ -97,7 +132,9 @@ def main() -> int:
     runs = settings.paths.runs_dir
 
     pairs = list(PAIR) + (list(SECONDARY) if "--with-wh" in sys.argv else [])
-    print(f"{'item':22}{'outcome':9}{'reasoning':>11}{'lines':>7}{'uniq':>6}{'redundant':>11}")
+    print(
+        f"{'item':22}{'outcome':9}{'runaway':8}{'min':>8}{'median':>9}{'max':>9}{'worst redun':>12}"
+    )
     for ticker, filing, outcome in pairs:
         facts = _intake_output(runs, ticker, filing)
         if facts is None:
@@ -113,17 +150,32 @@ def main() -> int:
             },
             untrusted={"facts": quarantine(str(UntrustedText(facts)))},
         )
-        try:
-            response = provider.complete(
-                model=model, prompt=prompt, sampling=SamplingParams(**spec.sampling.model_dump())
-            )
-            reasoning = response.reasoning_text or ""
-            tokens = response.reasoning_tokens or 0
-        except ModelBudgetExhaustedError as error:
-            reasoning, tokens = error.reasoning_text, error.reasoning_tokens
-        n, uniq, pct = _redundancy(reasoning)
+        lengths: list[int] = []
+        runaways = 0
+        worst = 0.0
+        for draw in range(DRAWS):
+            try:
+                response = provider.complete(
+                    model=model,
+                    prompt=prompt,
+                    sampling=SamplingParams(**spec.sampling.model_dump()),
+                    # Varied so a cache in front of this cannot collapse n draws into
+                    # one; both members of a pair take the identical path.
+                    attempt=draw,
+                )
+                reasoning = response.reasoning_text or ""
+                tokens = response.reasoning_tokens or 0
+            except ModelBudgetExhaustedError as error:
+                reasoning, tokens = error.reasoning_text, error.reasoning_tokens
+                runaways += 1
+            lengths.append(tokens)
+            worst = max(worst, _redundancy(reasoning)[2])
         label = f"{ticker} {filing}"
-        print(f"{label:22}{outcome:9}{tokens:>11,}{n:>7}{uniq:>6}{pct:>10.1f}%")
+        print(
+            f"{label:22}{outcome:9}{runaways}/{DRAWS:<6}"
+            f"{min(lengths):>8,}{sorted(lengths)[len(lengths) // 2]:>9,}{max(lengths):>9,}"
+            f"{worst:>11.1f}%"
+        )
 
     print(
         "\nRead it as: the failure redundant and the sibling not -> degeneration, and the "
