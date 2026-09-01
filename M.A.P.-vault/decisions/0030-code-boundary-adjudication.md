@@ -29,10 +29,23 @@ Three code states produced the 169 completed items of the clean band:
 | `65277e701c9a` | post-band re-runs | 9 |
 | `24453884817e` | post-band re-run | 1 |
 
-**Correction, 2026-09-01: the dirty stratum is 208, not 34.** The figure reported while
-the band was running was a snapshot at item 136; development continued against the live
-run for days afterwards. **59% of the completed band was produced from an uncommitted
-tree** — not 9%. Recorded as measured.
+### The dirty figure moved twice, and the path is the record
+
+Overwriting an intermediate value with a final one is the same instinct as deleting a
+ledger line. All three are kept:
+
+| figure | when | why it moved |
+| --- | --- | --- |
+| **34** | snapshot at item 136, mid-band | what the ledger held at the moment it was reported. Not wrong — just early. |
+| **214** | band end, 349 complete | development continued against the live run for days after that snapshot. This is the honest peak. |
+| **208** | now | ten items were re-run on a clean tree after the truncation correction; **six of them previously held dirty manifests**, and their replacement is the entire difference. |
+
+**Nothing else changed between 214 and 208** — the only manifests written in that window
+were the ten re-runs — so the six are arithmetically forced rather than inferred.
+
+**The honest headline is 214 of 349, or 59% of the band as it stood when the band
+finished.** 208 is the current figure only because correcting an unrelated defect happened
+to clean six of them; it is not evidence that the practice was less bad than 214 says.
 
 ---
 
@@ -134,6 +147,56 @@ The rule that stops this recurring is [ADR 0019](0019-corpus-execution-protocol.
 the band launches from a clean tree, and the runner now refuses otherwise.
 
 ---
+
+## The four boundaries, named rather than counted
+
+Four digests with counts is a record. Naming what differs is a report — and the whole
+lesson of `head_tail_v1` is that an identifier which does not state what it covers hides
+exactly this.
+
+| digest | items | commit |
+| --- | --- | --- |
+| `fd5154ed7e9b` | 14 | `0d78326` |
+| `ef4c60c0c74a` | 119 | `318250f` |
+| *none — dirty* | 208 | `4f57a82` |
+| `24453884817e` | 1 | `2388f11` |
+| `65277e701c9a` | 9 | `4b91fed` |
+
+**Boundary 1 · `0d78326 → 318250f`** — three files, all additions consumed only by
+scoring: a cache key in `config/default.toml`, the settings field that reads it, and
+`build_earnings_calendar` in `bootstrap.py`, which `map evaluate` calls and `build_run`
+does not. **Cannot change a forecast.** *(Adjudicated above.)*
+
+**Boundary 2 · `318250f → 2388f11`** — nineteen commits, thirteen files. Re-checked
+against every path by which code reaches a model:
+
+| | |
+| --- | --- |
+| prompt templates | **none changed** |
+| `SamplingParams` fields | **none touched** |
+| request body in `openai_compat` | **unchanged** |
+| cache key — `keys.py`, `hashing.py` | **neither touched** |
+| `data/exhibits.py` | comments and **exception types only**; a fetched document is byte-identical |
+| `core/tokens.py` | **`CHARS_PER_TOKEN` 3.5 → 3.0** — the one forecast-relevant change |
+
+The remaining files are recording, resume policy, digests and pre-flight plumbing.
+
+**The ratio change is forecast-relevant only for documents it truncates, and no item in
+the 119 or the 14 was truncated.** Zero, verified against the manifests: all nine
+truncated items were re-run and now sit in `65277e701c9a`. For an untruncated document
+the ratio decides only *whether* to cut, and it did not cut them at either value — so the
+input is byte-identical across this boundary for every item that remains on the old side
+of it.
+
+**Boundary 3 · `2388f11 → 4b91fed`** — two files, purely additive: `rule_id()`, a computed
+label, and the `verify_freeze` comparison that reads it. **A label and a startup check.
+Neither can change a forecast.**
+
+### Verdict
+
+**Nothing forecast-relevant separates the four digest groups beyond the truncation ratio,
+and that affects no item still on the old side of it.** The dirty 208 remain *cannot
+tell*, unchanged.
 
 ## The result
 
