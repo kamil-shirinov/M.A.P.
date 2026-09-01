@@ -28,6 +28,18 @@ in `Findings & Incidents` either way.
 The prompt is read from the trace of the failed run rather than rebuilt, so this
 replays what the model was actually asked. Nothing here writes to the ledger, the
 cache, or the corpus.
+
+THE CONTROL GROUP IS ALREADY IDENTIFIED (ADR 0027, addendum 2026-09-01)
+
+Do not re-derive it. Size is ruled out: five of the six runaway documents have a
+same-company, same-template sibling that is LARGER and terminated normally — WH failed
+at 39,902 with a pass at 48,922, CHD at 34,467 with a pass at 41,187, JAZZ at 32,599
+with a pass at 41,625. Every failure but ALLY's sits in the 53rd-73rd percentile of
+corpus document size, against a median of 31,751.
+
+So the comparison to make is failing document against its own company's passing
+sibling, on REDUNDANCY rather than length. If the failure's reasoning repeats and the
+sibling's does not, it is degeneration on that content; if both look alike, it is not.
 """
 
 from __future__ import annotations

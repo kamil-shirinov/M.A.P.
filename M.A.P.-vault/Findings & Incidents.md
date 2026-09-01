@@ -1216,3 +1216,82 @@ is the **price of that correctness**, not evidence the classification is too bro
 The digest answers *did any file that can produce a forecast change*. It was never going to answer *did the
 behaviour change* — that is undecidable without running both — which is exactly why the human judgement
 exists, and why it is written down before anyone has a reason to want a particular answer.
+
+---
+
+## 39 · One shape, three instances: a representation that cannot hold the state it must distinguish
+
+Three failures this week look unrelated. They are the same defect.
+
+| the identifier | the two states it had to tell apart | what happened |
+| --- | --- | --- |
+| `head_tail_v1` | a 3.5 chars/token basis vs a 3.0 one | the same string named both; documents cut to 98,121 and 84,121 characters carried identical labels |
+| the **freeze digest** | *was not truncated* vs *would not be truncated* | three items that fit whole at 3.5 carried the untruncated digest, so a ratio change that would now cut them was invisible |
+| the **ledger** | *never attempted* vs *deliberately invalidated* | forcing a re-run meant deleting lines from an append-only log, which also erased BXP's genuine transient-failure history |
+
+**Each is a representation that collapses two states the system must distinguish. And
+each failed silently, for the same reason: the missing state had no encoding in which
+to be wrong.** There was no field that could hold a contradiction, so nothing could
+contradict. A check can only catch a disagreement between two things that were both
+written down.
+
+The digest one is worth stating carefully, because it looks like a bug in the digest and
+is not. **A content hash records the input that *was* used. It cannot represent an input
+that *would* have been used under a different parameter.** FCX 2026-04-23, CP 2026-04-29
+and CP 2026-07-29 fit whole at 3.5, so the drift never touched them and there was
+nothing for a hash to differ about. **A digest detects a parameter change only where the
+parameter bit.** The instrument that found them is the staleness check, which compares
+each item against what the current rule *would* produce — a different question, needing
+a different tool.
+
+### The fix for the ledger, since it is the one still open
+
+`head_tail_v1` now carries its parameters, computed from them so it cannot disagree
+([[decisions/0020-context-window-and-truncation|ADR 0020]]). The digest limitation is
+inherent and the staleness check covers it. The ledger is still a log you delete from:
+
+> **Invalidation appends a supersession record** — item, reason, the commit or freeze
+> amendment that invalidated it — rather than removing lines. **`resolved()` treats a
+> superseded item as needing a run**, exactly as an unresolved transient failure is
+> treated. **Nothing is ever deleted from an append-only log**, so the history of an
+> item that was re-run three times remains legible, and "this item was invalidated by
+> amendment 2.6.0" becomes a fact in the record rather than an absence.
+
+The current mechanism is `rm` on a line, which destroys the evidence that the item was
+ever attempted — and the append-only design exists precisely to keep that. I noticed
+because deleting BXP's lines to force its re-run also erased its DNS failure from the
+band's history; it survives only in a backup I happened to take.
+
+---
+
+## 40 · The runaway is content, and the corpus contains its own control
+
+Four items ran the analyst past its entire 12,000-token reasoning budget. The obvious
+hypothesis is that they are long documents.
+
+**They are not, and the corpus proves it against itself.** Every one of these companies
+files quarterly, so each failing document has same-company, same-template siblings:
+
+| ticker | failed at | a **larger** sibling that passed |
+| --- | --- | --- |
+| ACGL | 39,253 | 39,655 — and 39,218 passed, **35 characters smaller than the failure** |
+| WH | 39,902 | **48,922** |
+| CHD | 34,467 | **41,187** |
+| JAZZ | 32,599 | **41,625** |
+| ATI | 36,261 | **37,979** |
+
+**Five of six failures have a strictly larger same-company sibling that terminated
+normally.** All but ALLY's sit between the 53rd and 73rd percentile of corpus document
+size, against a median of 31,751 characters and a maximum of 219,441. None of them is a
+large document.
+
+So *raise the budget* was never the remedy, because there is no size problem to solve.
+Whatever these documents do to the analyst is a property of **content**, and it is the
+same question [[decisions/0021-degeneration-retry|ADR 0021]] answered for intake by
+counting unique lines.
+
+**The control group is now written down before the diagnosis runs**, which is the point
+of recording this now rather than after: the comparison is a failing document against
+its own company's passing sibling, on redundancy rather than length. If the failure's
+reasoning repeats and the sibling's does not, it is degeneration on that content. If
+both look alike, it is not — and that would be a finding too.

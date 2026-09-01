@@ -151,6 +151,64 @@ branch cannot be evaluated and the correct action is to restart and continue, no
 guess.** A halt at 312 would very likely fall in that category; a halt at 208 might
 not.
 
+## Addendum, 2026-09-01 — the conditioning, its bound, and the length control
+
+### Every forecast in the band is conditioned on the analyst terminating
+
+This is a property of the **corpus**, not of any item. All 350 forecasts exist because
+the analyst finished inside its budget on the draw that produced them. The runaway is
+where that conditioning becomes visible, and it becomes visible in two opposite
+directions:
+
+| | items | what the conditioning did |
+| --- | --- | --- |
+| **removed** | ACGL 2026-02-09, ALLY 2026-01-21, WH 2026-04-29 | ran away twice, resolved by the repeat rule, absent from the sample |
+| **left a trace** | CHD 2026-07-31 | ran away once, succeeded on the next draw — its forecast is a resample |
+
+**The bound on the conditioning is the runaway rate: 7 of ~357 attempts that reached the
+analyst, 1.96%.** That is the fraction of draws the sample is conditioned against, and
+it is what a reader needs in order to judge whether the conditioning matters. It is
+reported with the result.
+
+**The DNS four are not part of this.** CP, ELV, LVS and WAL failed before any model call
+completed — the exhibit fetch failed — so their retry produced a *first* successful draw,
+not a second one. Grouping them with CHD would inflate a selection effect with four items
+that carry none.
+
+### Size is ruled out: the runaway is a property of the document's content
+
+The obvious hypothesis is that long documents run away. It is wrong, and the corpus
+contains its own within-company control — every one of these companies has other filings
+that passed:
+
+| ticker | failing doc | percentile | a **larger** filing that passed |
+| --- | --- | --- | --- |
+| ACGL | 39,253 | 71st | 39,655 *(and 39,218 passed — 35 chars smaller than the failure)* |
+| WH | 39,902 | 73rd | **48,922** |
+| CHD | 34,467 | 60th | **41,187** |
+| JAZZ | 32,599 | 53rd | **41,625** |
+| ATI | 36,261 | 64th | **37,979** |
+| ALLY | 51,188 | 90th | — *(the one case where the failure is that company's largest)* |
+
+**In five of six cases the same company has a strictly larger document that succeeded.**
+Every failure but ALLY's sits between the 53rd and 73rd percentile of corpus document
+size — the median band, not the tail. Against a corpus median of 31,751 characters and a
+maximum of 219,441, none of these is a large document.
+
+So a larger budget is not the remedy for a document-size problem, because there is no
+document-size problem. **The cause is content**, and the [ADR 0021](0021-degeneration-retry.md)
+diagnosis of intake — 757 lines of which 22 were unique — is the shape to look for.
+
+### This table is the control group for the diagnosis
+
+**Recorded here so it is not rediscovered when the diagnostic runs.** When
+`scripts/ally_reasoning_replay.py` and the redundancy analysis are run on the recorded
+reasoning, the question is not "is this document long" — that is settled — but whether
+the reasoning repeats. **Each failing document has a same-company, same-template,
+larger-or-equal sibling that terminated normally**, and those siblings are the control:
+if the failing document's reasoning is redundant and the sibling's is not, the diagnosis
+is degeneration on that content. If both look alike, it is not.
+
 ## Consequences
 
 - On halting: run `scripts/ally_reasoning_replay.py` and the redundancy analysis over
