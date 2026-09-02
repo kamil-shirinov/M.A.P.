@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from unittest import mock
 from uuid import UUID, uuid4
 
 import numpy as np
@@ -17,6 +19,7 @@ import pytest
 from typer.testing import CliRunner
 
 from mapf.cli.app import app
+from mapf.cli.commands.evaluate import FreezeBases, _freeze_bases, _frozen_by_digest
 from mapf.core.models import (
     Bar,
     Forecast,
@@ -25,6 +28,7 @@ from mapf.core.models import (
     Scenario,
     ScenarioSet,
 )
+from mapf.core.provenance import freeze_digest
 from mapf.corpus.ledger import Ledger, LedgerEntry
 from mapf.eval.baselines import BaselineError
 from tests.unit.test_cli import _config
@@ -169,6 +173,7 @@ def _manifest(
     trace: bool = True,
     freeze: str | None = None,
     digest: str | None = None,
+    freeze_digest: str | None = None,
 ) -> None:
     directory = tmp_path / "runs" / str(run_id)
     directory.mkdir(parents=True, exist_ok=True)
@@ -192,7 +197,11 @@ def _manifest(
         # Derived from the version so a fixture varying one varies the other; the
         # digest is what the equality test reads (ADR 0029). Tests that need two
         # versions to SHARE governing content set the digest explicitly.
-        body["freeze_digest"] = hashlib.sha256(freeze.encode()).hexdigest()
+        body["freeze_digest"] = (
+            freeze_digest
+            if freeze_digest is not None
+            else hashlib.sha256(freeze.encode()).hexdigest()
+        )
     (directory / "manifest.json").write_text(json.dumps(body), encoding="utf-8")
     if trace:
         (directory / "trace.jsonl").write_text(_one_run_trace(), encoding="utf-8")
@@ -560,7 +569,7 @@ def test_a_band_spanning_two_freezes_refuses(tmp_path: Path) -> None:
     _manifest(tmp_path, ids[1], "a" * 40, freeze="2.3.0")
     result = _invoke(tmp_path)
     assert result.exit_code == 2
-    assert "2 distinct forecast-governing records" in result.output
+    assert "2 distinct forecast-governing digests" in result.output
     assert "v2.2.0" in result.output and "v2.3.0" in result.output
 
 
@@ -1211,3 +1220,105 @@ def test_a_holdout_run_records_the_spend_before_printing_a_score(
     # And the record is what makes a second run impossible.
     again = _invoke(tmp_path, "--split", "holdout", frozen=_frozen_with_holdout(tmp_path))
     assert again.exit_code == 9
+
+
+# Reconciling two digests against one record (ADR 0029's per-item truncation scoping)
+
+
+def _record(*, ratio: float = 3.0, prompt: str = "p1") -> dict[str, object]:
+    return {
+        "models": {"analyst": "g"},
+        "prompts": {"analyst": prompt},
+        "truncation": {"chars_per_token_estimate": ratio},
+        "horizon_days": 21,
+    }
+
+
+def _bases(
+    monkeypatch: pytest.MonkeyPatch,
+    labels: list[str],
+    table: dict[str, tuple[dict[str, object], bool]],
+) -> FreezeBases:
+    monkeypatch.setattr("mapf.cli.commands.evaluate._frozen_by_digest", lambda: table)
+    return _freeze_bases(Counter(dict.fromkeys(labels, 1)))
+
+
+def test_one_record_seen_through_the_scoping_reconciles(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The band's real shape: every run shares a record, and the truncated ones hash
+    differently only because the rule that applied to them is included."""
+    rec = _record()
+    whole = str(freeze_digest(rec, truncated=False))[:12]
+    cut = str(freeze_digest(rec, truncated=True))[:12]
+    bases = _bases(monkeypatch, [whole, cut], {whole: (rec, False), cut: (rec, True)})
+    assert bases.reconciled
+    assert bases.shared_label == whole
+    assert bases.cut_label == cut
+
+
+def test_two_truncation_bases_still_refuse(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The failure the count was there to catch: truncated items built under two
+    different ratios. Both share the non-truncation record, so ONLY the cut digests
+    separate them -- which is why `cut` is compared and not merely counted."""
+    old, new = _record(ratio=3.5), _record(ratio=3.0)
+    a = str(freeze_digest(old, truncated=True))[:12]
+    b = str(freeze_digest(new, truncated=True))[:12]
+    bases = _bases(monkeypatch, [a, b], {a: (old, True), b: (new, True)})
+    assert not bases.reconciled
+    assert len(bases.cut) == 2
+
+
+def test_a_difference_outside_truncation_still_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A changed prompt survives the scoping: it is in the shared half."""
+    one, two = _record(prompt="p1"), _record(prompt="p2")
+    a = str(freeze_digest(one, truncated=False))[:12]
+    b = str(freeze_digest(two, truncated=False))[:12]
+    bases = _bases(monkeypatch, [a, b], {a: (one, False), b: (two, False)})
+    assert not bases.reconciled
+    assert len(bases.shared) == 2
+
+
+def test_a_digest_git_cannot_resolve_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unresolvable is not reconcilable. A digest whose record cannot be recovered
+    might be anything, and the safe reading of "might be anything" is a refusal."""
+    rec = _record()
+    whole = str(freeze_digest(rec, truncated=False))[:12]
+    bases = _bases(monkeypatch, [whole, "deadbeefcafe"], {whole: (rec, False)})
+    assert not bases.reconciled
+    assert bases.unresolved == 1
+
+
+def test_the_reconciled_band_says_so_rather_than_refusing(tmp_path: Path) -> None:
+    """End to end: two digests that resolve to one record report a basis, not a
+    problem. Guarded by the unit tests above so this cannot become "two is fine"."""
+    rec = _record()
+    whole, cut = str(freeze_digest(rec, truncated=False)), str(freeze_digest(rec, truncated=True))
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    _manifest(tmp_path, ids[0], "a" * 40, freeze="2.3.0", freeze_digest=whole)
+    _manifest(tmp_path, ids[1], "a" * 40, freeze="2.6.0", freeze_digest=cut)
+
+    with mock.patch(
+        "mapf.cli.commands.evaluate._frozen_by_digest",
+        return_value={whole[:12]: (rec, False), cut[:12]: (rec, True)},
+    ):
+        result = _invoke(tmp_path, "--split", "dev", "--check")
+    assert "one basis, seen through the per-item scoping" in result.output
+    assert "more than one frozen record" not in result.output
+
+
+def test_a_repo_without_the_frozen_record_resolves_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Outside a git checkout the table is empty, so every digest is unresolved and
+    the band refuses. Failing to read history must not read as agreement."""
+
+    class _Failed:
+        returncode = 128
+        stdout = ""
+
+    monkeypatch.setattr("mapf.cli.commands.evaluate.subprocess.run", lambda *a, **k: _Failed())
+    assert _frozen_by_digest() == {}

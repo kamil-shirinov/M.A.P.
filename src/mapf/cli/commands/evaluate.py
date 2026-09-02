@@ -30,6 +30,7 @@ import json
 import subprocess
 from collections import Counter
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
@@ -202,16 +203,30 @@ def evaluate(
             typer.secho("trace      every completed item has a trace", fg=typer.colors.GREEN)
 
         freezes, freeze_example = _freeze_versions(ledger, runs_dir, band)
+        bases = _freeze_bases(freezes)
         if len(freezes) > 1:
             typer.secho(
-                f"freeze     {len(freezes)} distinct forecast-governing records "
+                f"freeze     {len(freezes)} distinct forecast-governing digests "
                 "produced this band:",
-                fg=typer.colors.RED,
+                fg=typer.colors.YELLOW if bases.reconciled else typer.colors.RED,
             )
             for label, count in freezes.most_common():
                 typer.echo(f"           {label}  {count} runs")
             for field in _freeze_diff(freeze_example):
                 typer.echo(f"           differs: {field}")
+        if bases.reconciled and len(freezes) > 1:
+            # Two digests is what ONE record produces once the truncation rule is
+            # scoped per item (ADR 0029): an untruncated run's digest excludes the
+            # block, a truncated run's includes it, so any band holding both kinds
+            # yields exactly two strings. Counting them was the right test before
+            # the scoping existed and the wrong one after.
+            typer.secho(
+                f"freeze     one basis, seen through the per-item scoping: "
+                f"{bases.shared_label} shared by every run"
+                + (f", {bases.cut_label} adding the truncation rule" if bases.cut else ""),
+                fg=typer.colors.GREEN,
+            )
+        elif len(freezes) > 1:
             refuse(
                 "this band was produced under more than one frozen record",
                 hint=(
@@ -443,6 +458,95 @@ def _freeze_versions(
             for k, v in example.items()
         },
     )
+
+
+@dataclass(frozen=True)
+class FreezeBases:
+    """Whether a band's several freeze digests are several *records*, or one record
+    seen through the per-item truncation scoping.
+
+    `shared` is the digest every run's record produces with the truncation rule
+    EXCLUDED, and `cut` the digest the truncated runs' record produces with it
+    included. One of each means one basis. Two of either is a genuine split: the
+    band was shown documents built under different rules, or asked under different
+    prompts, and no override exists for that.
+    """
+
+    shared: frozenset[str]
+    cut: frozenset[str]
+    unresolved: int
+
+    @property
+    def reconciled(self) -> bool:
+        return self.unresolved == 0 and len(self.shared) == 1 and len(self.cut) <= 1
+
+    @property
+    def shared_label(self) -> str:
+        return next(iter(sorted(self.shared)), "?")[:12]
+
+    @property
+    def cut_label(self) -> str:
+        return next(iter(sorted(self.cut)), "?")[:12]
+
+
+def _freeze_bases(freezes: Counter[str]) -> FreezeBases:
+    """Resolve each recorded digest back to the record that produced it.
+
+    By CONTENT, not by the commit a run happened to execute under: the digests are
+    content-addressed, so the record can be found rather than trusted. A run's code
+    commit is not evidence about what `corpus/frozen.json` held when it ran — the
+    dirty-tree group has no commit at all — and matching on the hash removes the
+    question.
+    """
+    table = _frozen_by_digest()
+    shared: set[str] = set()
+    cut: set[str] = set()
+    unresolved = 0
+    for label in freezes:
+        digest = label.split(" ", 1)[0]
+        found = table.get(digest)
+        if found is None:
+            unresolved += 1
+            continue
+        record, truncated = found
+        whole = freeze_digest(record, truncated=False)
+        if whole:
+            shared.add(whole)
+        if truncated:
+            cut.add(digest)
+    return FreezeBases(frozenset(shared), frozenset(cut), unresolved)
+
+
+def _frozen_by_digest() -> dict[str, tuple[dict[str, object], bool]]:
+    """Every version of `corpus/frozen.json` git holds, keyed by both its digests.
+
+    Truncated and untruncated runs of the SAME record hash differently by design, so
+    each record is registered under both, with a flag saying which one was matched.
+    Prefixes are 12 characters because that is what the manifests display and what
+    `_freeze_versions` groups on.
+    """
+    table: dict[str, tuple[dict[str, object], bool]] = {}
+    try:
+        log = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            ["git", "log", "--format=%H", "--", "corpus/frozen.json"],
+            capture_output=True,
+            text=True,
+            timeout=15.0,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return table
+    if log.returncode != 0:
+        return table
+    for commit in log.stdout.split():
+        record = _frozen_at(commit)
+        if record is None:
+            continue
+        for truncated in (False, True):
+            digest = freeze_digest(record, truncated=truncated)
+            if digest:
+                table.setdefault(digest[:12], (record, truncated))
+    return table
 
 
 def _freeze_diff(example: dict[str, str]) -> list[str]:
