@@ -580,3 +580,84 @@ If it does replicate, it is NEW WORK WITH ITS OWN ADR. It is not an amendment
 folded into Phase 3, and Phase 3 is to be completed and reported on its
 pre-registered terms first, including reporting that its form was known to be
 inadequate for the tails.
+
+=============================================================================
+RECORD 7 — POWER of S4, and S4 withdrawn as uninformative
+amendment to record 6, written 2026-09-02 before any ambiguous item is scored
+=============================================================================
+
+Record 6 registered a prediction that S4 would NOT flag. A registered negative is
+worthless if the test could not have flagged anyway, so the power was computed
+against the alternative the test exists to detect: compression IS the tail
+mechanism, sigma_MAP compressed by the development slope, r drawn from the
+baseline's sigma with the same rho=0.276 clustering and seed 20260813.
+
+  POWER OF THE REGISTERED S4 AT THE 5% LEVEL
+                                   vs random_walk    vs garch
+    H1, compression at slope 0.32       0.049          0.059
+    contrast, slope 0.15                0.049          0.055
+                                   (nominal size is 0.050)
+
+THE POWER IS THE SIZE. The test has no ability to detect compression at all, and
+tightening the alternative to a slope of 0.15 does not change that.
+
+WHY, AND IT IS NOT SUBTLE: the registered null and the compression alternative
+are THE SAME DATA-GENERATING PROCESS. Both say "the baseline's sigma is the
+truth, and M.A.P.'s sigma is whatever it is". Since M.A.P.'s sigma IS compressed,
+the null already contains the compression it was meant to test for. The p-value
+is uniform by construction and the test can only reject when the concentration
+exceeds what compression itself predicts -- an alternative nobody proposed and
+which has no interpretation.
+
+APPLYING THE BAR SET IN ADVANCE: above roughly 60% power a p > 0.05 would be a
+genuine null result. At 0.049 it is a foregone conclusion, satisfied about 95% of
+the time whatever is true. By the standard this project has applied to every
+other gate, S4 as registered is a test that cannot fire, and that is being said
+NOW rather than discovered when it passes.
+
+  S4 IS WITHDRAWN. Its result on the ambiguous band is not to be computed, and if
+  computed anyway it is not to be reported as evidence in either direction. The
+  outcome branches of record 6 that depend on S4 -- "both replicate",
+  "exceedances concentrate but S1 does not" -- are VOID. Record 6's S1, S2 and S3
+  and their predictions are UNAFFECTED and remain registered exactly as written.
+
+CORRECTING RECORD 6'S READING OF THE DEVELOPMENT NUMBERS. Record 6 called the
+null "mechanical" and said the relation "carries NO information beyond the
+selection effect". That label was wrong. The null was the compression hypothesis,
+so p(null <= observed) of 0.92 and 0.885 means the observed concentration sits
+INSIDE what compression-drives-tails predicts, on the weak side of it. The honest
+statement is: development is CONSISTENT with compression driving the tail excess
+and cannot distinguish it from the alternatives. Not evidence against, and not
+evidence for.
+
+The genuinely mechanical component -- that |z_MAP| > 3 selects small sigma_MAP,
+which is the numerator of the ratio -- is real and was correctly identified in
+record 6. It is why the naive form against 0.5 cannot fail. Record 6 then chose a
+null that removed the circularity by assuming the very thing under test, which
+replaced a test that could not fail with one that could not fire.
+
+-----------------------------------------------------------------------------
+PROPOSED REPLACEMENT — not registered, for approval before the band ends
+-----------------------------------------------------------------------------
+The defect in both S4 forms is conditioning on z, which contains sigma_MAP. A
+test that never conditions on z avoids it entirely:
+
+  Regress log|r| on log sigma_MAP and log sigma_baseline JOINTLY, on the
+  ambiguous band, cluster-robust CIs on both coefficients.
+
+  If M.A.P. used cross-sectional volatility information fully, sigma_base should
+  add nothing once sigma_MAP is known, and its coefficient should be
+  indistinguishable from zero. Compression predicts a POSITIVE and clearly
+  non-zero coefficient on log sigma_baseline: the baseline knows something about
+  which names move that M.A.P.'s sigma does not carry.
+
+  This conditions on nothing the models produced -- |r| is the outcome -- so
+  there is no shared term between the tested quantity and the selection, and no
+  null that assumes the alternative. It also has an interpretable effect size
+  rather than a rank percentile.
+
+  Its power should be computed BEFORE it is registered, on the same principle
+  that retired S4. I have not computed it and am not registering this.
+
+ADR 0032 remains unchanged, as stated in record 6. Records 2 and 4 remain binding
+and are untouched by this amendment.
