@@ -443,3 +443,140 @@ nothing. PROPOSED, for approval or rejection before it finishes:
 
 Until that is approved this remains a development-only hypothesis and the
 pre-registered plan of records 2 and 4 is unchanged.
+
+=============================================================================
+RECORD 6 — PRE-REGISTERED replication of VOLATILITY COMPRESSION
+written 2026-09-02, ambiguous band running, NO ambiguous item scored
+approved as an addition to records 2 and 4
+=============================================================================
+
+Development finding being tested (record 5, post-hoc): M.A.P. states too narrow a
+range of volatilities across names. Dev anchors, for reference only -- the
+predictions below are deliberately looser, because a replication that demands the
+development point estimates tests luck rather than the effect.
+
+  slope of log sigma_MAP on log sigma_RW   0.3166  CI [0.2609, 0.3811]
+  spread ratio sd/sd                       0.5065
+  sigma ratio, top 6% by |return| vs rest  0.4575 vs 0.8492
+
+-----------------------------------------------------------------------------
+STATISTICS — ambiguous band ALONE, against BOTH baselines' sigma
+-----------------------------------------------------------------------------
+Not pooled with development. z, blocks and bootstrap exactly as records 2 and 4:
+10-day blocks, 4000 draws, seed 20260813. Baseline sigma is the fitted
+Prediction.sigma; baseline mean is 0 by construction.
+
+  S1  slope of log sigma_MAP on log sigma_baseline, cluster-robust 95% CI
+  S2  spread ratio, sd(log sigma_MAP) / sd(log sigma_baseline)
+  S3  median sigma_MAP / sigma_baseline on the largest |realised return| versus
+      the rest, at THREE cut depths fixed as fractions of the scored n:
+      top 6%, top 10%, top 20% -- the dev cuts of 11/18/36 of 178 expressed as
+      proportions so they scale with whatever n the band yields. Cut on REALISED
+      RETURN, which neither model produced, so the selection stays
+      model-independent. Cluster-robust CI on each difference.
+  S4  the relational test, below.
+
+PREDICTIONS, direction and rough magnitude only:
+  S1  slope well below 1.0, somewhere around 0.2-0.5, CI excluding 1.0
+  S2  spread ratio around 0.4-0.7, clearly below 1.0
+  S3  all three cuts NEGATIVE with CIs excluding zero; top-cut median ratio
+      roughly 0.4-0.6 against roughly 0.8-0.9 for the rest; effect monotone in
+      cut depth (deepest cut most negative)
+  Replication of compression = S1, S2 and S3 all in the predicted direction,
+  with S1's CI excluding 1.0 and at least the two deeper cuts of S3 excluding 0.
+
+-----------------------------------------------------------------------------
+S4 — THE RELATIONAL TEST, and a correction to how it must be posed
+-----------------------------------------------------------------------------
+The proposal was: if compression is the mechanism, the |z|>3 exceedances should
+sit in the items with the SMALLEST sigma_MAP/sigma_baseline.
+
+THAT FORM CANNOT FAIL, and the reason is the same circularity that sank the
+first sigma cut. z_MAP = r / sigma_MAP, so selecting |z_MAP| > 3 selects small
+sigma_MAP, and sigma_MAP is the NUMERATOR of the ratio. Exceedances land in
+low-ratio items whether or not compression is real.
+
+Measured on development, against a null in which the baseline's sigma is the
+truth and M.A.P.'s sigma is merely whatever it was:
+
+    statistic: mean rank-percentile of sigma_MAP/sigma_base among |z_MAP|>3
+               items, 0 = smallest ratio, 0.5 = no relation
+
+                        observed   mechanical null median   p(null <= obs)
+    vs random_walk        0.2299            0.1428              0.9220
+    vs garch              0.1954            0.1376              0.8850
+
+The observed concentration is real against 0.5 -- and WEAKER than mechanics alone
+produce. On development the relation carries NO information beyond the selection
+effect. Registering the naive form would have registered a guaranteed pass.
+
+S4 IS THEREFORE POSED AGAINST THE MECHANICAL NULL, not against 0.5:
+
+  Null construction, fixed here: draw r_i = sigma_base,i * (sqrt(rho)*f_c +
+  sqrt(1-rho)*e_i) with rho = 0.276, f_c one shared normal per 10-day block and
+  e_i independent normals -- i.e. the baseline's sigma is correct and the panel
+  has its observed clustering. Recompute z_MAP = r/sigma_MAP, take |z_MAP|>3,
+  compute the mean rank-percentile. 4000 draws, seed 20260813. Report the
+  observed statistic, the null median, and p(null <= observed).
+
+  PREDICTION: p(null <= observed) will be ABOVE 0.05 -- that is, the ambiguous
+  band's exceedances will NOT concentrate beyond what mechanics explain. This is
+  a prediction of a NEGATIVE, made because development says so, and it is the one
+  statement here that would embarrass me if it came out the other way.
+
+  IF p <= 0.05 (exceedances concentrate BEYOND the mechanical null): compression
+  is not merely present but is DRIVING the tail excess, more strongly than in
+  development. Stronger than anything development supports, and it would make the
+  per-item volatility map the clear successor.
+
+  IF p > 0.05, as predicted: compression and the tail excess are both real but
+  their link is UNDEMONSTRATED. Compression would then be a defect worth fixing
+  on its own terms and NOT established as the explanation of the |z|>3
+  exceedances, which would remain unexplained.
+
+-----------------------------------------------------------------------------
+ALL OUTCOMES, FIXED IN ADVANCE — including the splits
+-----------------------------------------------------------------------------
+  BOTH replicate (S1-S3 in direction AND S4 clears the mechanical null):
+    compression is established out of sample and is demonstrably the mechanism
+    behind the tails. Per-item volatility map becomes the leading candidate.
+
+  COMPRESSION REPLICATES, EXCEEDANCES DO NOT CONCENTRATE (the predicted outcome):
+    compression is established out of sample as a REAL AND SEPARATE defect.
+    It is NOT established as the cause of the tail excess, and must not be
+    described as such. Two findings, one link unproven.
+
+  EXCEEDANCES CONCENTRATE BUT S1 DOES NOT REPLICATE:
+    incoherent, and to be reported as such rather than resolved by picking the
+    congenial half. The likeliest reading would be that the concentration is a
+    residual mechanical artefact the null under-models, and the first response is
+    to attack the null, not to claim the finding.
+
+  NEITHER:
+    volatility compression is WITHDRAWN as a development-only artefact, exactly
+    as records 2 and 4 withdraw the thin-tails reading on their own failure. No
+    per-item map, no further work on it.
+
+  Records 2 and 4 remain binding and independent: if M.A.P.'s own tail
+  statistics do not replicate, the thin-tails reading is withdrawn regardless of
+  what S1-S4 show, and Student-t is not adopted.
+
+-----------------------------------------------------------------------------
+ADR 0032 IS UNCHANGED
+-----------------------------------------------------------------------------
+Stated explicitly so this record cannot later be read as having moved the plan.
+
+The pre-registered Phase 3 correction form STANDS as committed and as amended by
+record 3: a two-parameter location-and-scale map, both parameters fitted on
+development only, objective the log score, success condition the corrected
+development MAD-scale consistent with 1.0.
+
+A per-item volatility map is NOT part of Phase 3 and does not become part of it.
+It becomes a CANDIDATE only if record 6 replicates, and it would then rest on an
+out-of-sample test rather than on development exploration -- which is the whole
+reason for registering it here rather than acting on record 5.
+
+If it does replicate, it is NEW WORK WITH ITS OWN ADR. It is not an amendment
+folded into Phase 3, and Phase 3 is to be completed and reported on its
+pre-registered terms first, including reporting that its form was known to be
+inadequate for the tails.
