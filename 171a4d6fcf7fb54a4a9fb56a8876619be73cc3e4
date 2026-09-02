@@ -127,3 +127,87 @@ WHAT THIS STILL CANNOT SETTLE, whatever it shows: whether the excess is a defect
 of the forecaster or a property of 5-day post-earnings returns. Both bands are
 the same document type over the same event window. That comparison needs the
 non-issuer corpus of Findings #45, not more of this one.
+
+=============================================================================
+RECORD 3 — AMENDMENT to ADR 0032's pre-registered condition
+written 2026-09-02, before any correction has been fitted, holdout unspent
+supersedes the "A2 above 2.492" condition in decisions/0032-calibration-form.md
+=============================================================================
+
+ADR 0032 as committed states: "if the corrected development PIT still has A2 above
+2.492, the two-parameter form has not fixed the shape". That condition is wrong
+twice over and is replaced here rather than at fitting time.
+
+DEFECT 1 -- the threshold assumes independence.
+2.492 is the asymptotic 5% point of A2 for a fully specified uniform null under
+IID draws. The panel is 178 items in 18 occupied blocks with an intra-cluster
+correlation of rho=0.276. Regenerated on the panel's own structure:
+
+    iid table                     2.492
+    moving-block bootstrap        5.084   (the machinery used for every other
+                                           interval in this project)
+    equicorrelated, rho=0.276    12.087
+
+The observed uncorrected A2 is 3.044, so under either cluster-robust value the
+DEVELOPMENT PIT DOES NOT DEPART FROM UNIFORM. The earlier "the shape departs"
+claim was an artefact of the iid critical value, and is withdrawn. I had already
+caveated the KS p-value on precisely this ground and then failed to apply it to A2.
+
+DEFECT 2 -- the condition could not fail.
+A2 is 3.044 BEFORE any correction, and a correction that improves calibration can
+only reduce it. Against a threshold of 5.084 the condition would pass whatever
+happened. A test that cannot fail is the same defect as a statistic that cannot
+fire, and both are worse than no test because they look like one.
+
+AND the obvious replacement is worse still: the TAIL RATIO IS INVARIANT to the
+correction by construction. Under z -> (z-a)/b:
+    RMS((z-a)/b) = RMS(z-a)/b        MAD-scale((z-a)/b) = MAD-scale(z)/b
+so the b cancels EXACTLY. Verified numerically: b=1.30 and b=0.75 both leave the
+ratio at 1.2064 to four decimals. It is not perfectly invariant to a, because RMS
+is not location-invariant while MAD-scale is -- RMS(z-a)^2 = RMS(z)^2 - 2a*mean(z)
++ a^2 -- but the movement is second order (1.2046 at a=-0.05, 1.2304 at a=+0.20)
+and a is predicted to be near zero. The tail ratio therefore cannot test whether
+the correction worked. It measures kurtosis, and kurtosis is exactly what a
+location-scale map leaves alone.
+
+-----------------------------------------------------------------------------
+REPLACEMENT SUCCESS CONDITION -- what a location-scale map can actually move
+-----------------------------------------------------------------------------
+  The corrected development MAD-scale of z must be consistent with 1.0, judged by
+  the cluster-robust 95% CI from the same moving-block bootstrap.
+
+  Starting value: MAD-scale(z) = 1.1052, CI [0.9307, 1.4139], which ALREADY
+  covers 1.0.
+
+  This is not circular, and the reason matters: b is fitted by minimising the
+  development LOG SCORE, not by matching MAD-scale. The log score is pulled
+  upward by the seven |z|>3 outcomes, so the log-score-optimal b may well exceed
+  1.1052 and push the corrected body BELOW 1.0 -- over-dispersing 171 ordinary
+  items to cover seven extreme ones. That is the failure mode this condition
+  exists to catch, and it is a real possibility rather than a formality.
+
+  FAILS IF the corrected CI excludes 1.0 in either direction. Under-dispersion
+  means the correction did not go far enough; over-dispersion means the tails
+  captured the scale, which is the specific harm ADR 0032 chose the log score to
+  avoid and would mean that choice did not work.
+
+-----------------------------------------------------------------------------
+TAIL PREDICTION -- pre-committed, so the successor is not a reaction
+-----------------------------------------------------------------------------
+  A shift and a scale cannot alter kurtosis. The corrected tail ratio is
+  therefore PREDICTED TO BE UNCHANGED at 1.2064 +/- the second-order movement in
+  a described above, and the |z|>3 exceedance count is predicted to fall only as
+  far as rescaling moves the threshold -- not to the Gaussian expectation.
+
+  This is a prediction, not a disappointment. If it holds, it confirms the family
+  is inadequate for the tails, which was stated in ADR 0032 before any of this.
+
+  PRE-COMMITTED SUCCESSOR: Student-t on the simulated returns, with the degrees
+  of freedom fitted on development only, adopted IF AND ONLY IF the tail excess
+  REPLICATES on the ambiguous band under record 2. Naming it now, with the
+  trigger attached to an independent sample rather than to the size of a
+  development residual, is what stops it being a third parameter reached for
+  because the second one disappointed.
+
+  If record 2 does not replicate, the tail excess is withdrawn and Student-t is
+  NOT adopted, whatever the corrected development numbers look like.
