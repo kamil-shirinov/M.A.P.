@@ -211,3 +211,114 @@ TAIL PREDICTION -- pre-committed, so the successor is not a reaction
 
   If record 2 does not replicate, the tail excess is withdrawn and Student-t is
   NOT adopted, whatever the corrected development numbers look like.
+
+=============================================================================
+RECORD 4 — the baseline control, and an AMENDMENT to record 2
+written 2026-09-02, ambiguous band running, no ambiguous item scored
+=============================================================================
+
+WHY THIS AMENDMENT EXISTS
+Record 1 listed "this is a property of the target, not a defect of M.A.P." as
+something the development evidence could not rule out. That was wrong in a
+specific way: THE CONTROL WAS AVAILABLE THE WHOLE TIME AND I DID NOT COMPUTE IT.
+The random walk and GARCH are normal-tailed models fitted to the SAME 178
+outcomes. If fat tails were a property of 5-day post-earnings returns, their
+z-scores would show the same excess. Recording an untested alternative as
+"cannot rule out" when a one-command test was sitting in the same module is a
+weaker statement than the evidence supported.
+
+The amendment predates any ambiguous-band result: 21 of 353 items are complete,
+none scored, and no ambiguous forecast has been read.
+
+-----------------------------------------------------------------------------
+PART A — DEVELOPMENT CONTROL. Descriptive, and explicitly POST-HOC.
+-----------------------------------------------------------------------------
+The development half has been looked at repeatedly. This is a comparator run on
+an already-examined sample; it is NOT a test, and no decision about M.A.P. is
+being taken on it. n=178 for all three, nothing skipped.
+
+                  RMS     MAD   ratio   cluster-robust CI   |z|>2.5   |z|>3   |z|>4
+  expected      1.000   1.000  1.0000                          2.21    0.48    0.01
+  M.A.P.        1.333   1.105  1.2064   [1.0135, 1.4372]*    11 (7blk) 7 (5blk)    2
+  random_walk   0.959   0.910  1.0540   [0.9736, 1.1921]      6 (3blk) 1 (1blk)    0
+  garch         0.890   0.842  1.0577   [0.9579, 1.1912]      3 (2blk) 1 (1blk)    0
+  * the only CI excluding 1.0
+
+  largest |z|:  M.A.P. 4.59 4.34 3.99 3.46 3.43
+                random_walk 3.38 2.77 2.59 2.55 2.51
+                garch       3.29 2.53 2.52 2.27 2.27
+
+The comparison is NOT confounded by the baselines being wider overall (their RMS
+is below 1, so both are slightly over-dispersed on average, GARCH markedly).
+The tail RATIO is scale-invariant by construction -- RMS and MAD-scale both
+divide by any common factor -- so 1.206 against 1.054 and 1.058 is a statement
+about SHAPE, not about width.
+
+READING: on development, the "property of the target" explanation does not
+survive. The same outcomes, scored by two normal-tailed models, produce tail
+behaviour close to Gaussian. The excess appears to be M.A.P.'s. Record 1's
+"cannot rule out" on that point is superseded by this; the remaining caveats in
+record 1 stand.
+
+A FURTHER DEVELOPMENT OBSERVATION, NOT PRE-REGISTERED AND NOT PART OF THE TEST
+BELOW. M.A.P.'s sigma is narrower than the random walk's on 70.8% of items,
+median ratio 0.814. But on the ELEVEN |z|>2.5 items the median ratio is 0.541,
+against 0.834 on the other 167. So M.A.P. is not uniformly too narrow -- it is
+roughly half as wide as a trailing-volatility baseline precisely on the items
+that moved. Correlation of log sigmas is 0.625, so it tracks cross-sectional
+volatility partially and not enough.
+
+If that holds up it matters for Phase 3, because a MIS-ALLOCATION of sigma
+across items is neither a location error nor a scale error nor a kurtosis
+problem, and none of ADR 0032's family addresses it -- including the Student-t
+successor, which fattens every item's tails equally. This is one post-hoc
+observation on a much-examined sample and is recorded as a hypothesis, not a
+finding. It does not alter the pre-registered plan.
+
+-----------------------------------------------------------------------------
+PART B — AMENDMENT to record 2's ambiguous-band pre-registration
+-----------------------------------------------------------------------------
+Record 2 fixed three statistics on M.A.P. alone. They are now to be computed
+IDENTICALLY FOR THE RANDOM WALK AND GARCH on the same ambiguous items:
+
+  1. tail ratio RMS(z)/MAD-scale(z), cluster-robust 95% CI, moving-block
+     bootstrap, 4000 draws, seed 20260813, 10-day blocks
+  2. count of |z| > 2.5 with distinct-block spread
+  3. count of |z| > 3.0 with distinct-block spread
+  (|z| > 4 reported as a raw count for all three, as in Part A)
+
+Baseline z is (outcome - prediction.mean) / prediction.sigma with mean = 0 by
+construction. Everything else as record 2. Still three statistics; the addition
+is two comparators, not a wider search.
+
+INTERPRETATION, FIXED IN ADVANCE:
+
+  ALL THREE HEAVY (each tail-ratio CI excluding 1.0, or each |z|>3 well above
+  expectation over several blocks):
+    the target carries jump risk that a normal-tailed 5-day model cannot
+    represent. M.A.P.'s tails are then NOT a defect relative to the alternatives,
+    and Student-t remains the right successor -- but for a DIFFERENT REASON than
+    ADR 0032 assumed: not to fix a fault in M.A.P., but because the whole family
+    of Gaussian predictive distributions is misspecified for this event window.
+    That distinction is to be stated explicitly if it occurs, because it changes
+    what the correction is claiming to do.
+
+  M.A.P. HEAVY, BASELINES NOT (this is what development shows):
+    the excess is M.A.P.'s. The forecaster states distributions too narrow for
+    its own errors while trailing-volatility models on the same outcomes do not.
+    Student-t is then a patch on M.A.P.'s dispersion rather than a correction for
+    the target, and the sigma-allocation hypothesis of Part A becomes the more
+    promising line -- to be pursued as new work, not folded into Phase 3
+    silently.
+
+  M.A.P. LIGHTER THAN A BASELINE (M.A.P.'s tail ratio below either baseline's,
+  or its |z|>3 count below theirs):
+    RECORD IT. It is informative and unexpected, and it would mean the
+    development ordering does not survive a second sample. It would put the
+    development tail excess back to the false positive that p=0.066 permits, and
+    the whole thin-tails line -- Findings #44, ADR 0032's tail reasoning, and the
+    Student-t pre-commitment -- would be withdrawn rather than reinterpreted.
+
+The withdrawal conditions of record 2 are unchanged and still binding: if
+M.A.P.'s own three statistics do not replicate, the thin-tails reading is
+withdrawn and Student-t is not adopted, whatever the baselines do.
