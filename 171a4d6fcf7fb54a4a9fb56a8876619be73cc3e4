@@ -61,3 +61,69 @@ WHAT THEY DO NOT RULE OUT
 
 This record exists so that a later confirmation is a replication rather than a
 rediscovery, and so that the 0.0165 is never quoted without the 0.066 beside it.
+
+=============================================================================
+RECORD 2 — PRE-REGISTERED replication of the tail excess on the ambiguous band
+written 2026-09-02 while the band is RUNNING and none of its results exist
+=============================================================================
+
+The development tail excess is suggestive and post-hoc (record 1). The ambiguous
+band is a fresh sample of 353 items that has produced no scored result, so it can
+turn a post-hoc observation into a pre-registered test -- but only if the test is
+fixed before its numbers exist. That is what this is. At the time of writing 20 of
+353 items are complete, none has been scored, and no forecast of either band has
+been read for this purpose.
+
+This is NOT the holdout. The holdout remains unspent under ADR 0031 and nothing
+here touches it. The ambiguous band was always going to be scored; this record
+only fixes WHAT IS COMPUTED ON IT and HOW IT IS READ.
+
+STATISTICS -- exactly these three, on the ambiguous band ALONE, not pooled with
+development, using the same z = Phi^-1(PIT) and the same 10-day blocks:
+
+  1. tail ratio  RMS(z) / MAD-scale(z), with a cluster-robust 95% CI from the
+                 moving-block bootstrap, 4000 draws, seed 20260813
+  2. count of |z| > 2.5, against the Gaussian expectation
+  3. count of |z| > 3.0, against the Gaussian expectation, WITH the number of
+     distinct 10-day blocks those exceedances fall in
+
+No fourth statistic. If something else looks interesting it is a new post-hoc
+observation and is to be labelled as one.
+
+PREDICTION, stated now:
+  tail ratio      point estimate above 1.10, CI excluding 1.0
+  |z| > 2.5       roughly 4-5x the Gaussian expectation
+  |z| > 3         roughly 10-15x the Gaussian expectation, spread over at least
+                  four distinct blocks
+The development values were 1.2064, 5.0x and 14x. The prediction is deliberately
+looser than those point estimates, because a replication that demands the same
+number to two decimals is a test of luck.
+
+INTERPRETATION, both outcomes fixed in advance:
+
+  IF IT REPLICATES (tail ratio CI excludes 1.0 AND |z|>3 exceeds 4x expectation
+  over at least four blocks):
+    the tail excess is ESTABLISHED. Two independent samples, the second tested
+    against a pre-registered prediction, and the multiplicity argument of record 1
+    no longer applies because only one statistic was named. It also then bears on
+    the Phase 3 form: a location-scale correction cannot fix it (record 3), and
+    the Student-t successor is triggered on evidence rather than on preference.
+
+  IF IT DOES NOT REPLICATE:
+    the development result is recorded as a FALSE POSITIVE -- the 1-in-15 that a
+    p of 0.066 predicts -- and the thin-tails reading is withdrawn, including from
+    Findings #44 and from the reasoning in ADR 0032. The calibration ratio's
+    disagreement with the PIT would then need another explanation, and "we do not
+    know why 0.733 and a uniform PIT coexist" is the honest state to return to.
+    Student-t is NOT adopted in that case.
+
+  IF IT REPLICATES IN THE COUNTS BUT NOT THE RATIO (or the reverse):
+    reported as partial, with the disagreeing pair named. This is a real
+    possibility because the ratio needs a scale estimate and the counts do not,
+    and it is written down so it does not become a choice between two numbers
+    after both are known.
+
+WHAT THIS STILL CANNOT SETTLE, whatever it shows: whether the excess is a defect
+of the forecaster or a property of 5-day post-earnings returns. Both bands are
+the same document type over the same event window. That comparison needs the
+non-issuer corpus of Findings #45, not more of this one.
