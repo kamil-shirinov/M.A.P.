@@ -6,17 +6,23 @@ out too narrow, or a null read as evidence of no effect.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
 from mapf.eval.aggregate import (
+    AD_FIVE_PERCENT,
     AggregationError,
     Calibration,
+    PitTest,
+    anderson_darling_uniform,
     calibration_interval,
     calibration_ratio,
     compare,
     leakage,
     pit_histogram,
+    pit_uniformity,
     summarise,
 )
 from mapf.eval.scoring import pit, pit_deviation
@@ -339,3 +345,93 @@ def test_an_interval_with_no_surviving_draw_refuses(monkeypatch: pytest.MonkeyPa
     )
     with pytest.raises(AggregationError, match="no bootstrap resample"):
         calibration_interval([0.04] * 20, realised, list(range(20)), draws=5)
+
+
+# The PIT tilt and shape tests
+
+
+def test_a_uniform_pit_is_not_called_tilted() -> None:
+    rng = np.random.default_rng(3)
+    values = rng.uniform(0.0, 1.0, 400)
+    result = pit_uniformity(values, _clustered_days(400))
+    assert result.tilted == "not established"
+    assert result.lower <= 0.5 <= result.upper
+
+
+def test_a_strong_tilt_is_established_on_both_views() -> None:
+    """Shifted well away from 0.5: both the item-level and the cluster-level
+    interval must exclude it, or the verdict understates what is there."""
+    rng = np.random.default_rng(4)
+    values = rng.uniform(0.0, 1.0, 400) * 0.5 + 0.5
+    result = pit_uniformity(values, _clustered_days(400))
+    assert result.tilted == "established"
+    assert result.lower > 0.5
+    assert result.cluster_lower > 0.5
+    assert result.direction == "outcomes above the forecast centre"
+
+
+def test_a_tilt_only_one_view_finds_is_suggestive_not_established() -> None:
+    """Established requires BOTH. Letting the narrower interval decide would let the
+    view whose assumptions do more work carry the claim on its own."""
+    wide = PitTest(
+        mean=0.55,
+        lower=0.51,
+        upper=0.59,
+        n=178,
+        clusters=18,
+        cluster_lower=0.49,
+        cluster_upper=0.61,
+        ks_statistic=0.08,
+        ks_p_independent=0.2,
+        anderson_darling=1.0,
+    )
+    assert wide.tilted == "suggestive"
+
+
+def test_a_symmetric_u_has_no_tilt_and_the_shape_test_still_sees_it() -> None:
+    """Why both statistics exist: a U-shaped PIT has a mean of exactly 0.5, so the
+    tilt test is silent and only KS reports the departure."""
+    values = np.array([0.02, 0.98] * 100)
+    result = pit_uniformity(values, _clustered_days(200))
+    assert result.tilted == "not established"
+    assert result.ks_statistic > 0.3
+
+
+def test_the_pit_test_refuses_mismatched_inputs() -> None:
+    with pytest.raises(AggregationError, match="differ in length"):
+        pit_uniformity([0.1, 0.2], [0])
+
+
+def test_the_pit_test_refuses_an_empty_panel() -> None:
+    with pytest.raises(AggregationError, match="at least one item"):
+        pit_uniformity([], [])
+
+
+def test_anderson_darling_is_small_for_a_uniform_sample() -> None:
+    rng = np.random.default_rng(7)
+    assert anderson_darling_uniform(rng.uniform(0.0, 1.0, 500)) < AD_FIVE_PERCENT
+
+
+def test_anderson_darling_catches_the_tails_that_ks_misses() -> None:
+    """The reason both are reported. A sample right in the body and heavy at the
+    ends is the signature of a mis-scaled forecast, and KS is not built to see it."""
+    rng = np.random.default_rng(8)
+    body = rng.uniform(0.25, 0.75, 180)
+    tails = np.concatenate([rng.uniform(0.0, 0.02, 10), rng.uniform(0.98, 1.0, 10)])
+    values = np.concatenate([body, tails])
+    result = pit_uniformity(values, _clustered_days(200))
+    assert result.anderson_darling > AD_FIVE_PERCENT
+    assert result.tails_heavy
+    assert result.tilted == "not established"
+
+
+def test_pit_values_at_the_boundary_do_not_make_the_statistic_infinite() -> None:
+    """0.0 and 1.0 are legitimate PIT values -- an outcome outside every simulated
+    path -- and they are exactly the ones this statistic weighs most."""
+    values = [0.0, 1.0, *[i / 20 for i in range(1, 20)]]
+    assert math.isfinite(anderson_darling_uniform(values))
+
+
+def test_anderson_darling_refuses_an_empty_sample() -> None:
+    with pytest.raises(AggregationError, match="at least one item"):
+        anderson_darling_uniform([])

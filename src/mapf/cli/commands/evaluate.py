@@ -60,12 +60,14 @@ from mapf.corpus.runner import plan
 from mapf.corpus.selection import Corpus
 from mapf.data.earnings import EdgarEarningsCalendar
 from mapf.eval.aggregate import (
+    AD_FIVE_PERCENT,
     AggregationError,
     Comparison,
     calibration_interval,
     compare,
     leakage,
     pit_histogram,
+    pit_uniformity,
     summarise,
 )
 from mapf.eval.scorer import BandScores, VintageError, require_one_vintage, score_band
@@ -813,9 +815,31 @@ def _dispersion(scores: BandScores) -> None:
         lo = index / len(counts)
         bar = "#" * round(count / widest * 32)
         typer.echo(f"    {lo:.1f}-{lo + 1 / len(counts):.1f}  {count:4}  {bar}")
+    # The bars are a picture, not evidence. Ten bins give ten chances to look
+    # extreme, and the eye is drawn to whichever one did — so the claim is made by
+    # the two pre-stated statistics below and never by reading the histogram.
+    test = pit_uniformity(scores.pit_values, scores.day_index)
     typer.echo(
-        "    a U means too narrow, a hump too wide, a tilt biased; "
-        f"flat at {expected:.1f} is calibrated"
+        f"    tilt: mean PIT {test.mean:.4f} vs 0.5 — "
+        f"[{test.lower:.4f}, {test.upper:.4f}] over {test.n} items, "
+        f"[{test.cluster_lower:.4f}, {test.cluster_upper:.4f}] over "
+        f"{test.clusters} clusters"
+    )
+    typer.echo(
+        f"    shape: KS D={test.ks_statistic:.4f} (p={test.ks_p_independent:.3f} "
+        f"assuming independence), Anderson-Darling A2={test.anderson_darling:.3f} "
+        f"vs {AD_FIVE_PERCENT} at 5% — {'departs' if test.tails_heavy else 'no departure'}"
+    )
+    typer.echo(
+        "      both assume independent draws and the panel is clustered, so both "
+        "read high; A2 is the tail-sensitive one and KS the middle-sensitive one"
+    )
+    colour = typer.colors.YELLOW if test.tilted == "established" else None
+    typer.secho(
+        f"    verdict: the tilt is {test.tilted}"
+        + (f" ({test.direction})" if test.tilted != "not established" else ""),
+        fg=colour,
+        bold=test.tilted == "established",
     )
 
 
