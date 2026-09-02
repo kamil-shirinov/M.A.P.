@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from unittest import mock
@@ -31,6 +32,7 @@ from mapf.core.models import (
 from mapf.core.provenance import freeze_digest
 from mapf.corpus.ledger import Ledger, LedgerEntry
 from mapf.eval.baselines import BaselineError
+from mapf.eval.scorer import BandScores, score_band
 from tests.unit.test_cli import _config
 from tests.unit.test_cli_corpus import _frozen
 
@@ -1322,3 +1324,114 @@ def test_a_repo_without_the_frozen_record_resolves_nothing(
 
     monkeypatch.setattr("mapf.cli.commands.evaluate.subprocess.run", lambda *a, **k: _Failed())
     assert _frozen_by_digest() == {}
+
+
+# Direction, dispersion and the named strata
+
+
+def test_a_drifting_baseline_is_reported_per_baseline(tmp_path: Path) -> None:
+    """The coin-flip collapse is conditional. A baseline that makes a directional
+    claim must be compared against on its own, or the collapse would hide it."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    real = score_band
+
+    def _drifting(*args: object, **kwargs: object) -> BandScores:
+        scored = real(*args, **kwargs)  # type: ignore[arg-type]
+        return BandScores(
+            items=tuple(
+                replace(i, baseline_brier=dict.fromkeys(i.baseline_brier, 0.16))
+                for i in scored.items
+            ),
+            unscored=scored.unscored,
+        )
+
+    with mock.patch("mapf.cli.commands.evaluate.score_band", _drifting):
+        result = _invoke(tmp_path, "--split", "dev")
+    assert "a coin flip" not in result.output
+    assert "zero-drift by construction" not in result.output
+
+
+def test_an_undefined_calibration_ratio_is_named_not_crashed(tmp_path: Path) -> None:
+    """Every outcome exactly zero has no ratio. The run must say so and carry on to
+    the strata rather than dying between the comparisons and the rest of the report."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0")
+
+    real = score_band
+
+    def _flat(*args: object, **kwargs: object) -> BandScores:
+        scored = real(*args, **kwargs)  # type: ignore[arg-type]
+        return BandScores(
+            items=tuple(replace(i, realised_return=0.0) for i in scored.items),
+            unscored=scored.unscored,
+        )
+
+    with mock.patch("mapf.cli.commands.evaluate.score_band", _flat):
+        result = _invoke(tmp_path, "--split", "dev")
+    assert result.exit_code == 0
+    assert "calibration: not computed" in result.output
+    assert "named strata" in result.output
+
+
+def test_a_recovered_item_lands_in_the_stratum_its_failure_names(tmp_path: Path) -> None:
+    """`resolved()` keeps only the final entry, so an item that failed and then
+    succeeded looks untouched there. The stratum has to read the raw history."""
+    ids = [uuid4(), uuid4()]
+    ledger = Ledger(tmp_path / "ledger.jsonl")
+    ledger.append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="clean",
+            filing_date=CLEAN[0],
+            status="failed",
+            reason="budget_exhausted",
+        )
+    )
+    for i, day in enumerate(CLEAN):
+        ledger.append(
+            LedgerEntry(
+                ticker="AAPL", band="clean", filing_date=day, status="complete", run_id=ids[i]
+            )
+        )
+        _write_forecast(tmp_path, ids[i], day)
+        _manifest(tmp_path, ids[i], "a" * 40, freeze="2.3.0")
+
+    result = _invoke(tmp_path, "--split", "dev")
+    assert result.exit_code == 0
+    assert "recovered from a budget exhaustion: 1 of 2" in result.output
+    assert "recovered from the DNS outage: no scored item" in result.output
+
+
+def test_a_stratum_too_small_for_an_interval_says_so(tmp_path: Path) -> None:
+    """A bootstrap interval over one occupied block is a number with no content;
+    printing it anyway would be the most confident thing on the page."""
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0", dirty=True)
+    result = _invoke(tmp_path, "--split", "dev")
+    assert "produced from an uncommitted tree: 2 of 2" in result.output
+    assert "no interval — 2 items" in result.output
+    assert "without: empty" in result.output
+
+
+def test_a_stratum_large_enough_gets_the_full_comparison(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The other side of the threshold. Driven by lowering the minimum rather than
+    by a 40-item fixture: the branch under test is the threshold, not the corpus."""
+    monkeypatch.setattr("mapf.cli.commands.evaluate._INTERVAL_MINIMUM", 2)
+    ids = [uuid4(), uuid4()]
+    _finish(tmp_path, ids)
+    for run_id in ids:
+        _manifest(tmp_path, run_id, "a" * 40, freeze="2.3.0", dirty=True)
+    result = _invoke(tmp_path, "--split", "dev")
+    assert "produced from an uncommitted tree: 2 of 2" in result.output
+    assert "no interval" not in result.output
+    assert "M.A.P. vs random_walk" in result.output

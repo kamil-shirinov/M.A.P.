@@ -11,9 +11,12 @@ import pytest
 
 from mapf.eval.aggregate import (
     AggregationError,
+    Calibration,
+    calibration_interval,
     calibration_ratio,
     compare,
     leakage,
+    pit_histogram,
     summarise,
 )
 from mapf.eval.scoring import pit, pit_deviation
@@ -245,3 +248,94 @@ def test_pit_deviation_is_zero_for_a_perfect_grid() -> None:
     n = 1000
     grid = (np.arange(n) + 0.5) / n
     assert pit_deviation(grid) == pytest.approx(1.0 / (2 * n), abs=1e-9)
+
+
+# The calibration interval and the PIT histogram
+
+
+def _clustered_days(n: int) -> list[int]:
+    """Four items per occupied day, a week apart -- the panel's real shape."""
+    return [i // 4 * 7 for i in range(n)]
+
+
+def test_the_calibration_interval_brackets_a_known_ratio() -> None:
+    """Sigma stated at exactly twice the realised dispersion must land near 2.0, and
+    the interval must exclude 1.0 -- otherwise it cannot say anything at all."""
+    rng = np.random.default_rng(11)
+    realised = rng.normal(0.0, 0.05, 200)
+    stated = np.full(200, 0.10)
+    result = calibration_interval(stated, realised, _clustered_days(200))
+    assert 1.7 < result.ratio < 2.3
+    assert result.lower > 1.0
+    assert result.verdict == "over-dispersed"
+
+
+def test_a_calibrated_forecaster_is_not_called_miscalibrated() -> None:
+    rng = np.random.default_rng(12)
+    realised = rng.normal(0.0, 0.05, 300)
+    stated = np.full(300, float(np.sqrt(np.mean(realised**2))))
+    result = calibration_interval(stated, realised, _clustered_days(300))
+    assert result.lower <= 1.0 <= result.upper
+    assert result.verdict == "indistinguishable from calibrated"
+
+
+def test_the_verdict_reads_the_interval_and_not_the_point() -> None:
+    """The whole reason for the interval: 0.95 is not evidence of miscalibration."""
+    near = Calibration(ratio=0.95, lower=0.80, upper=1.10, n=50)
+    assert near.verdict == "indistinguishable from calibrated"
+    narrow = Calibration(ratio=0.95, lower=0.90, upper=0.99, n=50)
+    assert narrow.verdict == "under-dispersed"
+
+
+def test_mismatched_calibration_inputs_refuse() -> None:
+    with pytest.raises(AggregationError, match="disagree in length"):
+        calibration_interval([0.1, 0.2], [0.1], [0, 1])
+
+
+def test_a_flat_pit_histogram_is_flat() -> None:
+    # Bin CENTRES, not edges: 0.3 lands in bin 2 or 3 depending on the last bit of
+    # the float, and a test that turns on that is testing numpy's rounding.
+    counts = pit_histogram([(i + 0.5) / 100 for i in range(100)])
+    assert counts == (10,) * 10
+    assert sum(counts) == 100
+
+
+def test_the_pit_histogram_puts_the_edges_in_the_end_bins() -> None:
+    """0.0 and 1.0 are legitimate PIT values and must not fall outside the range."""
+    counts = pit_histogram([0.0, 1.0, 0.5])
+    assert sum(counts) == 3
+    assert counts[0] == 1 and counts[-1] == 1
+
+
+def test_an_empty_pit_histogram_refuses() -> None:
+    with pytest.raises(AggregationError, match="at least one item"):
+        pit_histogram([])
+
+
+def test_a_degenerate_resample_is_dropped_and_the_rest_still_report() -> None:
+    """Blocks whose outcomes are all exactly zero have no defined ratio. They are
+    dropped, not replaced by a guess, and their absence must not stop the interval."""
+    realised = [0.0] * 40 + [0.03, -0.02] * 20
+    stated = [0.04] * 80
+    days = [0] * 40 + [i // 2 * 7 + 70 for i in range(40)]
+    result = calibration_interval(stated, realised, days, draws=400)
+    assert result.lower < result.upper
+    assert result.n == 80
+
+
+def test_an_all_zero_panel_refuses_on_the_point_estimate() -> None:
+    with pytest.raises(AggregationError, match="realised outcomes are all zero"):
+        calibration_interval([0.04] * 20, [0.0] * 20, list(range(20)), draws=50)
+
+
+def test_an_interval_with_no_surviving_draw_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reachable only when the panel has a defined ratio but every resample lands
+    on zeros. Driven directly, because contriving it through the sampler would take
+    a panel so degenerate it would be testing the fixture."""
+    realised = [0.0] * 19 + [0.05]
+    monkeypatch.setattr(
+        "mapf.eval.aggregate.block_resamples",
+        lambda *a, **k: iter([np.arange(19)] * 5),
+    )
+    with pytest.raises(AggregationError, match="no bootstrap resample"):
+        calibration_interval([0.04] * 20, realised, list(range(20)), draws=5)

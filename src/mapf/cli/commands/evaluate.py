@@ -59,7 +59,15 @@ from mapf.corpus.passes import (
 from mapf.corpus.runner import plan
 from mapf.corpus.selection import Corpus
 from mapf.data.earnings import EdgarEarningsCalendar
-from mapf.eval.aggregate import Comparison, calibration_ratio, compare, leakage, summarise
+from mapf.eval.aggregate import (
+    AggregationError,
+    Comparison,
+    calibration_interval,
+    compare,
+    leakage,
+    pit_histogram,
+    summarise,
+)
 from mapf.eval.scorer import BandScores, VintageError, require_one_vintage, score_band
 from mapf.pipeline.run import TRACE_FILE
 from mapf.pipeline.trace import audit_trace
@@ -300,6 +308,8 @@ def evaluate(
                 if other is not None:
                     _leakage(other, corpus, ledger, runs_dir, settings, calendar, scores, split)
 
+        if not check:
+            _report_strata(scores, forecasts, ledger, runs_dir)
         _sensitivity(scores, forecasts, counts_only=check)
 
         if not check:
@@ -695,10 +705,10 @@ def _score(
 # ---------------------------------------------------------------------------
 # The report
 # ---------------------------------------------------------------------------
-def _comparisons(scores: BandScores) -> list[Comparison]:
+def _comparisons(scores: BandScores, metric: str = "crps") -> list[Comparison]:
     out: list[Comparison] = []
     for name in sorted({n for item in scores.items for n in item.baseline_crps}):
-        model, base, days = scores.paired(name)
+        model, base, days = scores.paired(name, metric)
         if model:
             out.append(compare(model, base, days, name="M.A.P.", baseline=name))
     return out
@@ -717,18 +727,96 @@ def _report(scores: BandScores, band: str, calendar: EdgarEarningsCalendar) -> N
     for reason, count in sorted(scores.unscored.items()):
         typer.echo(f"           {count} unscored: {reason}")
 
-    typer.echo("")
-    for line in summarise(_comparisons(scores)):
-        typer.echo(f"  {line}")
+    # All three scoring rules, against every baseline. They disagree by design: CRPS
+    # is forgiving in the tails, the log score is not, and Brier ignores magnitude
+    # entirely. Reporting only the one that flatters a result is the failure mode
+    # this exists to remove, so the choice of which to read is not made here.
+    for metric in ("crps", "log score"):
+        typer.echo("")
+        typer.secho(f"  {metric}:", bold=True)
+        for line in summarise(_comparisons(scores, metric)):
+            typer.echo(f"    {line}")
 
-    realised = [item.realised_return for item in scores.items]
-    k = calibration_ratio([item.map_sigma for item in scores.items], realised)
-    typer.echo("")
-    typer.echo(
-        f"  calibration: stated sigma / realised = {k:.3f} "
-        f"({'over' if k > 1 else 'under'}-dispersed; 1.0 is calibrated)"
-    )
+    _directional(scores)
+    _dispersion(scores)
     _benchmark_strength(scores, calendar)
+
+
+def _directional(scores: BandScores) -> None:
+    """Brier on direction, against the only reference the baselines can offer.
+
+    Every baseline is zero-drift **by construction** — the drift is set to zero
+    rather than estimated, because a mean return fitted from a year of dailies has
+    a standard error about the size of the volatility. So each predicts P(up) = 0.5
+    and scores exactly 0.25 on every item, and "M.A.P. vs random_walk" and "M.A.P.
+    vs garch" on Brier are the same comparison written twice.
+
+    Printing all three would have shown three identical intervals and read as three
+    pieces of agreeing evidence. It is one, and the reference it is against is a
+    coin flip — which is worth saying out loud, because beating a coin flip on
+    direction is a much weaker claim than beating GARCH on CRPS.
+    """
+    typer.echo("")
+    typer.secho("  brier (direction):", bold=True)
+    if scores.baselines_carry_direction:
+        for line in summarise(_comparisons(scores, "brier")):
+            typer.echo(f"    {line}")
+        return
+    days = scores.day_index
+    mine = scores.scores("brier")
+    coin = [0.25] * len(mine)
+    comparison = compare(mine, coin, days, name="M.A.P.", baseline="a coin flip")
+    for line in summarise([comparison]):
+        typer.echo(f"    {line}")
+    typer.echo(
+        "    every baseline is zero-drift by construction, so all three predict "
+        "P(up)=0.5 and score exactly 0.25 on every item — this is ONE comparison, "
+        "against a coin flip, not three against three baselines"
+    )
+    low, middle, high = scores.conviction
+    typer.echo(
+        f"    directional accuracy {scores.directional_accuracy:.1%} "
+        f"({scores.directional_hits:g} of {scores.n}; 50% is the coin)"
+    )
+    typer.echo(
+        f"    P(up) spans {low:.3f}-{high:.3f}, median {middle:.3f} — the model "
+        "rarely commits to a direction, which is why this rule cannot separate it "
+        "from the coin either way"
+    )
+
+
+def _dispersion(scores: BandScores) -> None:
+    """The calibration ratio with an interval, and the PIT shape underneath it.
+
+    The ratio alone says how far off the dispersion is; the histogram says in what
+    way, and they can disagree — a ratio near 1.0 sits comfortably on top of a
+    U-shaped PIT if the model is too narrow on some items and too wide on others.
+    Reporting both is what stops "calibrated" meaning "the average was fine".
+    """
+    realised = [item.realised_return for item in scores.items]
+    stated = [item.map_sigma for item in scores.items]
+    typer.echo("")
+    try:
+        k = calibration_interval(stated, realised, scores.day_index)
+    except AggregationError as error:
+        typer.secho(f"  calibration: not computed — {error}", fg=typer.colors.YELLOW)
+        return
+    typer.echo(
+        f"  calibration: stated sigma / realised = {k.ratio:.3f} "
+        f"[{k.lower:.3f}, {k.upper:.3f}] — {k.verdict} (1.0 is calibrated)"
+    )
+    counts = pit_histogram(scores.pit_values)
+    expected = scores.n / len(counts)
+    typer.echo(f"  PIT ({scores.n} items, {expected:.1f} expected per bin):")
+    widest = max(counts) or 1
+    for index, count in enumerate(counts):
+        lo = index / len(counts)
+        bar = "#" * round(count / widest * 32)
+        typer.echo(f"    {lo:.1f}-{lo + 1 / len(counts):.1f}  {count:4}  {bar}")
+    typer.echo(
+        "    a U means too narrow, a hump too wide, a tilt biased; "
+        f"flat at {expected:.1f} is calibrated"
+    )
 
 
 def _benchmark_strength(scores: BandScores, calendar: EdgarEarningsCalendar) -> None:
@@ -861,6 +949,93 @@ def _leakage(
         + ("  — SUGGESTS LEAKAGE" if estimate.suggests_leakage else ""),
         fg=typer.colors.RED if estimate.suggests_leakage else typer.colors.GREEN,
     )
+
+
+def _strata(
+    loaded: Sequence[Loaded], ledger: Ledger, runs_dir: Path
+) -> dict[str, set[tuple[str, date]]]:
+    """The subsets that have to be reported apart because of how they were produced.
+
+    Every one is DERIVED — from the ledger's own history, or from the run manifest —
+    rather than listed as tickers. A hardcoded list is a claim about the corpus that
+    stops being true the moment the corpus changes, and nothing would say so; a
+    derived one is re-checkable against the evidence it came from, and its count is
+    a fact rather than a memory.
+
+    `resolved()` is the wrong source for the recovery strata: it keeps the final
+    entry per item, and an item that failed and then succeeded looks untouched
+    there. The failures are in the raw history, which is why the ledger is walked.
+    """
+    history: dict[tuple[str, str, date], set[str]] = {}
+    for entry in ledger.entries():
+        if entry.status != "complete" and entry.reason is not None:
+            history.setdefault(entry.key, set()).add(str(entry.reason))
+
+    def recovered(*reasons: str) -> set[tuple[str, date]]:
+        wanted = set(reasons)
+        return {i.key for i in loaded if history.get(i.entry.key, set()) & wanted}
+
+    dirty: set[tuple[str, date]] = set()
+    for item in loaded:
+        manifest = _manifest_of(runs_dir, item.entry.run_id)
+        version = manifest.get("code_version") if manifest else None
+        if isinstance(version, dict) and version.get("dirty"):
+            dirty.add(item.key)
+
+    return {
+        "truncated exhibits (ADR 0020)": {i.key for i in loaded if i.entry.truncated},
+        "degeneration retries (ADR 0021)": {i.key for i in loaded if i.entry.degeneration_retry},
+        "recovered from a budget exhaustion": recovered("budget_exhausted"),
+        "recovered from the DNS outage": recovered("other", "market_data", "exhibit_unreachable"),
+        "produced from an uncommitted tree": dirty,
+    }
+
+
+def _report_strata(
+    scores: BandScores, loaded: Sequence[Loaded], ledger: Ledger, runs_dir: Path
+) -> None:
+    """Each named stratum scored on its own, and the rest scored without it.
+
+    Reported apart rather than pooled, per the standing instruction. Both halves are
+    shown because either alone misleads: a stratum's own scores on nine items say
+    little, and the remainder alone hides how much the stratum moved the total.
+
+    A stratum too small for a clustered interval is reported as a mean with its
+    count and no interval, and labelled as such. Printing a bootstrap interval over
+    one occupied block would be a number with no content.
+    """
+    typer.echo("")
+    typer.secho("  named strata, reported separately rather than pooled:", bold=True)
+    scored = {(i.ticker, i.as_of) for i in scores.items}
+    for label, keys in _strata(loaded, ledger, runs_dir).items():
+        present = keys & scored
+        typer.echo("")
+        if not present:
+            typer.echo(f"  {label}: no scored item in this split")
+            continue
+        inside = tuple(i for i in scores.items if (i.ticker, i.as_of) in present)
+        outside = tuple(i for i in scores.items if (i.ticker, i.as_of) not in present)
+        typer.echo(f"  {label}: {len(inside)} of {scores.n}")
+        for name, subset in (("within", inside), ("without", outside)):
+            if not subset:
+                typer.echo(f"    {name}: empty")
+                continue
+            group = BandScores(items=subset, unscored={})
+            mean = sum(i.map_crps for i in subset) / len(subset)
+            typer.echo(f"    {name} ({len(subset)}): mean CRPS {mean:.5f}")
+            if len(subset) < _INTERVAL_MINIMUM:
+                typer.echo(
+                    f"      no interval — {len(subset)} items over "
+                    f"{len({i.day_index // 10 for i in subset})} block(s) does not "
+                    "support one"
+                )
+                continue
+            for line in summarise(_comparisons(group)):
+                typer.echo(f"      {line}")
+
+
+# Below this, a clustered bootstrap is reporting the resample rather than the panel.
+_INTERVAL_MINIMUM = 20
 
 
 def _sensitivity(

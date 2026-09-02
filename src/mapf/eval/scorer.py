@@ -48,7 +48,7 @@ from mapf.eval.baselines import (
     random_walk,
 )
 from mapf.eval.montecarlo import DEFAULT_PATHS, crps_against, simulate
-from mapf.eval.scoring import crps_normal, pit
+from mapf.eval.scoring import brier, crps_normal, log_score_normal, pit
 
 # Prices should match the forecast's recorded spot to the cent. A tolerance this
 # loose only catches genuine drift — a different adjustment basis or vintage —
@@ -118,7 +118,24 @@ class ScoredItem:
     map_crps: float
     map_sigma: float
     map_pit: float
+    # The log score and Brier are taken on a NORMAL fitted to the simulation's mean
+    # and sigma, not on the ensemble itself. A density estimate over the paths would
+    # need a bandwidth, and a bandwidth is a free parameter chosen after seeing the
+    # outcome unless it is pre-registered. `map_pit` already uses the same normal, so
+    # the three agree about what distribution is being scored.
+    map_log_score: float
+    # Brier is the exception, and deliberately: P(up) is read straight off the
+    # ensemble, because a directional probability is exactly what the paths answer
+    # without any smoothing at all.
+    map_brier: float
+    # Kept so the directional claim can be reported as an accuracy, not only as a
+    # squared error. A Brier of 0.25 is what a coin flip scores AND what a confident
+    # forecaster scores when it is wrong exactly half the time; the two are only
+    # distinguishable if the probabilities themselves are available.
+    map_probability_up: float
     baseline_crps: dict[str, float]
+    baseline_log_score: dict[str, float]
+    baseline_brier: dict[str, float]
     # The series this item was scored against. Carried per item so `score_band` can
     # refuse a band whose items were priced from different sources — the reachable
     # half of the vintage problem (ADR 0023).
@@ -219,8 +236,16 @@ def score_item(
     ).before(as_of)
 
     baselines: dict[str, float] = {}
+    baseline_log: dict[str, float] = {}
+    baseline_dir: dict[str, float] = {}
     for name, prediction in _fit(prior, past_earnings, forecast.horizon_days):
         baselines[name] = float(crps_normal(prediction.mean, prediction.sigma, outcome))
+        baseline_log[name] = float(log_score_normal(prediction.mean, prediction.sigma, outcome))
+        # P(up) for a normal is the survival function at zero. Every baseline IS a
+        # normal, so this is the exact directional probability, not an approximation.
+        baseline_dir[name] = float(
+            brier(0.5 * math.erfc(-prediction.mean / (prediction.sigma * math.sqrt(2.0))), outcome)
+        )
 
     # Recomputed rather than plumbed out of the baseline: it is a few hundred
     # floats through `np.std`, and threading a second return value through
@@ -242,7 +267,12 @@ def score_item(
         map_crps=crps_against(simulation, outcome),
         map_sigma=simulation.sigma,
         map_pit=float(pit(simulation.mean, simulation.sigma, outcome)),
+        map_log_score=float(log_score_normal(simulation.mean, simulation.sigma, outcome)),
+        map_brier=float(brier(simulation.probability_above(0.0), outcome)),
+        map_probability_up=float(simulation.probability_above(0.0)),
         baseline_crps=baselines,
+        baseline_log_score=baseline_log,
+        baseline_brier=baseline_dir,
         provider=window.provider,
         adjustment=window.adjustment,
         earnings_multiplier=multiplier,
@@ -275,6 +305,15 @@ def _fit(
     return out
 
 
+# Which pair of fields each scoring rule lives in. Lower is better for all three,
+# so one bootstrap comparison serves them without a sign convention per metric.
+_METRICS: dict[str, tuple[str, str]] = {
+    "crps": ("map_crps", "baseline_crps"),
+    "log score": ("map_log_score", "baseline_log_score"),
+    "brier": ("map_brier", "baseline_brier"),
+}
+
+
 @dataclass(frozen=True)
 class BandScores:
     """Every scored item in a band, plus what could not be scored and why."""
@@ -292,22 +331,83 @@ class BandScores:
             return [item.map_crps for item in self.items]
         return [item.baseline_crps[name] for item in self.items if name in item.baseline_crps]
 
-    def paired(self, name: str) -> tuple[list[float], list[float], list[int]]:
+    def paired(self, name: str, metric: str = "crps") -> tuple[list[float], list[float], list[int]]:
         """M.A.P. and one baseline on exactly the items both scored.
 
         Pairing requires the same items on both sides; a baseline that failed on
         some of them must not be compared against M.A.P.'s scores on all of them.
+
+        `metric` selects which scoring rule is paired. All three are lower-is-better,
+        which is what lets one comparison routine serve them.
         """
-        both = [i for i in self.items if name in i.baseline_crps]
+        mine, theirs = _METRICS[metric]
+        both = [i for i in self.items if name in getattr(i, theirs)]
         return (
-            [i.map_crps for i in both],
-            [i.baseline_crps[name] for i in both],
+            [float(getattr(i, mine)) for i in both],
+            [float(getattr(i, theirs)[name]) for i in both],
             [i.day_index for i in both],
         )
+
+    def scores(self, metric: str = "crps", name: str | None = None) -> list[float]:
+        """M.A.P.'s scores on `metric` when `name` is None, otherwise that baseline's."""
+        mine, theirs = _METRICS[metric]
+        if name is None:
+            return [float(getattr(item, mine)) for item in self.items]
+        return [float(getattr(i, theirs)[name]) for i in self.items if name in getattr(i, theirs)]
 
     @property
     def day_index(self) -> list[int]:
         return [item.day_index for item in self.items]
+
+    @property
+    def directional_hits(self) -> float:
+        """Correct calls, ties counted as a half. Reported alongside the rate so a
+        round percentage reads as the count it came from rather than a placeholder."""
+        hits = 0.0
+        for item in self.items:
+            up = item.realised_return > 0
+            if item.map_probability_up == 0.5:
+                hits += 0.5
+            elif (item.map_probability_up > 0.5) == up:
+                hits += 1.0
+        return hits
+
+    @property
+    def conviction(self) -> tuple[float, float, float]:
+        """How far from 0.5 the directional claims actually go: min, median, max.
+
+        The diagnostic that makes a coin-flip Brier interpretable. A model that never
+        leaves [0.45, 0.55] cannot beat a coin on direction no matter how right it is
+        about magnitude, and that is a fact about the forecasts rather than a failure
+        of the scoring rule.
+        """
+        values = sorted(item.map_probability_up for item in self.items)
+        if not values:
+            return (0.0, 0.0, 0.0)
+        middle = values[len(values) // 2]
+        return (values[0], middle, values[-1])
+
+    @property
+    def directional_accuracy(self) -> float:
+        """How often the side with more than half the paths was the side that happened.
+
+        Items where the model is exactly split are counted as half, rather than
+        rounded to a direction it did not claim.
+        """
+        return self.directional_hits / len(self.items) if self.items else 0.0
+
+    @property
+    def baselines_carry_direction(self) -> bool:
+        """Whether the baselines make any directional claim at all.
+
+        All three are zero-drift by construction, so each predicts P(up) = 0.5 and
+        scores exactly 0.25 on every item — which makes "M.A.P. vs random_walk on
+        Brier" and "M.A.P. vs garch on Brier" the SAME comparison, printed twice.
+        Checked rather than assumed, so a baseline that later gains a drift term
+        goes back to being reported on its own.
+        """
+        scores = {round(v, 12) for item in self.items for v in item.baseline_brier.values()}
+        return scores != {0.25}
 
     @property
     def pit_values(self) -> list[float]:

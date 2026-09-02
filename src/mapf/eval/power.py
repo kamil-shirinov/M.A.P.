@@ -27,6 +27,7 @@ quarter of it is precisely the failure this exists to prevent.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterator
 from dataclasses import dataclass
 
 import numpy as np
@@ -148,24 +149,40 @@ def moving_block_bootstrap(
     smaller than the sample, which is why the calendar-span experiment in ADR 0015
     produced a result that had to be withheld.
     """
+    means = np.empty(draws, dtype=np.float64)
+    for draw, index in enumerate(block_resamples(starts, rng, draws=draws, block_days=block_days)):
+        means[draw] = float(np.mean(differences[index]))
+    return means
+
+
+def block_resamples(
+    starts: NDArray[np.int64],
+    rng: np.random.Generator,
+    *,
+    draws: int,
+    block_days: int,
+) -> Iterator[NDArray[np.int64]]:
+    """The resampling of `moving_block_bootstrap`, yielding INDICES rather than means.
+
+    Split out so a statistic that is not a mean of paired differences — the
+    calibration ratio is a ratio of two root-mean-squares — can be bootstrapped on
+    exactly the same blocks. Re-deriving the clustering beside it would let the two
+    drift apart, and an interval computed under a different dependence assumption
+    than the one beside it is not comparable to it.
+    """
     order = np.argsort(starts)
     sorted_starts = starts[order]
-    sorted_diffs = differences[order]
     occupied = np.unique(sorted_starts)
-    target = differences.size
-
-    means = np.empty(draws, dtype=np.float64)
-    for draw in range(draws):
-        picked: list[NDArray[np.float64]] = []
+    target = starts.size
+    for _ in range(draws):
+        picked: list[NDArray[np.int64]] = []
         taken = 0
         while taken < target:
             begin = int(occupied[rng.integers(0, occupied.size)])
             lo, hi = np.searchsorted(sorted_starts, (begin, begin + block_days))
-            picked.append(sorted_diffs[lo:hi])
+            picked.append(order[lo:hi])
             taken += hi - lo
-        resample = np.concatenate(picked)[:target]
-        means[draw] = float(np.mean(resample))
-    return means
+        yield np.concatenate(picked)[:target]
 
 
 def occupied_blocks(starts: NDArray[np.int64], block_days: int) -> int:

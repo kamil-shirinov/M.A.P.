@@ -21,6 +21,7 @@ from mapf.core.models import Bar, Forecast, ModelVersions, PriceWindow
 from mapf.eval.scorer import (
     EPOCH,
     BandScores,
+    ScoredItem,
     ScoringError,
     SpotDriftError,
     WindowNotClosedError,
@@ -342,3 +343,82 @@ def test_crps_can_be_read_for_a_single_baseline() -> None:
     )
     assert len(scores.crps("random_walk")) == 2
     assert scores.crps("random_walk") != scores.crps()
+
+
+# Direction, and whether the baselines can say anything about it
+
+
+def _scored(**kw: object) -> ScoredItem:
+    base: dict[str, object] = {
+        "ticker": "AAA",
+        "band": "clean",
+        "as_of": date(2026, 1, 5),
+        "horizon_days": 5,
+        "realised_return": 0.02,
+        "day_index": 0,
+        "map_crps": 0.01,
+        "map_sigma": 0.05,
+        "map_pit": 0.5,
+        "map_log_score": -1.0,
+        "map_brier": 0.09,
+        "map_probability_up": 0.7,
+        "baseline_crps": {"random_walk": 0.02},
+        "baseline_log_score": {"random_walk": -0.9},
+        "baseline_brier": {"random_walk": 0.25},
+    }
+    base.update(kw)
+    return ScoredItem(**base)  # type: ignore[arg-type]
+
+
+def test_zero_drift_baselines_are_reported_as_carrying_no_direction() -> None:
+    """All three baselines set mean=0.0, so each scores exactly 0.25 on every item.
+    Three identical Brier comparisons would read as three pieces of evidence."""
+    scores = BandScores(items=(_scored(), _scored(realised_return=-0.01)), unscored={})
+    assert not scores.baselines_carry_direction
+
+
+def test_a_baseline_with_drift_is_compared_on_its_own() -> None:
+    """Checked rather than assumed: a baseline that later gains a drift term must
+    go back to being reported separately."""
+    scores = BandScores(items=(_scored(baseline_brier={"drifting": 0.16}), _scored()), unscored={})
+    assert scores.baselines_carry_direction
+
+
+def test_a_tie_counts_as_half_a_call_not_a_correct_one() -> None:
+    """P(up) of exactly 0.5 claims no direction; scoring it as a hit would inflate
+    the accuracy of a model that declined to answer."""
+    scores = BandScores(
+        items=(_scored(map_probability_up=0.5), _scored(map_probability_up=0.5)),
+        unscored={},
+    )
+    assert scores.directional_hits == 1.0
+    assert scores.directional_accuracy == 0.5
+
+
+def test_directional_accuracy_reads_the_side_not_the_magnitude() -> None:
+    right = _scored(map_probability_up=0.51, realised_return=0.9)
+    wrong = _scored(map_probability_up=0.99, realised_return=-0.001)
+    scores = BandScores(items=(right, wrong), unscored={})
+    assert scores.directional_hits == 1.0
+
+
+def test_conviction_reports_the_span_of_the_directional_claim() -> None:
+    items = tuple(_scored(map_probability_up=p) for p in (0.30, 0.50, 0.62))
+    low, middle, high = BandScores(items=items, unscored={}).conviction
+    assert (low, middle, high) == (0.30, 0.50, 0.62)
+
+
+def test_conviction_of_an_empty_band_is_not_a_crash() -> None:
+    assert BandScores(items=(), unscored={}).conviction == (0.0, 0.0, 0.0)
+    assert BandScores(items=(), unscored={}).directional_accuracy == 0.0
+
+
+def test_the_metric_selector_pairs_the_right_pair_of_fields() -> None:
+    """`paired` reaching for map_crps while indexing baseline_log_score would still
+    return numbers, and they would be silently meaningless."""
+    scores = BandScores(items=(_scored(),), unscored={})
+    assert scores.paired("random_walk", "crps")[:2] == ([0.01], [0.02])
+    assert scores.paired("random_walk", "log score")[:2] == ([-1.0], [-0.9])
+    assert scores.paired("random_walk", "brier")[:2] == ([0.09], [0.25])
+    assert scores.scores("log score") == [-1.0]
+    assert scores.scores("brier", "random_walk") == [0.25]

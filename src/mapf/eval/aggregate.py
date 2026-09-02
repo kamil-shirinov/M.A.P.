@@ -28,7 +28,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from mapf.core.errors import MapError
-from mapf.eval.power import moving_block_bootstrap, occupied_blocks
+from mapf.eval.power import block_resamples, moving_block_bootstrap, occupied_blocks
 
 # Scores arrive either as plain lists or as arrays straight out of a scoring pass;
 # insisting on one would push a conversion onto every caller.
@@ -202,6 +202,85 @@ def calibration_ratio(stated_sigma: Floats, realised: Floats) -> float:
     if rms_actual <= 0.0:
         raise AggregationError("realised outcomes are all zero; ratio is undefined")
     return float(np.sqrt(np.mean(stated**2))) / rms_actual
+
+
+@dataclass(frozen=True)
+class Calibration:
+    """The dispersion ratio with an interval, on the same blocks as the CRPS tests."""
+
+    ratio: float
+    lower: float
+    upper: float
+    n: int
+
+    @property
+    def verdict(self) -> str:
+        """`calibrated` only when the interval covers 1.0 — not when the point
+        estimate happens to land near it."""
+        if self.lower > 1.0:
+            return "over-dispersed"
+        if self.upper < 1.0:
+            return "under-dispersed"
+        return "indistinguishable from calibrated"
+
+
+def calibration_interval(
+    stated_sigma: Floats,
+    realised: Floats,
+    day_index: Ints,
+    *,
+    horizon_days: int = 5,
+    draws: int = 2000,
+    seed: int = 20260813,
+    confidence: float = 0.95,
+) -> Calibration:
+    """`calibration_ratio` with a calendar-clustered interval around it.
+
+    A bare ratio of 0.73 invites the reading that the model is 27% too narrow, when
+    the honest question is whether it is distinguishable from 1.0 at all on a panel
+    of eighteen occupied blocks. Bootstrapped on the SAME blocks as the CRPS
+    comparisons, so the two intervals rest on one dependence assumption.
+    """
+    stated = np.asarray(stated_sigma, dtype=np.float64)
+    actual = np.asarray(realised, dtype=np.float64)
+    days = np.asarray(day_index, dtype=np.int64)
+    if not (stated.size == actual.size == days.size):
+        raise AggregationError(
+            f"calibration inputs disagree in length: stated={stated.size}, "
+            f"realised={actual.size}, days={days.size}"
+        )
+    point = calibration_ratio(stated, actual)
+    ratios: list[float] = []
+    rng = np.random.default_rng(seed)
+    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2):
+        try:
+            ratios.append(calibration_ratio(stated[index], actual[index]))
+        except AggregationError:
+            # A resample whose outcomes are all exactly zero has no defined ratio.
+            # Dropping it is the only option that does not invent one; if EVERY
+            # draw is like that the interval is refused below rather than widened
+            # to hide it.
+            continue
+    if not ratios:
+        raise AggregationError("no bootstrap resample produced a defined ratio")
+    tail = (1.0 - confidence) / 2.0 * 100.0
+    lower, upper = np.percentile(np.asarray(ratios, dtype=np.float64), [tail, 100.0 - tail])
+    return Calibration(ratio=point, lower=float(lower), upper=float(upper), n=int(stated.size))
+
+
+def pit_histogram(values: Floats, *, bins: int = 10) -> tuple[int, ...]:
+    """Counts per equal-width PIT bin. Flat is calibrated.
+
+    Reported as counts rather than as a single deviation statistic because the SHAPE
+    carries the diagnosis: a U means too narrow, a hump means too wide, and a tilt
+    means biased. `pit_deviation` collapses all three into one number that cannot
+    tell them apart.
+    """
+    series = np.asarray(values, dtype=np.float64)
+    if series.size == 0:
+        raise AggregationError("PIT histogram needs at least one item")
+    counts, _ = np.histogram(series, bins=bins, range=(0.0, 1.0))
+    return tuple(int(c) for c in counts)
 
 
 def summarise(comparisons: Sequence[Comparison]) -> tuple[str, ...]:
