@@ -322,3 +322,124 @@ INTERPRETATION, FIXED IN ADVANCE:
 The withdrawal conditions of record 2 are unchanged and still binding: if
 M.A.P.'s own three statistics do not replicate, the thin-tails reading is
 withdrawn and Student-t is not adopted, whatever the baselines do.
+
+=============================================================================
+RECORD 5 — the baseline comparison made PAIRED, and the sigma hypothesis re-cut
+written 2026-09-02, ambiguous band running, no ambiguous item scored
+supersedes the marginal reading in record 4 Part A
+=============================================================================
+
+Item alignment was verified rather than assumed: all three z-series carry the
+same 178 day indices in the same order, asserted before anything was computed.
+
+-----------------------------------------------------------------------------
+PART A — PAIRED COMPARISON. It narrows the claim, and one half of it fails.
+-----------------------------------------------------------------------------
+Record 4 compared marginal intervals: M.A.P.'s tail-ratio CI excluded 1.0 and
+both baselines' covered it. That is the weak form -- the difference between
+"significant" and "not significant" is not itself significant -- and pairing was
+the correct test on identical outcomes. It does not all survive.
+
+TAIL RATIO, paired within each block resample:
+    M.A.P. - random_walk   +0.1524   CI [-0.0575, +0.3608]   COVERS 0
+    M.A.P. - garch         +0.1487   CI [-0.0552, +0.3700]   COVERS 0
+
+  The tail ratio does NOT establish that M.A.P.'s tails are heavier than the
+  baselines'. The marginal reading in record 4 Part A overstated this and is
+  superseded. Note the two questions are different and both remain on the
+  record: "is M.A.P.'s ratio above 1.0?" (marginal, versus Gaussian, CI excludes
+  1.0, p=0.0165 raw / 0.066 family-corrected) and "is it above the baselines'?"
+  (paired, not established). Only the second is the control question.
+
+EXCEEDANCES, as discordant pairs on the same items:
+  |z| > 2.5   vs random_walk   both 2   M.A.P. only 9 (5blk)   RW only 4
+                rate diff CI [-0.0281, +0.0730]  covers 0   McNemar p=0.267
+              vs garch         both 2   M.A.P. only 9 (5blk)   garch only 1
+                rate diff CI [+0.0112, +0.0843]  EXCLUDES 0  McNemar p=0.0215
+  |z| > 3.0   vs random_walk   both 1   M.A.P. only 6 (4blk)   RW only 0
+                rate diff CI [+0.0169, +0.0562]  EXCLUDES 0  McNemar p=0.0312
+              vs garch         both 1   M.A.P. only 6 (4blk)   garch only 0
+                rate diff CI [+0.0169, +0.0562]  EXCLUDES 0  McNemar p=0.0312
+  |z| > 4.0   both baselines   both 0   M.A.P. only 2 (2blk)   baseline only 0
+                rate diff CI [+0.0000, +0.0281]  covers 0
+  (McNemar exact p assumes independent pairs and is anti-conservative here; the
+  cluster-robust rate-difference CI is the one to read.)
+
+  READING: the comparative tail claim rests specifically and only on the |z|>3
+  EXCEEDANCES -- six items where M.A.P. blows through three sigma and the
+  baseline does not, none the other way, spread over four distinct blocks,
+  against both baselines. It does NOT rest on the tail ratio, and at |z|>2.5 it
+  holds against GARCH but not against the random walk.
+
+  Record 1 said the exceedance counts were the strongest component. The paired
+  analysis confirms that and sharpens it: they are the ONLY component of the
+  comparative claim.
+
+-----------------------------------------------------------------------------
+PART B — SIGMA ALLOCATION, re-cut without conditioning on the outcome
+-----------------------------------------------------------------------------
+Record 4 cut sigma_MAP/sigma_RW on |z|>2.5. That is circular: z = r/sigma, so
+selecting large |z| selects small sigma mechanically. Withdrawn as evidence and
+replaced with two statements that do not touch the outcome being explained.
+
+STATEMENT 1 -- no selection at all. Regress log sigma_MAP on log sigma_RW:
+    correlation                 0.6251
+    slope                       0.3166   CI [0.2609, 0.3811]   FAR BELOW 1
+    sd(log sigma_MAP)  0.2183  vs  sd(log sigma_RW)  0.4311
+    cross-sectional spread ratio  0.5065
+
+  M.A.P.'s volatilities span about HALF the cross-sectional range of a trailing
+  realised-volatility baseline, and move about a third as fast with it. This is
+  a whole-sample statement with no cut and no outcome in it.
+
+STATEMENT 2 -- cut on the largest |realised return|, which neither model
+produced, so the selection cannot be induced by either model's sigma:
+    overall median sigma_MAP/sigma_RW  0.8137
+    top 11 by |return|   0.4575 vs 0.8492 rest   diff -0.3917  CI [-0.4767, -0.2609]
+    top 18               0.5181 vs 0.8544        diff -0.3363  CI [-0.4173, -0.2720]
+    top 36               0.5776 vs 0.8659        diff -0.2882  CI [-0.3617, -0.0908]
+  All three exclude zero, and the effect is monotone in the depth of the cut.
+
+  THE HYPOTHESIS SURVIVES THE CLEAN SELECTION. It is if anything stronger: at
+  k=11 the model-independent cut gives 0.4575 where the contaminated |z| cut
+  gave 0.5406, so the original number was not manufactured by its selection.
+
+  Named: VOLATILITY COMPRESSION. M.A.P. states too narrow a range of
+  volatilities across names -- roughly right in the middle of the cross-section,
+  far too narrow on the names that actually move.
+
+  It is still POST-HOC on a development half that has been examined many times,
+  and it is not established. It is now a sharp, well-identified hypothesis
+  rather than a selected artefact.
+
+-----------------------------------------------------------------------------
+PART C — what this changes, and one decision left open
+-----------------------------------------------------------------------------
+Compression would explain every observation in one mechanism: too-small sigma on
+high-volatility names produces the |z|>3 exceedances; those few items dominate
+the RMS and so the 0.733 calibration ratio; the rank-based PIT barely moves,
+which is why it looks uniform; and the body's MAD-scale sits near 1.0 because
+the middle of the cross-section is fine.
+
+If so, NONE of ADR 0032's family is the right correction. A location shift, a
+scale factor and a Student-t all act uniformly across items; a cross-sectional
+mis-allocation needs a per-item map -- expanding log sigma toward the baseline's
+spread. That is a different Phase 3 than the one pre-registered.
+
+OPEN AND NOT DECIDED HERE: the ambiguous-band pre-registration (records 2 and 4)
+does NOT include the compression statistics, because it was written before this
+analysis existed. Adding them is a governance decision, not mine to take
+silently, and there is still time -- the band is at 23 of 353 and has scored
+nothing. PROPOSED, for approval or rejection before it finishes:
+
+    on the ambiguous band, the same two selection-free statements --
+      (i)  slope and CI of log sigma_MAP on log sigma_RW, plus the spread ratio
+      (ii) median sigma_MAP/sigma_RW on the top 11/18/36 by |realised return|
+           versus the rest, with cluster-robust CIs
+    prediction: slope well below 1, spread ratio near 0.5, all three cuts
+    negative and excluding zero
+    if it does not replicate, volatility compression is withdrawn and ADR 0032's
+    family stands unchallenged
+
+Until that is approved this remains a development-only hypothesis and the
+pre-registered plan of records 2 and 4 is unchanged.
