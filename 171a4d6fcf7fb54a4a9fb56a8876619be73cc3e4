@@ -912,3 +912,154 @@ The pattern worth keeping: every one of my errors was in the direction of a
 STRONGER claim, and every correction weakened it. That is what a systematic bias
 looks like from the inside, and it is the argument for the holdout staying
 unspent rather than for trying harder next time.
+
+=============================================================================
+RECORD 10 — what the allowance of 8 counts, and the DNS burst of 2026-09-02
+written 2026-09-02, ambiguous band mid-run, no file edited and no commit made
+=============================================================================
+
+-----------------------------------------------------------------------------
+PART A — ADR 0027 VERBATIM, because the question is what it already says
+-----------------------------------------------------------------------------
+The context table is headed:
+
+  | | permanent failures | rate | projected at 356 | allowance of 8 crossed at |
+  | now | ALLY, ATI | 2/78 = 2.56% | 9.1 | item 312 |
+
+and immediately below it:
+
+  "The five `other` failures from the DNS drop all completed on retry and
+   correctly charge nothing (ADR 0024)."
+
+Later, on the two rates:
+
+  | per-attempt runaway rate | 7 / 358 = 1.96% | ledger entries that reached the
+    analyst -- larger than 356 because ACGL, ALLY, WH and CHD each reached it twice |
+  | per-item exclusion rate  | 3 / 356 = 0.84% | corpus items, of which ACGL,
+    ALLY and WH were removed |
+
+and:
+
+  "The DNS four are not part of this. CP, ELV, LVS and WAL failed before any
+   model call completed -- the exhibit fetch failed -- so their retry produced a
+   *first* successful draw, not a second one."
+
+THE ADR IS NOT AMBIGUOUS. The allowance counts PERMANENT failures -- items absent
+from the final corpus. It distinguishes attempts from items explicitly, in a
+table built for that purpose, and it names DNS failures that completed on retry
+as charging NOTHING. That sentence was written on 2026-08-30, about the clean
+band's DNS four, three days before today's burst existed.
+
+So: transient retried attempts were never in scope, and NOTHING CHANGES. I am not
+resolving an ambiguity under pressure from a live run, because there is no
+ambiguity in the ADR to resolve. This record exists to show that was checked
+rather than assumed, and to report what checking turned up.
+
+By that count the ambiguous band today stands at:
+  59 distinct items attempted, 58 complete, 1 failed
+  the 1 is ATI 2025-02-04, output_truncated -- a genuine model runaway
+  every one of the 11 DNS-affected items has since completed on retry
+  permanent failures: 1 against an allowance of 8. No pressure of any kind.
+
+-----------------------------------------------------------------------------
+PART B — the implementation does NOT match the ADR on one path
+-----------------------------------------------------------------------------
+Found while checking the above, and recorded rather than fixed.
+
+  runner.py:485-487   every appended entry, including a transient failure, goes
+                      through `_absorb`, which does `health.failed += 1`
+  runner.py:522       `if health.failed > allowance` halts
+  runner.py:633-643   `_seed`, used on RESUME, folds in only `ledger.resolved()`
+                      -- and its docstring says why: "a transient failure from an
+                      earlier pass is absent from resolved() and will be retried,
+                      so counting it would charge the allowance for a failure
+                      that may not survive the retry"
+
+So a transient DNS failure CHARGES the cumulative allowance within a single
+process run, and DOES NOT charge it across a restart. The same failure counts or
+does not count depending on whether a restart happened to intervene. `_seed` has
+the ADR's semantics and the in-run path does not.
+
+This is the guard-versus-name shape again: the docstring on `_seed` states the
+correct rule and the other path never got it.
+
+NOT FIXED, DELIBERATELY. The band is running, a code edit would dirty the tree and
+strip the forecast digest from every remaining item, and -- more to the point --
+editing a halt threshold's arithmetic while a run is pressing against it is the
+move ADR 0027 calls disqualifying, whichever direction it moves. It is recorded
+here, with the line numbers, to be fixed when the band is finished and the tree
+is free.
+
+Its effect today was nil: the halt came from the consecutive rule, not the
+cumulative one. See Part C.
+
+-----------------------------------------------------------------------------
+PART C — the alternative, stated honestly, and why the five-consecutive rule
+covers it -- demonstrated rather than argued
+-----------------------------------------------------------------------------
+THE HONEST OBJECTION: if DNS failures never charge the cumulative allowance, a
+systematically broken resolver could fail every item in the band, each one
+retried, each one charging nothing, and the run would grind through 353 items
+with no halt pressure at all. A rule that excuses an entire failure class can be
+consumed by that class.
+
+ADR 0019 anticipated exactly this and gave it a different instrument:
+
+  | consecutive failures | 5 | the inference server down, a provider revoked,
+    disk full -- a state that will not fix itself |
+  | cumulative failures in a band | 2% (approx. 7 of 365) | slow attrition that
+    would still leave the corpus materially incomplete |
+
+  "Five consecutive is a strong systematic signal: at any plausible per-item
+   failure rate, an unbroken run of five is far more likely to be one cause than
+   five coincidences."
+
+The two thresholds catch different things ON PURPOSE. The cumulative cap is for
+scattered attrition, where each failure is its own small fact; the consecutive
+rule is for one cause hitting everything, where the count is irrelevant because
+the run of them is the evidence. A broken resolver is the second kind by
+definition -- it does not fail every fifth item, it fails everything until it is
+fixed -- so it trips the instrument built for it long before the count would
+matter.
+
+THIS IS NOT A THEORETICAL DEFENCE. It happened today, and it worked:
+
+  2026-09-02 15:47:08   HALTED -- halted on 5 consecutive failures;
+                        failures by reason: exhibit_error=1, exhibit_unreachable=5
+
+At the halt the progress line read `failed=6` against an allowance of 8. The
+cumulative counter had charged those transient failures (Part B) and STILL had
+not reached its limit. The consecutive rule fired first, after five items, and
+stopped the band. The resolver fault consumed five items, not three hundred.
+
+So the answer to the objection is: the class-exclusion cannot be consumed,
+because the failure mode that would consume it is the one the other threshold is
+for, and that threshold demonstrably fires first and fires early.
+
+-----------------------------------------------------------------------------
+PART D — a correction to my own report
+-----------------------------------------------------------------------------
+Earlier today I reported the band as "RUNNING" with "17 failures in 71 items,
+24%". Both figures were entries, not items, and the band was NOT running as I
+described: it had halted at 15:47:08 and a second invocation was started
+afterwards, which is the process now writing to the ledger. I read `pgrep` and a
+ledger row count and reported a state neither of them established.
+
+The correct statement at that moment was: the band halted on the consecutive
+rule, the halt was diagnosed as a local DNS fault, and it was resumed. The
+mechanism did what it was built to do; my summary of it did not.
+
+DIAGNOSIS OF THE FAULT, for completeness: all 15 exhibit_unreachable entries carry
+`[Errno 8] nodename nor servname provided, or not known` -- DNS resolution, never
+an HTTP response. Zero 403, zero 429. One separate HTTP 503 (ALLY 2025-07-18,
+recorded as exhibit_error). Every failure in both bands names the same host,
+www.sec.gov, and DNS resolves a host rather than a path, so the ambiguous band's
+2025 archive paths cannot resolve differently from the clean band's 2026 ones.
+Confirmed live: one of the failed URLs (HD 2025-05-20) fetches HTTP 200 in 0.36s
+with a compliant User-Agent, and the 403 seen on a first probe was a
+non-compliant User-Agent on my own curl, not an IP block -- the same request with
+a name-and-email UA returns 200. `scutil --dns` shows a local resolver at
+127.0.0.1 in the path, which is where an intermittent [Errno 8] burst against an
+otherwise reachable host comes from.
+
+The fault was local. The corpus was never implicated.
