@@ -317,3 +317,18 @@ type, adjacent quarters.
 built* — the current mechanism deletes lines, which erased one item's genuine failure
 history ([[Findings & Incidents]] #39).
 
+
+**Spend record** — the append-only proof that a one-shot resource was used once. Scoring the holdout
+appends a line — date, commit, forecast digest, freeze version, and which calibration artifact was in
+place — and any later holdout run refuses against it ([[0031-holdout-spend]]). *Committed, deliberately:*
+the git history is then the proof, in the way the frozen-corpus commit is the proof the corpus was
+pre-registered. An absence is checkable by anyone; a promise is checkable by no one.
+
+**Spent before shown** — the spend is recorded *before* the first number is printed, because a holdout is
+spent when it is **seen**, and a crash between computing and displaying would otherwise leave it looking
+untouched. A repeat could then be justified as *"the last one didn't finish"* — true, and still a second
+look. *Erring the other way* burns a holdout nobody read; that is the cheaper error.
+
+**Required with no default** — an option deliberately left without one, so the dangerous choice cannot be
+made by forgetting. `--split` has no default because a default is a decision made by whoever omits the
+flag, and the holdout must not be scoreable by omission.
