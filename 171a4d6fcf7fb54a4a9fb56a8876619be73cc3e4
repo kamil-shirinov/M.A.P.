@@ -661,3 +661,130 @@ test that never conditions on z avoids it entirely:
 
 ADR 0032 remains unchanged, as stated in record 6. Records 2 and 4 remain binding
 and are untouched by this amendment.
+
+=============================================================================
+RECORD 8 — errors-in-variables on the compression slope; S1 prediction updated;
+the encompassing regression POWERED and NOT REGISTERED
+amendment to records 5 and 6, written 2026-09-02, no ambiguous item scored
+=============================================================================
+
+-----------------------------------------------------------------------------
+PART A — the 0.32 slope is attenuated, and must be reported as an interval
+-----------------------------------------------------------------------------
+log sigma_baseline is itself an estimate. Classical measurement error attenuates
+the forward slope toward zero, so 0.3166 is a LOWER BOUND on compression, not the
+estimate of it.
+
+RELIABILITY. Two noisy measures of one true volatility are available -- the
+random walk's sigma and GARCH's -- and under independent errors their correlation
+estimates the reliability:
+    corr(log sigma_RW, log sigma_GARCH) = lambda = 0.8410
+  Both are fitted on the SAME price history, so their errors are positively
+  correlated, which INFLATES lambda and SHRINKS the correction below. The
+  estimate is conservative against the compression claim.
+
+                              random_walk      garch
+  forward slope                  0.3166        0.2119
+  reverse slope                  1.2343        1.0208
+  r  /  r^2                 0.6251/0.3908  0.4651/0.2163
+  FRISCH BOUNDS            [0.3166, 0.8102] [0.2119, 0.9796]
+  attenuation-corrected          0.3765        0.2520
+  cluster-robust CIs:
+    forward               [0.2609, 0.3811] [0.1375, 0.2933]
+    1/reverse             [0.6548, 0.9993] [0.8014, 1.2348]
+    corrected             [0.3144, 0.4659] [0.1656, 0.3423]
+  WIDEST DEFENSIBLE       [0.2609, 0.9993] [0.1375, 1.2348]
+                          entirely below 1  REACHES 1.0
+
+  The Frisch bounds are the honest statement: the forward slope assumes all the
+  noise is in sigma_base, 1/reverse assumes it is all in sigma_MAP, and the truth
+  lies between. Compression is therefore to be stated as an INTERVAL of roughly
+  [0.26, 1.00] against the random walk and [0.14, 1.23] against GARCH, with point
+  estimates of 0.38 and 0.25 -- not as "the slope is 0.32".
+
+  CONSEQUENCE, and it weakens the finding: against the random walk compression
+  survives errors-in-variables, but only just, the upper bound landing at 0.9993.
+  AGAINST GARCH IT DOES NOT SURVIVE -- the interval reaches 1.2348, which is no
+  compression at all. Record 5 reported only the random walk's forward slope;
+  GARCH's is 0.2119 and its corrected interval covers 1.0. The two baselines do
+  not agree, and that was not visible before this correction.
+
+-----------------------------------------------------------------------------
+PART B — S1's prediction, restated about the corrected quantity
+-----------------------------------------------------------------------------
+S1 as registered in record 6 predicted a raw forward slope of 0.2-0.5. That is
+the attenuated quantity. Replaced, since the corrected one is what would
+replicate:
+
+  S1 now reports, for EACH baseline, on the ambiguous band: forward slope,
+  reverse slope, lambda from corr(log sigma_RW, log sigma_GARCH) computed on the
+  ambiguous band itself, the attenuation-corrected slope forward/lambda, and the
+  Frisch bounds [forward, 1/reverse]. All with cluster-robust CIs, 10-day blocks,
+  4000 draws, seed 20260813.
+
+  PREDICTION, loose and directional:
+    vs random_walk  corrected slope roughly 0.25-0.55; Frisch upper bound BELOW
+                    1.0; widest defensible interval excluding 1.0
+    vs garch        corrected slope roughly 0.15-0.40; Frisch upper bound MAY
+                    reach or exceed 1.0, as it does on development
+  REPLICATION OF S1 = the random walk's widest defensible interval excludes 1.0.
+  GARCH agreeing is a bonus, not a requirement, and GARCH failing is expected.
+
+  S2 and S3 are UNCHANGED, exactly as registered in record 6.
+  ADR 0032 is UNCHANGED.
+
+-----------------------------------------------------------------------------
+PART C — the encompassing regression: powered, and NOT registered
+-----------------------------------------------------------------------------
+The test proposed in record 7, named properly: a FORECAST-ENCOMPASSING
+REGRESSION (Chong & Hendry 1986; the combination form in Fair & Shiller 1990).
+Regress log|r| on log sigma_MAP and log sigma_baseline jointly and test whether
+the baseline's coefficient is zero -- does M.A.P.'s sigma encompass the
+baseline's, or does the baseline carry information about which names move that
+M.A.P.'s does not.
+
+Power computed BEFORE registration, on the ambiguous band's REAL calendar taken
+from the frozen plan (353 items, 30 occupied 10-day blocks -- structural, not a
+result), cluster-robust SEs with t(G-1):
+
+  alternative: compression at the corrected slope 0.38    POWER 0.977
+  alternative: compression at the raw slope 0.32          POWER 0.990
+  (development, 178 items / 18 blocks, for reference:     0.811 / 0.862)
+
+Power is far above the 60% bar. THE TEST IS STILL NOT BEING REGISTERED, because
+the same simulation shows the size is broken:
+
+  NULL: no compression (slope 1.0), sigma_MAP merely NOISY   REJECTS 38.6%
+  (development                                                       23.8%)
+
+A nominal 5% test that rejects 38.6% of the time when its null is true is not a
+5% test. The cause is that BOTH regressors are measured with error: when
+sigma_MAP carries independent noise, sigma_base genuinely does hold information
+about |r| beyond it, and the coefficient is positive with no compression present
+at all. The regression cannot separate "M.A.P. compresses the cross-section"
+from "M.A.P.'s sigma is noisy", because both make sigma_base incrementally
+informative.
+
+  A CORRECTION TO THE PREMISE I WAS GIVEN AND ACCEPTED. Measurement error in
+  log sigma_baseline does attenuate its coefficient toward zero, which is
+  conservative -- that much is right. But measurement error in log sigma_MAP
+  pushes the same coefficient AWAY from zero, and in this panel that effect
+  dominates: the net is anti-conservative by roughly eight-fold at the 5% level.
+  The test is conservative in one of its two error channels and badly
+  anti-conservative overall.
+
+  So the rule that retired S4 retires this one too, one step earlier: the power
+  was computed before registration, and it revealed a size problem rather than a
+  power problem. Recorded as the reason it is NOT registered.
+
+  WHAT IT COULD HONESTLY TEST, if someone wants it later: the weaker and still
+  useful claim that sigma_base is incrementally informative about |r| given
+  sigma_MAP -- i.e. that a COMBINED volatility would beat M.A.P.'s alone. That is
+  a statement about forecast combination and it is true under either mechanism,
+  which is exactly why it is testable here and "compression" is not. It would
+  need its own out-of-sample split to avoid fitting the combination on the data
+  that judges it, and it is not part of any registered plan.
+
+No test of the compression MECHANISM is registered. S1, S2 and S3 test whether
+the compression PATTERN replicates, which they do validly, and record 7 already
+established that no registered test distinguishes the mechanism behind the tails.
