@@ -1,0 +1,63 @@
+=============================================================================
+RECORD 1 — the thin-tails result is SUGGESTIVE and POST-HOC, not established
+written 2026-09-02, while the ambiguous band runs and nothing has been fitted
+=============================================================================
+
+FOUR statistics were computed on the development PIT. Only the fourth fires.
+
+  mean PIT vs 0.5    0.4893, CI [0.4098, 0.5423] items / [0.3964, 0.5371] clusters
+  KS D               0.0726, p=0.291 even under the anti-conservative iid null
+  Anderson-Darling   A2=3.044 vs a CLUSTER-ROBUST 5% point of 5.084 (block
+                     bootstrap) or 12.087 (equicorrelated, rho=0.276) -> no departure
+  tail ratio         1.2064, cluster-robust CI [1.0135, 1.4372], p=0.0165
+
+Reporting the fourth as a result while the first three were also tried is a
+multiplicity problem, and it is MY multiplicity: the tail ratio was constructed
+after seeing that the calibration ratio and the PIT disagreed. It is the fourth
+look at one panel, not a pre-stated test.
+
+  raw p                      0.0165
+  Bonferroni over the family 0.066
+  -> NOT significant at 5% family-wise
+
+Recorded status: SUGGESTIVE. The thin-tails reading is the best available
+explanation of why the calibration ratio (0.733) and the PIT disagree, and it is
+not established.
+
+WHAT IS ROBUST
+  seeds        the CI lower bound excludes 1.0 in 8 of 8 bootstrap seeds,
+               range 1.0125-1.0179. Thin, but not seed-dependent.
+  single names dropping the largest |z| leaves 1.1904; dropping the four largest
+               leaves 1.1233. Not one ticker.
+
+THE STRONGEST COMPONENT IS THE EXCEEDANCE COUNTS, not the ratio
+  |z| > 2.5    11 observed vs 2.21 expected, over 7 distinct 10-day blocks
+  |z| > 3      7 observed vs 0.5 expected, over 7 distinct days and 5 blocks
+  |z| > 4      2 observed vs 0.01 expected
+They are the strongest because they need no scale estimate and no bootstrap: a
+14x excess at |z|>3 is a count against a binomial, and the spread across 5-7
+blocks is a fact about the calendar rather than a modelling choice.
+
+WHAT THE EXCEEDANCES DO RULE OUT
+  - one bad market day as the whole explanation. Seven exceedances on seven
+    distinct dates in five distinct blocks is not a single event, which is the
+    obvious deflationary reading of a clustered panel and it does not hold.
+  - a pure SCALE error as the whole explanation. MAD-scale(z)=1.1052 with a
+    cluster-robust CI of [0.9307, 1.4139], which COVERS 1.0 -- the body is
+    already consistent with calibrated. Widening everything cannot be the fix.
+
+WHAT THEY DO NOT RULE OUT
+  - that this is a property of the TARGET, not a defect of this forecaster.
+    Earnings announcements carry genuine jump risk; any normal-tailed model of a
+    5-day post-announcement window would show the same excess. Nothing here
+    separates "M.A.P. underestimates tails" from "5-day earnings returns have
+    fat tails and a Gaussian mixture cannot represent them".
+  - that rho=0.276 understates the dependence. If items correlate across
+    adjacent blocks as well as within them, every interval above is still too
+    narrow and 0.066 is still too small.
+  - the mechanism. Four of the seven exceedances are small, high-volatility
+    names (CELH, INTC, IONQ x2, CORZ). Whether the tail excess is concentrated
+    in a subpopulation is untested, and n=178 cannot test it.
+
+This record exists so that a later confirmation is a replication rather than a
+rediscovery, and so that the 0.0165 is never quoted without the 0.066 beside it.
