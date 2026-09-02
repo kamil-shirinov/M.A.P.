@@ -332,3 +332,36 @@ look. *Erring the other way* burns a holdout nobody read; that is the cheaper er
 **Required with no default** — an option deliberately left without one, so the dangerous choice cannot be
 made by forgetting. `--split` has no default because a default is a decision made by whoever omits the
 flag, and the holdout must not be scoreable by omission.
+
+**Multiplicity in a picture** — a histogram with ten bins is ten implicit tests, and one will sit outside
+its 90% range by construction. Reading a shape off one is not a free look at the data ([[Findings &
+Incidents]] #43). *The fix is not to look harder* but to state the statistic before looking.
+
+**Tilt versus shape** — two different departures from a uniform PIT, needing two different instruments.
+The mean against 0.5 finds a *tilt* (biased one way); Kolmogorov–Smirnov and Anderson–Darling find a
+*shape*. A symmetric U has a mean of exactly 0.5, so the tilt test is silent on the most common
+miscalibration there is.
+
+**KS versus Anderson–Darling** — KS is driven by the largest gap between the empirical and uniform CDFs,
+which for a symmetric departure sits in the middle where the curves cross anyway. A² carries a 1/(u(1−u))
+weight and is built for the ends. *On the development half they disagree* — KS 0.0726 (p=0.291), A² 3.044
+against 2.492 — and the disagreement locates the problem in the tails.
+
+**Aggregation is not diagnosis** — the calibration ratio is a quotient of root-mean-squares and is
+dominated by the largest outcomes; the PIT is rank-based and barely notices them. 0.733 was a true fact
+that supported a false conclusion, caught only because both were reported side by side ([[Findings &
+Incidents]] #44).
+
+**A parameter carried on purpose** — `a`, the location shift in [[0032-calibration-form]], is not motivated
+by the development evidence and is in the form anyway. Leaving it out and adding it later, after the
+holdout showed a location error, would be a parameter chosen on the holdout. *Fitting to near zero is a
+result*, not a wasted degree of freedom.
+
+**Uninformative null** — a null result from a design that could not have produced anything else. The corpus
+is entirely EX-99.1 issuer text, so a test for issuer-promotion skew has nothing to be *relative to*
+([[Findings & Incidents]] #45). Distinct from a null that constrains.
+
+**Declining to commit** — a forecaster whose directional probabilities cluster at 0.5 cannot be right or
+wrong about direction, so a Brier score against a coin flip restates the span rather than measuring skill
+([[Findings & Incidents]] #46). *An architecture question*, which is what gives the three-agent ablation a
+specific prediction to test.

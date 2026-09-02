@@ -424,6 +424,56 @@ truncates slightly more than needed.
 
 **No forecast has been scored.**
 
+---
+
+## 14 · The development half, scored
+
+178 items, 18 date clusters. The holdout is untouched and there is a committed record
+proving it ([[0031-holdout-spend]]).
+
+Two things had to be settled before a number could exist. The freeze refusal fired on
+two digests, and it turned out to be **counting digest strings when the truncation rule
+had been scoped per item** — one record produces two digests by construction, so any
+band holding both truncated and untruncated items refuses forever. Computing both
+digests for every historical record settled it: the non-truncation digest is
+byte-identical across v2.3.0 through v2.6.0. And `--check`'s stale line prints only when
+non-empty, so `stale 0` had to be **asserted** rather than read off an absence
+([[Findings & Incidents]] #39, fourth instance).
+
+### The result
+
+| | vs earnings-scaled RW | vs GARCH | vs random walk |
+| --- | --- | --- | --- |
+| CRPS | indistinguishable | indistinguishable | **worse 5.4%** |
+| log score | indistinguishable | **worse 11.8%** | **worse 12.8%** |
+
+Brier is **one** comparison, not three: every baseline sets drift to zero, so all three
+predict P(up)=0.5 and score exactly 0.25 on every item. Against that coin flip the model
+is indistinguishable, at 50.0% accuracy — and the reason is that it barely claims a
+direction at all, P(up) spanning 0.369–0.631 around a median of 0.513. Recorded as an
+architecture question rather than a scoring one ([[Findings & Incidents]] #46).
+
+### Calibration, after two corrections to my own reading
+
+I first called the PIT tilted, from one tall bin. **Tested, there is no tilt** — mean
+0.4893, both cluster-robust intervals covering 0.5 ([[Findings & Incidents]] #43). What
+*does* depart is the shape, and only Anderson–Darling sees it: A²=3.044 against 2.492,
+while KS reports nothing.
+
+The calibration ratio (0.733) and the PIT disagreed, and **both were right**: the ratio
+is dominated by five outcomes carrying 28.5% of the squared returns, while the PIT is
+rank-based. The body is calibrated; the tails are thin ([[Findings & Incidents]] #44).
+That distinction is why [[0032-calibration-form]] fixes the Phase 3 objective as the log
+score rather than the ratio — a scale fitted on 0.733 would widen every forecast by 36%
+to accommodate five events.
+
+### The stratum worth watching
+
+The 106 dev items from an uncommitted tree lose to the random walk by 6.0%; the 72 clean
+ones are indistinguishable. The intervals overlap heavily and nine clusters is thin, so
+this is not evidence of a difference — but it is where the headline result concentrates,
+and it sits in the stratum with the weakest provenance.
+
 **Next:** the ambiguous band, under [[0019-corpus-execution-protocol]] §8 — launched from
 a clean tree, no commits while it runs.
 

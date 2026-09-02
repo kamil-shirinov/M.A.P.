@@ -1219,21 +1219,35 @@ exists, and why it is written down before anyone has a reason to want a particul
 
 ---
 
-## 39 · One shape, three instances: a representation that cannot hold the state it must distinguish
+## 39 · One shape, four instances: a representation that cannot hold the state it must distinguish
 
-Three failures this week look unrelated. They are the same defect.
+Four failures this week look unrelated. They are the same defect.
 
 | the identifier | the two states it had to tell apart | what happened |
 | --- | --- | --- |
 | `head_tail_v1` | a 3.5 chars/token basis vs a 3.0 one | the same string named both; documents cut to 98,121 and 84,121 characters carried identical labels |
 | the **freeze digest** | *was not truncated* vs *would not be truncated* | three items that fit whole at 3.5 carried the untruncated digest, so a ratio change that would now cut them was invisible |
 | the **ledger** | *never attempted* vs *deliberately invalidated* | forcing a re-run meant deleting lines from an append-only log, which also erased BXP's genuine transient-failure history |
+| the **`--check` stale line** | *nothing is stale* vs *the check never ran* | it prints only when the list is non-empty, so a clean report and a silently skipped one are the same output — an absence of text |
 
 **Each is a representation that collapses two states the system must distinguish. And
 each failed silently, for the same reason: the missing state had no encoding in which
 to be wrong.** There was no field that could hold a contradiction, so nothing could
 contradict. A check can only catch a disagreement between two things that were both
 written down.
+
+The fourth is the mildest and the most general, and it is the one most likely to recur,
+because **it is the default style of almost every command-line tool**: report problems,
+stay quiet on success. That is fine when the reader is watching the exit code. It is not
+fine when the line is a *gate* — and this one was, since scoring was conditional on
+`stale 0`. A gate that passes by printing nothing cannot be distinguished from a gate
+that was never reached, and the reader supplies the reassuring reading for free.
+
+It was confirmed by computing the count independently rather than by reading the absence
+— every completed clean-band item's recorded elision against what the current rule
+produces, 351 checked, 0 stale — which is the right response to a missing signal but not
+a substitute for the signal existing. **The rule this yields: a check whose result gates
+a decision must state its result, including when the result is zero.**
 
 The digest one is worth stating carefully, because it looks like a bug in the digest and
 is not. **A content hash records the input that *was* used. It cannot represent an input
@@ -1400,3 +1414,156 @@ fell to five.
 stopping for. The corpus is now on one truncation basis, and `head_tail_v1` carries its
 parameters so two bases can never again share a name.
 
+
+---
+
+## 43 · I read a histogram and called it a tilt
+
+Reporting the first development scores, I described the PIT as "tilted, not U-shaped",
+on the strength of the bottom bin holding 28 items against 17.8 expected.
+
+**Tested, the tilt is not there.** Mean PIT is 0.4893, and the cluster-robust interval
+is [0.4098, 0.5423] over 178 items and [0.3964, 0.5371] over the 18 occupied blocks.
+Both cover 0.5 with room to spare.
+
+Two things went wrong, and they are both structural rather than careless:
+
+**Ten bins are ten chances.** One bin in ten will sit outside its 90% range by
+construction, and the eye goes to whichever one did. Reading a shape off a histogram is
+not a free look at the data — it is an implicit test with an unstated multiplicity
+correction of one.
+
+**The naive standard error was never computed, and would have been wrong anyway.** With
+178 items in 18 date clusters, the independent-draw error is far too small. The interval
+that matters had to come from the same moving-block bootstrap the CRPS comparisons use,
+and once it did, the tilt evaporated.
+
+### The shape does depart, but not where I said
+
+| statistic | value | verdict |
+| --- | --- | --- |
+| mean PIT vs 0.5 | 0.4893, both intervals cover | no tilt |
+| KS *D* | 0.0726, p=0.291 under independence | nothing |
+| **Anderson–Darling *A²*** | **3.044** vs 2.492 at 5% | **departs** |
+
+**KS and A² disagree, and the disagreement is the finding.** KS is driven by the largest
+vertical gap between the empirical and uniform CDFs, which for a symmetric departure sits
+in the middle where the two curves cross anyway. A² carries a 1/(u(1−u)) weight and is
+built for the ends. A distribution correct in the body and thin in the tails is precisely
+the case KS is blind to — and precisely what a mis-scaled forecast produces.
+
+Both p-values assume independent draws, so both read high on a clustered panel. Neither
+is the test; the tilt interval is. A² is reported as a descriptor that points at *where*
+to look, and where it points is the tails.
+
+**The lesson is not "look harder at histograms".** It is that a picture with ten
+categories cannot make a claim, and the fix is to state the statistic before looking —
+which is what the tilt interval and A² now are, computed unconditionally on every scoring
+run rather than reached for when a bar looks tall.
+
+---
+
+## 44 · The calibration ratio and the PIT disagreed, and both were right
+
+`stated sigma / realised = 0.733 [0.637, 0.798]` says clearly under-dispersed. The PIT
+says the body is fine. These are not compatible readings of one distribution, so one of
+them had to be wrong — and neither was.
+
+**They weight outcomes differently.** The ratio is a quotient of root-mean-squares, so it
+is dominated by the largest moves. The PIT is rank-based and hardly notices them: an
+outcome at four sigma and an outcome at forty both land in the top bin.
+
+| | value | calibrated |
+| --- | --- | --- |
+| MAD-based scale of `z` | 1.079 | 1.0 |
+| median &#124;z&#124; | 0.7445 | 0.674 |
+| RMS `z` | **1.324** | 1.0 |
+
+**The top five outcomes carry 28.5% of the sum of squared returns.** Excluding them moves
+the ratio from 0.733 to 0.843.
+
+| ticker | date | return | sigma | z |
+| --- | --- | --- | --- | --- |
+| CELH | 2026-02-27 | −0.222 | 0.048 | **−4.64** |
+| INTC | 2026-04-24 | +0.188 | 0.047 | **+4.00** |
+| IONQ | 2026-05-07 | +0.187 | 0.066 | +2.83 |
+| CORZ | 2026-07-29 | +0.184 | 0.073 | +2.50 |
+| IONQ | 2026-01-27 | −0.168 | 0.066 | −2.56 |
+
+So the model's dispersion is **right in the body and much too thin in the tails.** That
+is excess kurtosis in the outcomes, not a scale error — and the distinction is not
+academic, because it decides what a correction may be fitted on. A scale factor fitted to
+the RMS ratio would widen every sigma by about 36% to accommodate five events, leaving
+173 items over-dispersed while the headline ratio read 1.00 exactly. The correction would
+score *worse* on every rule that weighs items equally, and better on the one number
+anybody would quote.
+
+Pre-registered in [[decisions/0032-calibration-form|ADR 0032]]: the scale is fitted by
+minimising the development log score, never the ratio.
+
+**A statistic that aggregates is not a diagnosis.** 0.733 was a true fact that supported
+a false conclusion, and the only reason it did not become a fitted correction is that the
+two instruments were reported side by side and disagreed loudly enough to check.
+
+---
+
+## 45 · An open hypothesis that the evidence does not currently support
+
+Recording this because the *test* was designed before the result came in, and a
+hypothesis discarded for the right reason is worth as much as one kept.
+
+**The issuer-promotion hypothesis.** Every exhibit in the corpus is an EX-99.1 earnings
+release — the issuer's own promotional text about its own quarter. If a model reasons
+from that document, the design predicts a **bullish skew**: the forecast should sit above
+the outcome on average, and the PIT should tilt low.
+
+**The corpus shows no such tilt** (finding #43), so the hypothesis is *not* recorded as
+live, and no mechanism story is being told about a pattern that has not been established.
+
+It is worth keeping written down because **this corpus structurally cannot test it.**
+Document type does not vary: every item is the same genre from the same author about the
+same author. A null here is uninformative about the mechanism — there is no contrast, so
+there is nothing for a skew to be *relative to*.
+
+**What could test it:** the same tickers and dates, forecast from a document type the
+issuer did not write — a wire-service summary, an analyst note, or the 8-K body stripped
+of the exhibit. The comparison is the skew of one against the skew of the other, paired
+by ticker and quarter. That is a second corpus, not a re-analysis of this one, and it is
+the natural companion to the ablation in #46.
+
+---
+
+## 46 · The system declines to commit to a direction — an architecture result, not a scoring one
+
+| | |
+| --- | --- |
+| P(up) span | 0.369 – 0.631 |
+| median | 0.513 |
+| directional accuracy | 50.0% (89 of 178) |
+| Brier vs a coin flip | indistinguishable |
+
+The easy reading is that Brier is a weak rule or that direction is hard. Neither is what
+this says. **The forecasts barely leave the neighbourhood of 0.5.** A model that never
+claims a direction cannot be right or wrong about one, and the Brier result is a
+restatement of the P(up) span rather than independent evidence about skill.
+
+The three baselines cannot arbitrate, because all three set drift to zero by
+construction — so each predicts P(up) = 0.5 exactly and the comparison is against a coin
+flip, once, not against three benchmarks.
+
+**Why this is an architecture question.** The pipeline is Intake → Analyst → Structuralist,
+and the analyst is asked for three scenarios with probability weights. A near-0.5 P(up)
+is what you get when the bullish and bearish scenarios come back close to symmetric —
+which may be the analyst genuinely finding no signal, or may be an artefact of *asking
+for three scenarios in the first place*. A prompt that requests a balanced set may be
+answered with a balanced set regardless of the document.
+
+Those two explanations make different predictions, and the ablation already planned for
+Phase 3 separates them: run the structuralist directly on the intake summary, with no
+analyst, and compare the P(up) spans. If the span widens without the analyst, the
+three-scenario frame is compressing the directional claim. If it does not, the flatness
+is in the model's reading of the document and the frame is innocent.
+
+**This is what makes the ablation the next experiment worth running** rather than the
+tidy-up item it has been since Phase 1. It has a specific prediction to test, on a
+quantity that has now been measured.
