@@ -788,3 +788,127 @@ informative.
 No test of the compression MECHANISM is registered. S1, S2 and S3 test whether
 the compression PATTERN replicates, which they do validly, and record 7 already
 established that no registered test distinguishes the mechanism behind the tails.
+
+=============================================================================
+RECORD 9 — three corrections to record 8
+written 2026-09-02, ambiguous band running, no ambiguous item scored
+=============================================================================
+
+-----------------------------------------------------------------------------
+PART A — the GARCH conclusion, restated precisely
+-----------------------------------------------------------------------------
+Record 8 said "AGAINST GARCH IT DOES NOT SURVIVE ... which is no compression at
+all". That overstates, and conflates the Frisch bounds with the interval that
+carries sampling error on top of them. Three distinct quantities:
+
+                                    random_walk         garch
+  Frisch bounds (no sampling error) [0.3166, 0.8102] [0.2119, 0.9796]
+                                     below 1.0        BELOW 1.0
+  attenuation-corrected, with CI    [0.3144, 0.4659] [0.1656, 0.3423]
+                                     excludes 1.0     EXCLUDES 1.0
+  widest defensible: forward CI
+  lower to 1/reverse CI upper       [0.2609, 0.9993] [0.1375, 1.2348]
+                                     excludes 1.0     INCLUDES 1.0
+
+  The GARCH Frisch bounds are [0.2119, 0.9796], ENTIRELY BELOW 1.0. Only the
+  widest construction -- the Frisch upper bound with its own sampling error added
+  -- reaches 1.2348.
+
+  CORRECT STATEMENT: the point estimates agree across baselines. Corrected slopes
+  of 0.3765 (random walk) and 0.2520 (GARCH) both sit well below 1.0, and both
+  attenuation-corrected CIs exclude it. What differs is that under the most
+  conservative interval available -- every source of uncertainty stacked -- the
+  random walk's still excludes 1.0 and GARCH's does not.
+
+  So: COMPRESSION IS NOT ESTABLISHED AGAINST GARCH under the widest interval. It
+  is NOT "does not survive", and it is not evidence of disagreement between the
+  baselines. The point estimates agree; the interval fails to exclude the null.
+  Record 8 Part A is amended accordingly. S1's prediction in record 8 Part B is
+  unaffected -- it already predicted GARCH's upper bound may reach 1.0 and
+  already made the random walk the replication criterion.
+
+-----------------------------------------------------------------------------
+PART B — the combination question, recorded as SUCCESSOR, not registered
+-----------------------------------------------------------------------------
+Recorded 2026-09-02 as the successor to the retired mechanism tests.
+
+  THE QUESTION: does a combined volatility -- some function of sigma_MAP and
+  sigma_baseline -- produce better forecasts than sigma_MAP alone, judged out of
+  sample by log score and CRPS?
+
+  WHY IT REPLACES THE MECHANISM QUESTION. Records 7 and 8 retired two tests of
+  "compression versus noise" for opposite reasons: S4 had no power because its
+  null assumed the alternative, and the encompassing regression had 38.6% size
+  because both regressors carry error. The common cause is that compression and
+  noise in sigma_MAP make the SAME prediction for every statistic available here
+  -- both make sigma_baseline incrementally informative about |r|. On this data
+  THE MECHANISM APPEARS UNIDENTIFIABLE, and that is a property of the design, not
+  a gap to be closed by a cleverer statistic.
+
+  The decision question does not need the mechanism. Whether M.A.P.'s sigma
+  under-varies because it compresses or because it is noisy, the remedy and the
+  test are the same: combine, and see whether the combination scores better. It
+  is answerable, it is what Phase 3 would act on, and it is well-posed under
+  either mechanism.
+
+  WHY IT IS NOT BEING REGISTERED NOW. It needs its own out-of-sample split, and
+  no unspent sample is available for it:
+    - the AMBIGUOUS band is committed. It is the leakage estimate (ADR 0019) and
+      it now carries S1-S3 of record 6. Fitting a combination on it and judging
+      the combination on it would be the overfitting the split exists to prevent.
+    - the CLEAN HOLDOUT is reserved for Phase 3 under ADR 0031, spendable exactly
+      once, and a committed record proves it unspent. Spending it on a
+      combination weight would consume the one sample that can test the
+      pre-registered calibration.
+  Registering a test with nowhere valid to run it would be the same defect as a
+  condition that cannot fire, arriving through the sample rather than the
+  statistic.
+
+  WHAT IT WOULD NEED: a further corpus, or a split of the ambiguous band declared
+  BEFORE it is scored. Neither exists today, and inventing the second now would
+  cut into the leakage estimate the band was drawn for. It is left open, named,
+  and dated.
+
+-----------------------------------------------------------------------------
+PART C — provenance of the corrections, including one premise I accepted wrongly
+-----------------------------------------------------------------------------
+The premise handed to me and repeated in record 8 Part C -- that measurement
+error makes the encompassing test conservative against its own hypothesis -- is
+WRONG, and I accepted it before testing it. It considers only error in
+log sigma_baseline, which does attenuate that coefficient toward zero. Error in
+log sigma_MAP pushes the same coefficient AWAY from zero and dominates here: the
+simulated size is 38.6% against a nominal 5%. Record 8 caught this only because
+the power run happened to include a size check.
+
+Recording where each correction in this sequence came from, since the record
+should show that rather than present a smooth narrative:
+
+  FROM THE OPERATOR
+    the A2 critical value must be cluster-robust, not the iid table value
+    the baseline control existed and I had not computed it
+    the comparison must be paired, not marginal -- overlapping CIs are the weak form
+    the sigma cut on |z|>2.5 is selected on the outcome it explains
+    a registered negative needs a power statement
+    the slope needs errors-in-variables and Frisch bounds
+    power before registration, as a rule
+    the GARCH restatement in Part A above
+
+  FROM ME, WHILE ACTING ON THOSE
+    that S4's naive form cannot fail (z contains sigma_MAP)
+    that S4's fixed form cannot fire (null == alternative), found by the
+      operator's own power rule
+    that the encompassing regression's size is broken, found the same way
+    that the mechanism appears unidentifiable, which follows from both
+
+  WRONG AND CORRECTED
+    mine:     "the shape departs" from an iid A2 threshold
+    mine:     the PIT "tilt" read off one tall histogram bin
+    mine:     "cannot rule out a property of the target" with the control uncomputed
+    mine:     record 6 labelling the compression null "mechanical"
+    mine:     record 8 overstating the GARCH result (Part A above)
+    operator: measurement error makes the encompassing test conservative
+
+The pattern worth keeping: every one of my errors was in the direction of a
+STRONGER claim, and every correction weakened it. That is what a systematic bias
+looks like from the inside, and it is the argument for the holdout staying
+unspent rather than for trying harder next time.
