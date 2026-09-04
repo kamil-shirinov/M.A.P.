@@ -37,7 +37,7 @@ from datetime import date
 import numpy as np
 
 from mapf.core.errors import MapError
-from mapf.core.models import ADJUSTMENT_BASIS, Forecast, PriceWindow
+from mapf.core.models import ADJUSTMENT_BASIS, Bar, Forecast, PriceWindow
 from mapf.eval.baselines import (
     BaselineError,
     History,
@@ -78,6 +78,27 @@ class SpotDriftError(ScoringError):
     """
 
 
+class RealisedDriftError(ScoringError):
+    """The outcome bar disagrees with the one this item was first scored against.
+
+    `SpotDriftError` anchors the numerator of the return; this anchors the
+    denominator's counterpart — the realised close — and nothing else does. The
+    asymmetry is not an oversight in the original design: the spot can be pinned at
+    forecast time because the forecast records it, while the outcome does not exist
+    yet and structurally cannot be recorded then. So the pin is taken at FIRST
+    SCORING and enforced on every later one.
+
+    Phase 3 is why it exists. The correction is fitted on the development half and
+    then tested once on the holdout, both scored after the numbers already reported.
+    A realised bar that drifts in between would have the correction fitted against
+    outcomes different from the ones published, with nothing to say so.
+
+    Date and close are both compared: a shifted bar that happens to close nearby
+    would slip a value-only check, and the shift is the more dangerous error because
+    it silently re-times the horizon.
+    """
+
+
 class VintageError(ScoringError):
     """Two prices in one comparison do not share an adjustment basis or a source.
 
@@ -103,6 +124,26 @@ class LookAheadError(ScoringError):
     rather than as a point-in-time question. Raised rather than filtered: dropping
     the offending dates silently would leave a broken adapter looking correct.
     """
+
+
+@dataclass(frozen=True)
+class RealisedPin:
+    """The outcome bar an item was first scored against."""
+
+    ticker: str
+    as_of: date
+    horizon_days: int
+    realised_date: date
+    realised_close: float
+
+    @property
+    def key(self) -> tuple[str, date, int]:
+        return (self.ticker, self.as_of, self.horizon_days)
+
+
+# Injected rather than imported, so this module still never reaches `mapf.data`.
+PinReader = Callable[[str, date, int], RealisedPin | None]
+PinWriter = Callable[[RealisedPin], None]
 
 
 @dataclass(frozen=True)
@@ -196,6 +237,29 @@ def realised_return(window: PriceWindow, as_of: date, horizon_days: int, spot: f
     return math.log(bars[end].close / opening)
 
 
+def realised_bar(window: PriceWindow, as_of: date, horizon_days: int) -> Bar:
+    """The bar the horizon closes on — the outcome `realised_return` divides by.
+
+    Split out so it can be pinned and compared without recomputing the return, and
+    so the pin names the same bar the score used rather than one derived separately.
+    """
+    bars = window.bars
+    index = {bar.date: i for i, bar in enumerate(bars)}
+    start = index.get(as_of)
+    if start is None:
+        earlier = [i for i, bar in enumerate(bars) if bar.date <= as_of]
+        if not earlier:
+            raise ScoringError(f"no bar on or before {as_of} for {window.ticker}")
+        start = max(earlier)
+    end = start + horizon_days
+    if end >= len(bars):
+        raise WindowNotClosedError(
+            f"{window.ticker} {as_of}: needs {horizon_days} bars after {bars[start].date}, "
+            f"series has {len(bars) - start - 1}"
+        )
+    return bars[end]
+
+
 def score_item(
     forecast: Forecast,
     window: PriceWindow,
@@ -204,6 +268,8 @@ def score_item(
     past_earnings: Sequence[date] = (),
     paths: int = DEFAULT_PATHS,
     seed: int = 20260813,
+    pin: PinReader | None = None,
+    record_pin: PinWriter | None = None,
 ) -> ScoredItem:
     """Score one forecast against its outcome and the three baselines.
 
@@ -226,6 +292,35 @@ def score_item(
             "design exists to exclude, arriving through the benchmark."
         )
     outcome = realised_return(window, as_of, forecast.horizon_days, forecast.spot_price)
+
+    # The outcome side of the anchor. Taken at first scoring because the outcome does
+    # not exist when the forecast is written, and enforced from then on.
+    bar = realised_bar(window, as_of, forecast.horizon_days)
+    taken = RealisedPin(
+        ticker=forecast.ticker,
+        as_of=as_of,
+        horizon_days=forecast.horizon_days,
+        realised_date=bar.date,
+        realised_close=bar.close,
+    )
+    known = pin(forecast.ticker, as_of, forecast.horizon_days) if pin is not None else None
+    if known is None:
+        if record_pin is not None:
+            record_pin(taken)
+    else:
+        if known.realised_date != taken.realised_date:
+            raise RealisedDriftError(
+                f"{forecast.ticker} {as_of}: horizon closed on {known.realised_date} when "
+                f"this item was first scored and closes on {taken.realised_date} now — the "
+                "series has gained or lost bars and the horizon has been silently re-timed"
+            )
+        drift = abs(known.realised_close - taken.realised_close) / abs(known.realised_close)
+        if drift > SPOT_TOLERANCE:
+            raise RealisedDriftError(
+                f"{forecast.ticker} {as_of}: realised close was {known.realised_close:.4f} "
+                f"when first scored and is {taken.realised_close:.4f} now — the outcome "
+                "this item is scored against has changed"
+            )
 
     simulation = simulate(
         forecast.scenarios, horizon_days=forecast.horizon_days, paths=paths, seed=seed
@@ -435,6 +530,8 @@ def score_band(
     paths: int = DEFAULT_PATHS,
     seed: int = 20260813,
     strict: bool = True,
+    pin: PinReader | None = None,
+    record_pin: PinWriter | None = None,
 ) -> BandScores:
     """Score every forecast in a band, counting the ones that could not be.
 
@@ -468,6 +565,8 @@ def score_band(
                     past_earnings=earnings(forecast.ticker, as_of),
                     paths=paths,
                     seed=seed,
+                    pin=pin,
+                    record_pin=record_pin,
                 )
             )
         except MapError as error:

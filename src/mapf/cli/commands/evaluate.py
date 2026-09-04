@@ -56,6 +56,7 @@ from mapf.corpus.passes import (
     split_passes,
     status_of,
 )
+from mapf.corpus.pins import RealisedPins
 from mapf.corpus.runner import plan
 from mapf.corpus.selection import Corpus
 from mapf.data.earnings import EdgarEarningsCalendar
@@ -678,15 +679,24 @@ def _git_names(left: str, right: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # The adapters
 # ---------------------------------------------------------------------------
+PIN_STORE = Path("var/corpus/realised_pins.jsonl")
+
+
 def _score(
     loaded: Sequence[Loaded],
     settings: Settings,
     calendar: EdgarEarningsCalendar,
     *,
     strict: bool = True,
+    pins: RealisedPins | None = None,
 ) -> BandScores:
-    """Fit and score everything, against one price series and one EDGAR calendar."""
+    """Fit and score everything, against one price series and one EDGAR calendar.
+
+    `pins` anchors the outcome bar. Passed as callables rather than the store
+    itself so `mapf.eval` keeps its distance from anything that touches disk.
+    """
     market = build_market_data(settings)
+    store = pins if pins is not None else RealisedPins(PIN_STORE)
 
     def prices(ticker: str, start: date, end: date) -> PriceWindow:
         return market.get_ohlcv(ticker, start, end)
@@ -694,6 +704,8 @@ def _score(
     return score_band(
         [(item.forecast, item.band) for item in loaded],
         prices=prices,
+        pin=store.get,
+        record_pin=store.record,
         # STRICTLY prior, cut inside the adapter and asserted again in `score_item`.
         # The multiplier would otherwise drop a future date silently by failing to
         # find it in an already-truncated history, which leaves a broken adapter
