@@ -11,8 +11,9 @@ from __future__ import annotations
 from datetime import date
 
 import pandas as pd
+from pydantic import ValidationError
 
-from mapf.core.errors import EmptyPriceWindowError
+from mapf.core.errors import EmptyPriceWindowError, MalformedPriceDataError
 from mapf.core.models import Bar, PriceWindow
 
 _COLUMNS = ("open", "high", "low", "close", "volume")
@@ -59,17 +60,23 @@ def frame_to_window(
     # `to_dict("records")` rather than `itertuples`: pandas-stubs types the latter
     # as a union of every dtype it could hold, which no amount of casting makes
     # readable at the call site.
-    bars = tuple(
-        Bar(
-            date=record["date"],
-            open=float(record["open"]),
-            high=float(record["high"]),
-            low=float(record["low"]),
-            close=float(record["close"]),
-            volume=int(record["volume"]),
+    # Translated at the boundary rather than let out raw: `ProviderChain` catches
+    # `MarketDataError`, so a bare `ValidationError` here would escape the failover
+    # and end the run with another provider configured and never tried.
+    try:
+        bars = tuple(
+            Bar(
+                date=record["date"],
+                open=float(record["open"]),
+                high=float(record["high"]),
+                low=float(record["low"]),
+                close=float(record["close"]),
+                volume=int(record["volume"]),
+            )
+            for record in working.to_dict("records")
         )
-        for record in working.to_dict("records")
-    )
+    except ValidationError as err:
+        raise MalformedPriceDataError(provider, ticker, str(err)) from err
     return PriceWindow(
         ticker=ticker,
         provider=provider,

@@ -18,6 +18,8 @@ from structlog.testing import capture_logs
 from mapf.core.errors import (
     AllMarketDataProvidersFailedError,
     EmptyPriceWindowError,
+    MalformedPriceDataError,
+    MarketDataError,
     MarketDataUnavailableError,
 )
 from mapf.core.models import ADJUSTMENT_BASIS, PriceWindow
@@ -356,3 +358,42 @@ def test_the_cache_defaults_to_the_real_clock(tmp_path: Path) -> None:
     cache = ParquetPriceCache(StubProvider("yfinance", _window()), tmp_path)
     cache.get_ohlcv("AAPL", START, END)
     assert list(tmp_path.rglob("*.parquet"))
+
+
+# ---------------------------------------------------------------------------
+# Impossible data must fail OVER, not end the run
+# ---------------------------------------------------------------------------
+def test_a_bar_whose_open_exceeds_its_high_is_a_market_data_error() -> None:
+    """`open` outside [low, high] is impossible, not merely surprising, and it has
+    to reach the chain as a MarketDataError or the chain cannot act on it."""
+    frame = _yf_frame().copy()
+    frame.loc[frame.index[1], "Open"] = float(frame.loc[frame.index[1], "High"]) + 5.0
+
+    with pytest.raises(MalformedPriceDataError) as caught:
+        YFinanceProvider(lambda t, s, e: frame).get_ohlcv("AAPL", START, END)
+    assert caught.value.provider == "yfinance"
+    assert caught.value.ticker == "AAPL"
+    assert isinstance(caught.value, MarketDataError)
+
+
+def test_the_chain_fails_over_when_the_primary_serves_impossible_data() -> None:
+    """The failure this fixes: on 2026-09-04 yfinance served five tickers with
+    `open` above `high`, and the run died with stooq configured and never tried."""
+    primary = StubProvider(
+        "yfinance", None, error=MalformedPriceDataError("yfinance", "AAPL", "open above high")
+    )
+    fallback = StubProvider("stooq", _window("stooq"))
+    window = ProviderChain([primary, fallback]).get_ohlcv("AAPL", START, END)
+    assert window.provider == "stooq"
+    assert fallback.calls == 1
+
+
+def test_a_defect_in_our_own_code_is_not_mistaken_for_a_provider_fault() -> None:
+    """Why this is translated at the provider boundary rather than by widening the
+    chain to `except Exception`: a KeyError of ours must propagate, not look like
+    an outage and silently fail over."""
+    primary = StubProvider("yfinance", None, error=KeyError("close"))
+    fallback = StubProvider("stooq", _window("stooq"))
+    with pytest.raises(KeyError):
+        ProviderChain([primary, fallback]).get_ohlcv("AAPL", START, END)
+    assert fallback.calls == 0

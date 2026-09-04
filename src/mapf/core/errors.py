@@ -325,6 +325,27 @@ class EmptyPriceWindowError(MarketDataError):
         super().__init__(f"{provider} returned no bars for {ticker}")
 
 
+class MalformedPriceDataError(MarketDataError):
+    """A provider returned rows that cannot be a price series.
+
+    An open outside [low, high] is impossible, not merely surprising, and it is
+    the shape upstream corruption actually takes: on 2026-09-04 Yahoo served five
+    tickers with `open` above `high` for a few hours and then corrected them.
+
+    Distinct from `EmptyPriceWindowError`: the provider answered, and the answer
+    is invalid. A `MarketDataError` so the chain FAILS OVER rather than dying —
+    a provider serving impossible data is precisely what a fallback exists for,
+    and before this the validation failure escaped `ProviderChain` entirely and
+    killed the run with a second provider configured and untried.
+    """
+
+    def __init__(self, provider: str, ticker: str, reason: str) -> None:
+        self.provider = provider
+        self.ticker = ticker
+        self.reason = reason
+        super().__init__(f"{provider} returned unusable bars for {ticker}: {reason}")
+
+
 class PriceAdjustmentUnsupportedError(MarketDataError):
     """The adapter cannot produce the canonical adjustment basis for this request.
 
