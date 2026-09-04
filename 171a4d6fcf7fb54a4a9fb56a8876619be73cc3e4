@@ -1063,3 +1063,53 @@ a name-and-email UA returns 200. `scutil --dns` shows a local resolver at
 otherwise reachable host comes from.
 
 The fault was local. The corpus was never implicated.
+
+=============================================================================
+RECORD 11 — EVR 2025-10-29 is retried, decided BEFORE any scoring
+written 2026-09-04, ambiguous band idle at 352 of 353 resolved, NOTHING SCORED
+=============================================================================
+
+STATE AT THE TIME OF THIS DECISION. The ambiguous band has attempted all 353
+items: 349 complete, 4 failed. Three of the four are terminal (ATI, TROW, UHS,
+all output_truncated). The fourth, EVR 2025-10-29, failed once with
+budget_exhausted, which is NOT terminal -- under the repeat rule (ADR 0024) a
+reason must recur on the same item before it resolves it. `map corpus run
+--check` therefore reports "1 to run".
+
+No forecast of either band has been scored. No leakage estimate exists. The
+holdout is unspent.
+
+THE DECISION: resume the band for EVR 2025-10-29, then close the band whatever
+happens.
+
+THE GROUND: PROTOCOL SYMMETRY WITH THE CLEAN BAND. The clean band ran its repeat
+rule to completion -- ACGL, ALLY and WH each took a second strike and were
+resolved by recurrence, not abandoned after one. Closing the ambiguous band with
+an item on one strike would apply a shorter rule to the second band than to the
+first, and the two bands are about to be COMPARED. A leakage estimate is a
+difference between them, so any asymmetry in how they were produced lands
+directly in the number this phase exists for.
+
+WHY THIS IS NOT AN OUTCOME-DRIVEN CHOICE, and how that is checkable:
+
+  - It is recorded here BEFORE the retry runs and before anything is scored. The
+    git note is timestamped and the ledger shows no scoring has occurred.
+  - The decision is symmetric in EVR's outcome. If EVR completes, the band closes
+    at 350 complete. If it fails again, the repeat rule resolves it and the band
+    closes at 349 complete with 4 terminal failures. BOTH outcomes close the
+    band; neither triggers a further retry, and no third option exists.
+  - Either way the failure allowance is untouched: 4 permanent failures against
+    an allowance of 8, or 3 against 8. The retry cannot rescue a halt because
+    there is no halt to rescue.
+  - I do not know, and cannot know, whether EVR completing helps or hurts the
+    leakage estimate. One additional item out of 349 moves no interval
+    materially, and its direction is unknowable in advance.
+
+WHAT WOULD HAVE MADE THIS SELF-SERVING, stated so the distinction is legible: a
+retry chosen after seeing that the band was one item short of some threshold, or
+after a first score came back badly, or applied selectively to items expected to
+help. None of those is the case, and the ordering in this repository is the
+evidence rather than the assertion.
+
+AFTER THE RETRY THE BAND IS CLOSED. No further resumption, no further retries,
+whatever EVR does.
