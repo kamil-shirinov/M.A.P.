@@ -477,3 +477,69 @@ and it sits in the stratum with the weakest provenance.
 **Next:** the ambiguous band, under [[0019-corpus-execution-protocol]] §8 — launched from
 a clean tree, no commits while it runs.
 
+---
+
+## 15 · Phase 2 closes
+
+The ambiguous band ran from a clean tree at `ad71b13` and closed at **350 of 353
+complete, 3 failed, fidelity 1.0**, with **zero items produced from an uncommitted
+tree** — the defect that gave the clean band its 208-item stratum did not recur.
+
+It halted once, correctly. Fifteen `exhibit_unreachable` entries across eleven items
+were all `[Errno 8]` DNS failures against `www.sec.gov` — no HTTP status, no 403, no
+429 — and the five-consecutive rule stopped the band after five, with the cumulative
+counter at 6 against an allowance of 8. A local resolver fault cost five items rather
+than three hundred, which is the whole argument for having two thresholds instead of
+one. Every affected item completed on retry and charged nothing, exactly as
+[[0027-halt-response]] said DNS failures should.
+
+EVR 2025-10-29 was retried before any scoring, on protocol symmetry with the clean
+band — which ran its repeat rule to completion — and the decision was recorded with
+its reasoning before the retry ran. It completed on the second attempt.
+
+### The definition of done, written at the close
+
+Phase 1 had eight criteria written as named tests **before** it started. **Phase 2
+never had one.** What follows was assembled at the close from CLAUDE.md §8 and the
+ADRs that governed the phase, and it is weaker evidence than Phase 1's for exactly
+that reason: a checklist written after the work cannot fail.
+
+| # | criterion | met by |
+| --- | --- | --- |
+| 1 | Monte Carlo over the scenario mixture | `eval/montecarlo.py`; the cone is inverted from the mixture, not sampled, so it cannot disagree with the scenarios |
+| 2 | Baselines fitted per item | random walk, GARCH, earnings-scaled random walk — 178 of 178, none defaulted |
+| 3 | Proper scoring rules | CRPS, log score, Brier — all three reported against every baseline |
+| 4 | A pre-registered panel | [[0018-corpus-band-and-panel-shape]], frozen before any inference, amended only in its own commits |
+| 5 | Both bands executed under the protocol | clean 351/356, ambiguous 350/353, every item with a forecast, a trace and a digest |
+| 6 | Calibration reported with measured uncertainty | ratio 0.733 [0.637, 0.798]; PIT tilt tested rather than read off a histogram; **no tilt established** |
+| 7 | **The leakage estimate** | **clean 0.03189 vs ambiguous 0.03330, difference −0.00141 [−0.00904, +0.00647]** |
+
+### The number the phase exists for
+
+**No measurable contamination.**
+
+The two bands hold the same companies and differ only in when the filings landed —
+the clean band after the training cutoff, the ambiguous band across it. A model that
+had memorised outcomes would score *better* on the ambiguous band, and that gap would
+be the leakage. It scores slightly **worse** there, by about 4%, with an interval from
+−0.009 to +0.006 that comfortably contains zero.
+
+Not proof of no leakage; 177 items over 24 date clusters cannot deliver that. But no
+sign of it, with the point estimate leaning the way that embarrasses the contamination
+hypothesis rather than supporting it. **The headline result — that M.A.P. is
+indistinguishable from GARCH on CRPS and worse than the random walk — is not an
+artefact of the model having seen these outcomes.**
+
+### What the phase also produced
+
+Two guards that did not exist when it began. `MalformedPriceDataError`, after Yahoo
+served five tickers with `open` above `high` and the run died with a fallback provider
+configured and never tried. And `RealisedDriftError`, which anchors the outcome bar the
+way `SpotDriftError` anchors the spot — **355 pins taken today**, because Phase 3 scores
+these same items again and a drifting outcome would otherwise fit a correction against
+numbers different from the ones just published.
+
+**Next:** Phase 3 — the calibration correction, pre-registered in
+[[0032-calibration-form]] and amended by git note records 3 and 7. The holdout is
+unspent.
+

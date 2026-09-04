@@ -1604,3 +1604,60 @@ is in the model's reading of the document and the frame is innocent.
 **This is what makes the ablation the next experiment worth running** rather than the
 tidy-up item it has been since Phase 1. It has a specific prediction to test, on a
 quantity that has now been measured.
+
+---
+
+## 47 · The leakage line labelled both bands "clean", and a display artifact caught a logic error for the second time
+
+Running `map evaluate --band ambiguous` to produce the headline number printed:
+
+> `leakage: clean 0.03330 vs clean 0.03189, difference +0.00141`
+
+**Both figures labelled clean.** One of them is the ambiguous band. The tell was
+visual — a label repeated where two different labels belong — and it exposed a real
+inversion underneath.
+
+`_leakage` passes the band **being scored** as the first argument. `LeakageEstimate`
+documents that argument as the clean band, and `suggests_leakage` is `lower > 0` on
+`first − second`, which is a leakage signal only when the first is clean. So:
+
+| invoked as | `difference` is | `suggests_leakage` fires when |
+| --- | --- | --- |
+| `--band clean` | clean − ambiguous | ambiguous scores **better** ✓ correct |
+| `--band ambiguous` | ambiguous − clean | ambiguous scores **worse** ✗ inverted |
+
+The estimate is correctly oriented and correctly labelled **only when the clean band
+is the one scored**. Run the other way it inverts silently, and the display hardcodes
+`clean` for whichever band it was handed. Both bands were complete, both invocations
+were legitimate, and one of them was wrong.
+
+Here it changed nothing — the interval spans zero either way, so no verdict flipped.
+That is luck, not design. Had the difference been significant, the wrong invocation
+would have reported contamination where there was none, or the reverse.
+
+### The second time a display artifact caught a logic error
+
+The first was **three identical Brier intervals** ([[Findings & Incidents]] #46,
+recorded in the development scoring). `M.A.P. vs random_walk`, `vs garch` and `vs
+earnings_scaled_random_walk` all printed `[-0.00261, +0.00733]` to five decimals.
+Three different baselines cannot agree to five decimals by chance, and they did not:
+every baseline sets drift to zero by construction, so all three predict P(up)=0.5 and
+score exactly 0.25 on every item. It was one comparison against a coin flip, printed
+three times and reading as three agreeing pieces of evidence.
+
+**Both were caught by looking at the rendered output, not by a test.** Neither is the
+kind of defect a unit test finds, because in both cases every function did exactly
+what it said: `leakage` differenced its arguments correctly, `compare` bootstrapped
+correctly. The error was in what the arguments *meant* and how the result was
+*labelled* — a layer no assertion in the suite was pointed at.
+
+The pattern worth keeping: **an implausible-looking display is evidence about the
+logic behind it.** Three identical intervals and a repeated label are both anomalies
+in the output that a reader notices and a test does not. Reading your own output as
+if you were a sceptical stranger is a debugging technique, not a courtesy — and it
+has now found two real defects that 1,425 passing tests did not.
+
+*Fix not applied:* both remain as reported. The orientation bug needs `_leakage` to
+name its arguments by role rather than by position, and the Brier collapse is already
+handled in the reporting layer. Recorded here so the next reader of that line knows
+which band is which.
