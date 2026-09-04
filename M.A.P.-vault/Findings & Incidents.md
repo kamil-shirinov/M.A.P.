@@ -1219,9 +1219,9 @@ exists, and why it is written down before anyone has a reason to want a particul
 
 ---
 
-## 39 · One shape, four instances: a representation that cannot hold the state it must distinguish
+## 39 · One shape, six instances: a representation that cannot hold the state it must distinguish
 
-Four failures this week look unrelated. They are the same defect.
+Six failures look unrelated. They are the same defect — and the sixth is a variant.
 
 | the identifier | the two states it had to tell apart | what happened |
 | --- | --- | --- |
@@ -1229,12 +1229,49 @@ Four failures this week look unrelated. They are the same defect.
 | the **freeze digest** | *was not truncated* vs *would not be truncated* | three items that fit whole at 3.5 carried the untruncated digest, so a ratio change that would now cut them was invisible |
 | the **ledger** | *never attempted* vs *deliberately invalidated* | forcing a re-run meant deleting lines from an append-only log, which also erased BXP's genuine transient-failure history |
 | the **`--check` stale line** | *nothing is stale* vs *the check never ran* | it prints only when the list is non-empty, so a clean report and a silently skipped one are the same output — an absence of text |
+| the **leakage line** | *the band being scored* vs *the band compared against* | the display hardcodes "clean" for whichever band was scored, so `--band ambiguous` prints "clean X vs clean Y" and inverts `suggests_leakage` |
+| **`prices.fetched_on`** | *the vintage these prices came from* vs *the vintage we intended* | all 701 manifests record `2026-08-14`; no price was ever fetched on that date, and the cache is keyed on the real calendar day in every code path |
 
 **Each is a representation that collapses two states the system must distinguish. And
 each failed silently, for the same reason: the missing state had no encoding in which
 to be wrong.** There was no field that could hold a contradiction, so nothing could
 contradict. A check can only catch a disagreement between two things that were both
 written down.
+
+### The sixth is a different animal, and worse
+
+The first five collapse two states into one encoding: the field cannot express the
+distinction, so nothing can contradict. **The sixth records a state that never
+existed.** `prices.fetched_on: 2026-08-14` is not ambiguous — it is false, in 701
+manifests, and has been since the corpus began.
+
+The mechanism: `ParquetPriceCache` *has* a `today` injection point, designed for
+exactly this. It is constructed in one place (`bootstrap.py:69`) **with no `today`
+argument**, in every code path including the corpus run, so `_path` always
+namespaces on the real calendar date. The `today=config.price_vintage` at
+`runner.py:569` never reaches the cache; it reaches `run.py:156`, where
+`fetched_on = today or as_of.date()` writes it into the manifest. **The pin is a
+label.** The corpus was fetched across at least seven daily snapshots — 08-28,
+08-30, 08-31, 09-01, 09-02, 09-03, 09-04 — and there are zero files under 08-14.
+`map corpus run --check` prints `vintage 2026-08-14 (pinned)` and reports a pin
+that no code implements.
+
+**What actually protected the result was `SpotDriftError`, not the label.**
+`realised_return` refuses to score if the recorded spot has moved from the series
+by more than 1e-4 relative, so a genuinely changed price fails loudly instead of
+scoring wrong. Checked empirically on 2026-09-04: across the 178 clean-band dev
+items, the spot bar and the realised bar agree **to the cent between the 09-02 and
+09-04 snapshots, 178 of 178**, with the realised bar landing on the same date in
+every one. The published result was never at risk. It was protected by a live
+guard, while a dead one took the credit.
+
+**The lesson is narrower than "check your labels".** A recorded field that no code
+reads is not documentation, it is an assertion nobody verifies — and the longer it
+sits there being wrong, the more load it silently takes. The fix is not to make the
+label true but to make the pin real: pass `today=` at the one construction site,
+so the field describes something.
+
+---
 
 The fourth is the mildest and the most general, and it is the one most likely to recur,
 because **it is the default style of almost every command-line tool**: report problems,
