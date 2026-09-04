@@ -82,6 +82,7 @@ LEDGER = Path("var/corpus/ledger.jsonl")
 # Committed, so the git history is the proof the holdout was spent once — the same
 # argument that makes the frozen corpus commit the proof it was pre-registered.
 HOLDOUT_LEDGER = Path("corpus/holdout_spend.jsonl")
+PIN_STORE = Path("var/corpus/realised_pins.jsonl")
 
 
 @app.command()
@@ -90,6 +91,13 @@ def evaluate(
     frozen: Path = typer.Option(FROZEN, help="The frozen corpus."),
     ledger_path: Path = typer.Option(LEDGER, help="Where item outcomes were recorded."),
     runs_dir: Path = typer.Option(Path("runs"), help="Where run artifacts live."),
+    pins_path: Path = typer.Option(
+        PIN_STORE,
+        help=(
+            "The realised-bar pins. Taken at first scoring and enforced on every "
+            "later one, so a revised outcome refuses instead of scoring silently."
+        ),
+    ),
     passes: int = typer.Option(2, help="Passes the band was split into."),
     declared: str | None = typer.Option(
         None,
@@ -299,7 +307,8 @@ def evaluate(
             # Computed identically in both modes. `--check` withholds the scores; it
             # does not avoid producing them, because a path that skipped the
             # computation would not be exercising the one that matters.
-            scores = _score(forecasts, settings, calendar, strict=not check)
+            pins = RealisedPins(pins_path)
+            scores = _score(forecasts, settings, calendar, strict=not check, pins=pins)
             # BEFORE anything is printed. See `_record_holdout_spend`.
             if split == "holdout" and not check:
                 _record_holdout_spend(HOLDOUT_LEDGER, band=band, items=scores.n, record=record)
@@ -309,7 +318,9 @@ def evaluate(
                 _report(scores, band, calendar)
                 other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
                 if other is not None:
-                    _leakage(other, corpus, ledger, runs_dir, settings, calendar, scores, split)
+                    _leakage(
+                        other, corpus, ledger, runs_dir, settings, calendar, scores, split, pins
+                    )
 
         if not check:
             _report_strata(scores, forecasts, ledger, runs_dir)
@@ -679,9 +690,6 @@ def _git_names(left: str, right: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # The adapters
 # ---------------------------------------------------------------------------
-PIN_STORE = Path("var/corpus/realised_pins.jsonl")
-
-
 def _score(
     loaded: Sequence[Loaded],
     settings: Settings,
@@ -952,6 +960,7 @@ def _leakage(
     calendar: EdgarEarningsCalendar,
     scores: BandScores,
     split: str,
+    pins: RealisedPins,
 ) -> None:
     """The headline number, reported only when both bands are actually finished.
 
@@ -972,7 +981,9 @@ def _leakage(
             fg=typer.colors.YELLOW,
         )
         return
-    theirs = _score(load_band(ledger, corpus, runs_dir, other, split), settings, calendar)
+    theirs = _score(
+        load_band(ledger, corpus, runs_dir, other, split), settings, calendar, pins=pins
+    )
     if not theirs.items:
         return
     estimate = leakage(scores.crps(), theirs.crps())

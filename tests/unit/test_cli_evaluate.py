@@ -134,6 +134,10 @@ def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ig
             str(tmp_path / "ledger.jsonl"),
             "--runs-dir",
             str(tmp_path / "runs"),
+            # Pins go to the sandbox: a suite that writes fixture outcomes into the
+            # real store would pin the corpus to values no market ever produced.
+            "--pins-path",
+            str(tmp_path / "realised_pins.jsonl"),
             *(() if "--split" in args else ("--split", "dev")),
             *args,
         ],
