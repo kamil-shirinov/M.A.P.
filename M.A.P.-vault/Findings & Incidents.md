@@ -1661,3 +1661,89 @@ has now found two real defects that 1,425 passing tests did not.
 name its arguments by role rather than by position, and the Brier collapse is already
 handled in the reporting layer. Recorded here so the next reader of that line knows
 which band is which.
+
+---
+
+## 48 · Three near-misses in one week: fabricated data entering real artifacts, by three unrelated mechanisms
+
+The realised-bar pin was committed on 2026-09-04. Within minutes of the commit, the
+store it created held **three fabricated pins**:
+
+```
+{"ticker":"AAPL","as_of":"2026-02-02","realised_close":139.3400367105083, ...}
+{"ticker":"AAPL","as_of":"2026-05-02","realised_close":131.26886939802492, ...}
+{"ticker":"AAPL","as_of":"2025-02-02","realised_close":109.28935224142265, ...}
+```
+
+Those are synthetic closes from `test_cli_evaluate.py`. `PIN_STORE` was a module-level
+relative path read inside `_score`, so the CLI suite — which carefully points its
+ledger and `runs_dir` at `tmp_path` — wrote fixture outcomes into the real store at
+`var/corpus/realised_pins.jsonl`.
+
+**Had it survived:** AAPL's real 2026-02-02 and 2026-05-02 items would have been pinned
+to values no market produced. The next real scoring would then either refuse a correct
+outcome against a fixture, or — the worse branch — validate against one and report a
+guard that had passed. **The guard's first act was to commit the failure it exists to
+prevent.**
+
+The narrow lesson: *"the tests use `tmp_path`"* was true of every path the command
+takes as an option and false of the one added as a constant. `--pins-path` now follows
+`--ledger-path` and `--runs-dir`.
+
+### The same week, by two other routes
+
+| # | what nearly happened | mechanism | caught by |
+| --- | --- | --- | --- |
+| 1 | An invented row in an AAPL track record, written for a mockup, on its way into a fixture file | **hand-authoring** — a plausible number typed to fill a layout | the author, before it landed |
+| 2 | The UI's reliability fixture seeded with the project's **real** measured figures (coverage 0.78, mean PIT 0.4893) | **fixture-seeding** — realism borrowed from actual results | reversed in the same session, before the file was written |
+| 3 | Fabricated fixture closes written into the real pin store | **test-suite path leakage** — a relative constant no test overrode | reading the file after the commit |
+
+Three mechanisms with nothing in common at the implementation level: one is a person
+typing, one is a design choice about fixture realism, one is a path constant. **They
+are the same defect.**
+
+Note that #2 runs the *opposite* direction — real values into a fabricated artifact —
+and is no less dangerous. It is arguably worse: fabricated data in a real store is
+detectable by inspection because the values are wrong, while real data in a fixture is
+undetectable by inspection because the values are right. What makes it a defect is the
+same thing in both directions.
+
+### The common cause, named
+
+**A stored value carries no marker distinguishing measured from fixture.** A float in
+a JSONL file is a float. `139.3400367105083` and `94.69999694824219` are
+indistinguishable as data; one came from a test helper and one from Yahoo, and nothing
+in the representation says which. Every one of the three near-misses was caught by a
+human noticing, which is not a mechanism.
+
+This is the sixth-instance shape of [[Findings & Incidents]] #39 arriving in a new
+place: *a representation that cannot hold the state it must distinguish.* Not "the
+same field means two things" but "the field cannot express its own origin at all."
+
+### The gap is named, and a design for it already exists
+
+**The pipeline has provenance for runs and none for values.** It records, per run, the
+code digest, the freeze digest, the model versions, the trace, the price provider and
+adjustment. All of that answers *which execution produced this artifact*. None of it
+answers *where did this number come from* — and the pin store, the fixtures and the
+ledger all hold bare numbers.
+
+The M.A.P. front end solves exactly this problem in a different context, and the design
+is already written down and working:
+
+- three states — `measured` (read from a real artifact), `derived` (computed from
+  measured inputs), `fabricated` (from a fixture, **or derived from anything
+  fabricated**);
+- **weakest input wins**, so provenance cannot be laundered through arithmetic — an
+  invented weight cannot become an innocent-looking target price;
+- the boundary module **stamps** it, because a file that describes itself can be wrong;
+- an audit with **no heuristics**: every value must be positively marked or it is a
+  violation, since "skip things that look like dates" is how a real value formatted as
+  `2026.07` passes unnoticed.
+
+**This is not a proposal to build it now.** Phase 3 is the calibration correction and
+this is not that. It is recorded because the third near-miss in one week is the point
+at which "we keep catching it" stops being reassurance and starts being a measurement
+of how often it happens — and because the candidate design is not hypothetical. It
+exists, it is running, and it was written for the same failure in a context where the
+consequence was a screenshot rather than a scored result.

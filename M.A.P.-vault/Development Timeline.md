@@ -504,6 +504,26 @@ never had one.** What follows was assembled at the close from CLAUDE.md §8 and 
 ADRs that governed the phase, and it is weaker evidence than Phase 1's for exactly
 that reason: a checklist written after the work cannot fail.
 
+**Checked rather than assumed, because the first version of this section asserted it
+from a three-directory search.** A `docs/PHASE2_KICKOFF.md` was proposed as the
+pre-registered source of these seven criteria. It does not exist and never has: of the
+**297 distinct paths ever added on any branch**, none matches `phase` or `kickoff`, and
+the `docs/` tree — which existed before the rename to `M.A.P.-vault/` — only ever held
+`STATE.md` and `decisions/`.
+
+The contrast is what makes the verdict meaningful rather than pedantic:
+
+| | criteria | committed | before the work? |
+| --- | --- | --- | --- |
+| Phase 1 | eight, as named tests | `76ded21`, 2026-08-09 — the **initial commit**, alongside `pyproject.toml` | **yes, provably** |
+| Phase 2 | seven, below | never | **no** |
+
+So: **genuinely post-hoc.** If a kickoff brief was written and never committed, this
+repository cannot show it — and by the standard the project applies everywhere else,
+that is the same as not having one. Git history is the pre-registration; an
+uncommitted intention is the thing the freeze commits, the ADR ordering and the git
+notes all exist to replace.
+
 | # | criterion | met by |
 | --- | --- | --- |
 | 1 | Monte Carlo over the scenario mixture | `eval/montecarlo.py`; the cone is inverted from the mixture, not sampled, so it cannot disagree with the scenarios |

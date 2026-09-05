@@ -365,3 +365,13 @@ is entirely EX-99.1 issuer text, so a test for issuer-promotion skew has nothing
 wrong about direction, so a Brier score against a coin flip restates the span rather than measuring skill
 ([[Findings & Incidents]] #46). *An architecture question*, which is what gives the three-agent ablation a
 specific prediction to test.
+
+**Value provenance** — a marker travelling with a stored number saying whether it was measured, derived
+from measured inputs, or fabricated, with the weakest input winning so it cannot be laundered through
+arithmetic ([[Findings & Incidents]] #48). *The pipeline has provenance for runs and none for values:* a
+float in a JSONL file is a float, and `139.34` from a test helper is indistinguishable from `94.70` from
+Yahoo. Named gap, candidate design already running in the front end.
+
+**Uncommitted pre-registration** — an intention written in advance and never committed, which this project
+treats as equivalent to no pre-registration at all. Git history is the evidence; a brief that cannot be
+shown is the thing the freeze commits and the git notes exist to replace ([[Development Timeline]] §15).
