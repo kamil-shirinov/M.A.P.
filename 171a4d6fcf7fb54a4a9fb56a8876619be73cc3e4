@@ -1917,3 +1917,72 @@ offer.
 PRIMARIES A-D AND D-C ARE UNAFFECTED, along with their Bonferroni-corrected 97.5%
 intervals and the hierarchy of record 17. A-C, B-C and B-D as descriptive
 comparisons lose their B members; A-C remains.
+
+=============================================================================
+RECORD 20 — the control is RE-PURPOSED: re-derivation variance, descriptive only.
+Written 2026-09-05 before the control runs. Arm A complete, arm C mid-run, no
+comparison computed for any arm.
+=============================================================================
+
+The 60-item control was registered in records 15 and 17 to estimate sigma_draw and
+GATE the A-B comparison. Record 19 dropped arm B, so the gate has nothing to gate.
+The control is kept and its purpose is restated here BEFORE it runs.
+
+NEW PURPOSE: measure RE-DERIVATION VARIANCE -- how much a cold re-run moves the
+score. Nothing else in this project measures it.
+
+WHY IT IS WORTH KEEPING. The README supports "re-derivable does not hold" with a
+BYTE-IDENTITY statistic: replaying five identical recorded prompts returned
+byte-identical output twice out of five. That is a statement about strings. It
+tells a reader nothing about whether a re-run would change a reported RESULT. This
+converts it into a result-level number: **a cold re-run changes mean CRPS by X.**
+
+WHAT IT ACTUALLY RE-RUNS, stated precisely because the earlier description was
+narrower than the implementation. The control builds its provider with
+`cached=False`, so ALL THREE AGENTS run fresh -- not the analyst alone. Intake and
+the structuralist are temperature 0 and near-deterministic; the analyst is
+temperature 0.7. So the measurement is WHOLE-PIPELINE re-derivation variance, which
+is what the README's claim is about, and it is a better instrument for that claim
+than an analyst-only re-draw would have been.
+
+WHAT IS REPORTED
+  1. mean CRPS on the 60 items, cached versus cold, and the paired difference with
+     a cluster-robust interval
+  2. the per-item SD of that paired difference -- the quantity formerly called
+     sigma_draw, now reported for its own sake rather than as a gate input
+  3. the byte-identity rate of the cold forecasts against the stored ones, directly
+     comparable to the existing 2-of-5 figure
+  4. how many of the 60 items change their scenario numbers at all
+
+DESCRIPTIVE ONLY. NO INFERENTIAL USE AND NO GATING ROLE. It tests no hypothesis,
+enters no comparison, and corrects nothing. It is a variance measurement of a
+system property the project already states publicly, and its only consumers are the
+README's reproducibility table and the vault.
+
+THERE IS NO TEST HERE TO BIAS, which is why re-purposing it after the fact is
+legitimate where re-purposing a hypothesis test would not be. A gate has a decision
+attached and can be moved to change an outcome; a variance measurement of a stated
+property has no outcome to change. That distinction is the whole reason this record
+exists rather than a silent reuse.
+
+-----------------------------------------------------------------------------
+TWO ITEMS FOR THE WRITE-UP, FIXED NOW
+-----------------------------------------------------------------------------
+1. THE OBSERVATIONAL SALVAGE IS REPORTED AS A CORRELATION, NOT ONLY AS AN INTERVAL.
+   The association between analyst reasoning length and CRPS across 349 items is
+   **r = -0.009**, slope -1.74e-07 per token, CI [-1.47e-06, +2.24e-06]. Reporting
+   only "the interval covers zero" would tell a reader less: a near-zero point
+   estimate with a wide interval and a large one with a wide interval are different
+   findings, and only the first is evidence of absence rather than absence of
+   evidence. Over the whole observed range, 1,600 to 11,431 tokens, the fitted
+   effect is -0.0017 of CRPS against a mean of 0.0326. Still DESCRIPTIVE and still
+   confounded by document difficulty (record 19).
+
+2. THE ARM B COROLLARY IS THE ACTIONABLE HALF AND GETS ITS OWN LINE:
+   **THE ANALYST'S COST IS NOT TUNABLE BY ITS BUDGET.** It can be reduced only by
+   removing the agent, by choosing a model that reasons less, or by a provider-side
+   reasoning-effort control that this backend does not expose. Capping the budget
+   removes the answer rather than the reasoning -- 997 of 1,000 tokens were
+   reasoning and nothing came back. This is the practical finding of the whole
+   arm-B episode and should not be buried inside the explanation of why the arm
+   was dropped.
