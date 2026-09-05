@@ -141,7 +141,11 @@ def main(arm: str = typer.Argument(...), limit: int = typer.Option(0)) -> None:
         for line in index_path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 r = json.loads(line)
-                seen.add((r["ticker"], r["as_of"]))
+                # Only a SUCCESSFUL run counts as done. Treating a failure as seen
+                # would skip it forever on resume, which is how a transient error
+                # becomes a permanent silent exclusion.
+                if r.get("status") == "ok":
+                    seen.add((r["ticker"], r["as_of"]))
 
     typer.echo(f"arm {arm}: {len(items)} items, {len(seen)} already done -> {out_dir}")
     with build_http_client(settings) as client:
@@ -199,14 +203,33 @@ def main(arm: str = typer.Argument(...), limit: int = typer.Option(0)) -> None:
                         structuralist=agents.structuralist.__class__(
                             provider=provider,
                             model=model,
-                            sampling=registry.spec("structuralist").sampling,
+                            # Arm D is the 12B on arm C's prompt (record 17). The
+                            # structuralist's budget is None because the 4B answers
+                            # directly; unbounded, the 12B reasoned for 15,406
+                            # tokens and never answered. 12,000 is its registered
+                            # budget everywhere else (record 19).
+                            sampling=(
+                                registry.spec("structuralist").sampling.model_copy(
+                                    update={"max_tokens": 12000}
+                                )
+                                if spec.structuralist == "analyst"
+                                else registry.spec("structuralist").sampling
+                            ),
                             prompts=prompts,
                             trace=built.trace,
                             stage="structuralist",
                             template=NO_ANALYST_TEMPLATE[0],
                             version=NO_ANALYST_TEMPLATE[1],
                             max_attempts=settings.inference.max_repair_attempts,
-                            context_tokens=registry.spec("structuralist").context_tokens,
+                            # The model and its window travel together. Arm D runs
+                            # the 12B, whose window is 16,384; keeping the 4B's
+                            # 8,192 left a negative prompt budget once the 12,000
+                            # generation budget was subtracted, and the guard
+                            # refused before dispatch. Same defect as the max_tokens
+                            # one, one field along (record 19).
+                            context_tokens=registry.spec(
+                                "analyst" if spec.structuralist == "analyst" else "structuralist"
+                            ).context_tokens,
                             upstream=registry.spec("structuralist").upstream,
                             degeneration_penalty=None,
                         ),
