@@ -1330,3 +1330,91 @@ stored state existed that a reader could point at and re-run.
 The write-up should say that: the project gained a reproducibility property it did
 not previously have, prompted by a provider action that the existing guards caught
 correctly. The guards worked; what was missing was the snapshot, and now it exists.
+
+=============================================================================
+RECORD 14 — the holdout report, FIXED BEFORE THE SPEND
+written 2026-09-05. Holdout unspent: corpus/holdout_spend.jsonl does not exist.
+=============================================================================
+
+THE SETTLED DATA STATE. Price vintage 2026-09-05, pinned and read-only, 701 of 701
+windows. Development half 175 items (3 SCCO excluded as a SpotDriftError stratum,
+record 13 Part B). Holdout 173 items in the clean band; if any fails SpotDriftError
+the surviving count is reported as found, with the excluded items named.
+
+THE PARAMETERS ARE FIXED. a = -0.0757, b = 1.3305, fitted on the development half
+by minimising its log score. THE HOLDOUT DOES NOT REFIT. z' = (z - a)/b, applied
+per item, identical arithmetic to the development correction.
+
+-----------------------------------------------------------------------------
+WHAT IS COMPUTED
+-----------------------------------------------------------------------------
+PRIMARY -- the actual test of Phase 3: does a correction fitted on development
+generalise to a sample it has never seen?
+
+  P1  corrected vs UNCORRECTED on the holdout, LOG SCORE, paired, cluster-robust
+      interval from the moving-block bootstrap, 10-day blocks, 4000 draws, seed
+      20260813
+  P2  the same on CRPS
+
+SECONDARY, all reported whatever they show:
+
+  S1  calibration ratio, before and after, with cluster-robust intervals
+  S2  MAD-scale of z, before and after, with cluster-robust intervals
+  S3  tail ratio, before and after
+  S4  PIT: histogram, tilt against 0.5, Anderson-Darling
+  S5  corrected and uncorrected against all three baselines -- random walk, GARCH,
+      earnings-scaled random walk -- on CRPS and log score
+  S6  |z| > 2.5 and |z| > 3 counts with block spread, before and after
+  S7  the named strata: the ADR 0030 dirty-tree items (102 of the clean holdout),
+      truncated exhibits, degeneration retries, and any SpotDriftError exclusions
+
+-----------------------------------------------------------------------------
+THE READING OF EACH OUTCOME, FIXED NOW
+-----------------------------------------------------------------------------
+CORRECTED BEATS UNCORRECTED ON LOG SCORE (P1 interval excludes zero, favouring
+corrected):
+  THE CORRECTION GENERALISES. A two-parameter map fitted on 175 development items
+  improves a sample of 173 it has never seen. This is the Phase 3 result and it
+  stands whatever the secondary measures show.
+
+NO IMPROVEMENT (P1 interval spans zero):
+  THE CORRECTION WAS FITTED TO DEVELOPMENT NOISE. Reported as a negative result,
+  not as an inconclusive one -- the holdout is the test, it was spent, and it
+  returned no evidence of generalisation. No third parameter is reached for, no
+  refit on the holdout, no reinterpretation of `b` as approximately right.
+
+CORRECTED IS WORSE THAN UNCORRECTED (P1 interval excludes zero, favouring
+uncorrected):
+  Recorded as the strongest form of the same negative: the correction actively
+  harms out of sample. Stated in advance so it cannot later be softened into "no
+  improvement".
+
+BODY STILL OVER-DISPERSED ON THE HOLDOUT (S2 corrected MAD-scale CI excludes 1.0
+from below):
+  THE FAILURE MODE RECORD 3 PREDICTED IS CONFIRMED OUT OF SAMPLE. That is a
+  RESULT, not a disappointment: record 3 named it in advance -- "the log-score-
+  optimal b may well exceed 1.1052 and push the corrected body BELOW 1.0, over-
+  dispersing 171 ordinary items to cover seven extreme ones" -- and a prediction
+  that holds on a fresh sample is evidence about the method, not a shortfall.
+
+THE TAIL RATIO UNMOVED (S3 essentially unchanged before to after):
+  AS PREDICTED, AND NOT EVIDENCE OF ANYTHING NEW. A shift and a scale cannot alter
+  kurtosis. Confirmation, not discovery, and it is not to be presented as a finding.
+
+STUDENT-T REMAINS NOT ADOPTED whatever the holdout shows. Its trigger under record
+3 was replication of the tail excess on the AMBIGUOUS band under record 2, which
+came back PARTIAL and remains PARTIAL after re-derivation on this vintage. Partial
+is not replication. A holdout tail result does not substitute for that trigger.
+
+-----------------------------------------------------------------------------
+REPORTING DISCIPLINE
+-----------------------------------------------------------------------------
+EVERY ITEM ON THE LIST IS REPORTED, IN THE ORDER GIVEN, WHATEVER IT SAYS. No
+leading with a subset, no promoting a secondary measure that happens to look
+better than the primary, no omission of a measure that returned nothing.
+
+The spend record is appended BEFORE any number is printed, per ADR 0031, and
+carries `calibration` naming the fitted a and b rather than null -- this is a
+holdout scored with something to test, and the record must say so.
+
+THE HOLDOUT IS SPENT ONCE. There is no second run under any outcome.
