@@ -83,9 +83,12 @@ LEDGER = Path("var/corpus/ledger.jsonl")
 # argument that makes the frozen corpus commit the proof it was pre-registered.
 HOLDOUT_LEDGER = Path("corpus/holdout_spend.jsonl")
 PIN_STORE = Path("var/corpus/realised_pins.jsonl")
-# The last snapshot taken before Yahoo rewrote SCCO's split-adjusted close on
-# 2026-09-05. Every published number rests on this vintage; see ADR 0033.
-SCORING_VINTAGE = "2026-09-04"
+# One snapshot covering both bands and both splits, materialised 2026-09-05 so the
+# development fit and the holdout test rest on a single data state. The 09-04
+# snapshot covered only what had been scored by then and held none of the holdout's
+# 346 windows, and the cache is read-only under a pin -- so the spend would have
+# failed partway through. See git note record 13.
+SCORING_VINTAGE = "2026-09-05"
 
 
 @app.command()
