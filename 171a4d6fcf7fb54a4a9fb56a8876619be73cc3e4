@@ -1826,3 +1826,94 @@ WHAT WAS VERIFIED BEFORE COMMITTING THE RUN
 
 OUTPUTS GO TO `var/ablation/<arm>/`, NEVER `runs/`. They are not corpus artifacts,
 they are not scored against the holdout, and they do not enter the ledger.
+
+=============================================================================
+RECORD 19 — arm B is DROPPED and arm D is repaired.
+Written 2026-09-05 BEFORE A-D or D-C has produced any number. Arm A is complete
+(355 of 355, a pure cache replay); arm C is mid-run; no comparison has been
+computed and no CRPS for any arm exists.
+=============================================================================
+
+-----------------------------------------------------------------------------
+ARM D — a BUG FIX, not a design change
+-----------------------------------------------------------------------------
+Record 17 registered arm D as "the 12B on arm C's no-analyst prompt". The
+implementation handed it `registry.spec("structuralist").sampling`, whose
+`max_tokens` is None, because the 4B structuralist answers directly and needs no
+bound. Unbounded, the 12B reasoned for 15,406 tokens and produced no answer.
+
+`max_tokens` is set to 12,000, matching the analyst's registered budget. **None was
+never the design** -- record 17 says "the 12B on arm C's prompt", and the 12B's
+budget in every frozen configuration is 12,000. This is a defect in my wiring,
+corrected to what was registered, and it changes no parameter the design specified.
+
+-----------------------------------------------------------------------------
+ARM B — DROPPED, and here is why before any primary number exists
+-----------------------------------------------------------------------------
+1. THE REGISTERED PREMISE IS FALSIFIED. Record 17 describes the cap as "analyst
+   max_tokens 1000 (18% of its 5,585 mean)", treating it as a LENGTH manipulation.
+   It is not one. gemma-4-12b-qat is a reasoning model: at a 1,000 cap it emitted
+   997 reasoning tokens and no answer at all. The cap removes the ANSWER, not the
+   reasoning. The arm does not measure a shorter analyst; it measures a broken one.
+
+2. ANY REPAIRED CAP CREATES DIFFERENTIAL ATTRITION. Raise the cap and the items
+   that still fail are exactly those whose documents need more reasoning. The
+   completed set is then biased toward easier documents, and comparing it against
+   arm A -- which has every item -- makes the estimand near-circular: the capped
+   arm looks good partly because the hard items dropped out.
+
+3. THE CAP VALUE WOULD BE FITTED TO A FAILURE. Choosing 3,000 or 4,000 means
+   choosing a design parameter empirically after watching 1,000 fail. That is the
+   thing this project's pre-registration discipline exists to prevent, and it is
+   not made acceptable by the parameter being about cost rather than about a
+   result.
+
+4. NOTHING ABOUT AN OUTCOME IS BEING AVOIDED. Arm B produced no forecast, no CRPS
+   and no comparison. There is no inconvenient result to escape, and this record is
+   written before the two primaries have produced one either.
+
+THE SIGMA_DRAW CONTROL GOES WITH IT. The 60-item control existed for exactly one
+purpose: to gate A-B against draw noise, because A is a cached temperature-0.7 draw
+and B was a fresh one. With A-B gone there is no comparison it gates. Arms C and D
+run the structuralist at temperature 0 with a pass-through analyst, so neither
+carries the analyst's stochasticity, and A-D compares a cached draw against a
+DETERMINISTIC arm -- draw noise enters A only, as a fixed property of the arm
+rather than as a difference between two draws. The control is not run. Its
+specification stands in record 15 and 17 for anyone who later needs it.
+
+-----------------------------------------------------------------------------
+THE FAILURE IS A FINDING, and a better one than the comparison would have been
+-----------------------------------------------------------------------------
+**THIS PIPELINE CANNOT BE MADE CHEAPER BY CAPPING THE ANALYST.** The analyst is
+86.7% of all generated tokens and the obvious economy is to let it think less. It
+does not work, and the reason generalises beyond this project: on a reasoning model
+the token budget is spent on reasoning FIRST and the answer LAST, so a budget cut
+truncates the output rather than the deliberation. At 1,000 tokens, 99.7% went to
+reasoning and nothing came back.
+
+The practical consequence is that the cost of a reasoning agent is not tunable by
+its budget. It is tunable only by removing the agent (arms C and D), by choosing a
+model that reasons less, or by a provider-side control over reasoning effort that
+this backend does not expose. That is worth more than the A-B comparison would have
+been, and it was obtained for the price of two smoke-test items.
+
+-----------------------------------------------------------------------------
+THE LENGTH QUESTION, SALVAGED OBSERVATIONALLY -- NOT A SUBSTITUTE
+-----------------------------------------------------------------------------
+The 719 completed analyst calls already carry their own completion-token counts, so
+the association between reasoning length and forecast quality can be LOOKED AT
+without running anything: regress per-item CRPS on analyst completion tokens across
+the existing corpus.
+
+**IT IS CONFOUNDED BY DOCUMENT DIFFICULTY AND IS NOT THE EXPERIMENT.** A harder
+filing plausibly causes both longer reasoning and a worse forecast, which would
+produce a positive slope with no causal content whatsoever. It has no random
+assignment, no attrition control and no counterfactual. It is reported as
+DESCRIPTIVE, labelled as such wherever it appears, and it must never be written up
+as evidence about what capping the analyst would do. Its one virtue is that it is
+free and has no attrition, which is precisely what the repaired arm B could not
+offer.
+
+PRIMARIES A-D AND D-C ARE UNAFFECTED, along with their Bonferroni-corrected 97.5%
+intervals and the hierarchy of record 17. A-C, B-C and B-D as descriptive
+comparisons lose their B members; A-C remains.
