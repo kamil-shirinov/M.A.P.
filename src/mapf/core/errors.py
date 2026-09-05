@@ -346,6 +346,26 @@ class MalformedPriceDataError(MarketDataError):
         super().__init__(f"{provider} returned unusable bars for {ticker}: {reason}")
 
 
+class PriceSnapshotIncompleteError(MarketDataError):
+    """A pinned price vintage does not hold the window a score needs.
+
+    Raised instead of fetching. A vintage that silently backfills from today is not
+    a snapshot — it is the calendar-keyed cache with a fixed name, and it reintroduces
+    exactly the decay it was added to stop: on 2026-09-05 Yahoo rewrote SCCO's
+    split-adjusted close from 204.2374 to 201.8156, retroactively, and three corpus
+    items stopped matching the spot they were produced against.
+    """
+
+    def __init__(self, ticker: str, vintage: str, window: str) -> None:
+        self.ticker = ticker
+        self.vintage = vintage
+        self.window = window
+        super().__init__(
+            f"price snapshot {vintage} has no window {window} for {ticker}; "
+            "a pinned vintage never fetches"
+        )
+
+
 class PriceAdjustmentUnsupportedError(MarketDataError):
     """The adapter cannot produce the canonical adjustment basis for this request.
 

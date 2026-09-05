@@ -26,6 +26,7 @@ from pathlib import Path
 import pandas as pd
 import structlog
 
+from mapf.core.errors import PriceSnapshotIncompleteError
 from mapf.core.models import ADJUSTMENT_BASIS, Bar, PriceWindow
 from mapf.core.ports import MarketDataProvider
 
@@ -49,10 +50,15 @@ class ParquetPriceCache:
         cache_dir: Path,
         *,
         today: Callable[[], date] = _today,
+        frozen: bool = False,
     ) -> None:
         self._inner = inner
         self._cache_dir = cache_dir
         self._today = today
+        # A frozen vintage READS ONLY. Without this the pin is cosmetic: a miss
+        # would fetch today's series and store it under the pinned name, which is
+        # the calendar-keyed cache wearing a fixed label.
+        self._frozen = frozen
 
     @property
     def name(self) -> str:
@@ -64,6 +70,10 @@ class ParquetPriceCache:
         if cached is not None:
             return cached
 
+        if self._frozen:
+            raise PriceSnapshotIncompleteError(
+                ticker, self._today().isoformat(), f"{start.isoformat()}__{end.isoformat()}"
+            )
         window = self._inner.get_ohlcv(ticker, start, end)
         self._write(path, window)
         return window

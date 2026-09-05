@@ -83,6 +83,9 @@ LEDGER = Path("var/corpus/ledger.jsonl")
 # argument that makes the frozen corpus commit the proof it was pre-registered.
 HOLDOUT_LEDGER = Path("corpus/holdout_spend.jsonl")
 PIN_STORE = Path("var/corpus/realised_pins.jsonl")
+# The last snapshot taken before Yahoo rewrote SCCO's split-adjusted close on
+# 2026-09-05. Every published number rests on this vintage; see ADR 0033.
+SCORING_VINTAGE = "2026-09-04"
 
 
 @app.command()
@@ -91,6 +94,15 @@ def evaluate(
     frozen: Path = typer.Option(FROZEN, help="The frozen corpus."),
     ledger_path: Path = typer.Option(LEDGER, help="Where item outcomes were recorded."),
     runs_dir: Path = typer.Option(Path("runs"), help="Where run artifacts live."),
+    vintage: str = typer.Option(
+        SCORING_VINTAGE,
+        help=(
+            "The stored price snapshot to score against. Pinned and READ-ONLY: a "
+            "missing window refuses rather than fetching, because an upstream "
+            "revision to a scored series is silent and permanent. Pass an empty "
+            "string to score against a live fetch, which is not reproducible."
+        ),
+    ),
     pins_path: Path = typer.Option(
         PIN_STORE,
         help=(
@@ -307,8 +319,19 @@ def evaluate(
             # Computed identically in both modes. `--check` withholds the scores; it
             # does not avoid producing them, because a path that skipped the
             # computation would not be exercising the one that matters.
+            # An empty vintage means UNPINNED — a live fetch, which is not
+            # reproducible and says so rather than looking like a snapshot.
+            pinned = date.fromisoformat(vintage) if vintage else None
+            typer.secho(
+                f"vintage    {vintage} (pinned snapshot, read-only)"
+                if pinned is not None
+                else "vintage    UNPINNED -- scoring a live fetch, not reproducible",
+                fg=typer.colors.GREEN if pinned is not None else typer.colors.YELLOW,
+            )
             pins = RealisedPins(pins_path)
-            scores = _score(forecasts, settings, calendar, strict=not check, pins=pins)
+            scores = _score(
+                forecasts, settings, calendar, strict=not check, pins=pins, vintage=pinned
+            )
             # BEFORE anything is printed. See `_record_holdout_spend`.
             if split == "holdout" and not check:
                 _record_holdout_spend(HOLDOUT_LEDGER, band=band, items=scores.n, record=record)
@@ -319,7 +342,16 @@ def evaluate(
                 other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
                 if other is not None:
                     _leakage(
-                        other, corpus, ledger, runs_dir, settings, calendar, scores, split, pins
+                        other,
+                        corpus,
+                        ledger,
+                        runs_dir,
+                        settings,
+                        calendar,
+                        scores,
+                        split,
+                        pins,
+                        pinned,
                     )
 
         if not check:
@@ -697,13 +729,14 @@ def _score(
     *,
     strict: bool = True,
     pins: RealisedPins | None = None,
+    vintage: date | None = None,
 ) -> BandScores:
     """Fit and score everything, against one price series and one EDGAR calendar.
 
     `pins` anchors the outcome bar. Passed as callables rather than the store
     itself so `mapf.eval` keeps its distance from anything that touches disk.
     """
-    market = build_market_data(settings)
+    market = build_market_data(settings, vintage=vintage)
     store = pins if pins is not None else RealisedPins(PIN_STORE)
 
     def prices(ticker: str, start: date, end: date) -> PriceWindow:
@@ -961,6 +994,7 @@ def _leakage(
     scores: BandScores,
     split: str,
     pins: RealisedPins,
+    vintage: date | None,
 ) -> None:
     """The headline number, reported only when both bands are actually finished.
 
@@ -982,7 +1016,11 @@ def _leakage(
         )
         return
     theirs = _score(
-        load_band(ledger, corpus, runs_dir, other, split), settings, calendar, pins=pins
+        load_band(ledger, corpus, runs_dir, other, split),
+        settings,
+        calendar,
+        pins=pins,
+        vintage=vintage,
     )
     if not theirs.items:
         return

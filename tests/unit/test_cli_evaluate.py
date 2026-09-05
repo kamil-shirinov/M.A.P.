@@ -85,7 +85,10 @@ class _Market:
 @pytest.fixture(autouse=True)
 def _offline(monkeypatch: pytest.MonkeyPatch) -> None:
     """No unit test may reach the network. Ever."""
-    monkeypatch.setattr("mapf.cli.commands.evaluate.build_market_data", lambda _settings: _Market())
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.build_market_data",
+        lambda _settings, vintage=None: _Market(),
+    )
 
 
 def _write_forecast(tmp_path: Path, run_id: UUID, filing_date: date) -> None:
@@ -138,6 +141,9 @@ def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ig
             # real store would pin the corpus to values no market ever produced.
             "--pins-path",
             str(tmp_path / "realised_pins.jsonl"),
+            # Unpinned: these tests serve prices from a fake provider, so there is
+            # no snapshot to read and a frozen vintage would refuse every window.
+            *(() if "--vintage" in args else ("--vintage", "")),
             *(() if "--split" in args else ("--split", "dev")),
             *args,
         ],
@@ -934,7 +940,8 @@ def test_the_check_reports_a_mixed_vintage_as_a_problem(
     """Scoring raises on this; the pre-flight names both series and carries on, so
     one run shows every problem rather than the first."""
     monkeypatch.setattr(
-        "mapf.cli.commands.evaluate.build_market_data", lambda _settings: _TwoVintages()
+        "mapf.cli.commands.evaluate.build_market_data",
+        lambda _settings, vintage=None: _TwoVintages(),
     )
     result, _ = _checked(tmp_path)
     assert result.exit_code == 2

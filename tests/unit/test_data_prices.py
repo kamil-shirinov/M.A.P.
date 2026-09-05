@@ -21,6 +21,7 @@ from mapf.core.errors import (
     MalformedPriceDataError,
     MarketDataError,
     MarketDataUnavailableError,
+    PriceSnapshotIncompleteError,
 )
 from mapf.core.models import ADJUSTMENT_BASIS, PriceWindow
 from mapf.data.cache import ParquetPriceCache
@@ -397,3 +398,42 @@ def test_a_defect_in_our_own_code_is_not_mistaken_for_a_provider_fault() -> None
     with pytest.raises(KeyError):
         ProviderChain([primary, fallback]).get_ohlcv("AAPL", START, END)
     assert fallback.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# A pinned vintage is a stored snapshot, not a cache with a fixed name
+# ---------------------------------------------------------------------------
+def test_a_pinned_vintage_reads_the_snapshot_without_fetching(tmp_path: Path) -> None:
+    inner = StubProvider("yfinance", _window())
+    writable = ParquetPriceCache(inner, tmp_path, today=lambda: date(2026, 9, 4))
+    writable.get_ohlcv("AAPL", START, END)
+    assert inner.calls == 1
+
+    frozen = ParquetPriceCache(inner, tmp_path, today=lambda: date(2026, 9, 4), frozen=True)
+    frozen.get_ohlcv("AAPL", START, END)
+    assert inner.calls == 1  # served from the snapshot, provider untouched
+
+
+def test_a_pinned_vintage_refuses_a_missing_window_rather_than_fetching(
+    tmp_path: Path,
+) -> None:
+    """The whole point. A vintage that backfills from today is the calendar-keyed
+    cache wearing a fixed label, and it decays exactly as that one did: on
+    2026-09-05 Yahoo rewrote SCCO's split-adjusted close and three items stopped
+    matching the spot they were produced against."""
+    inner = StubProvider("yfinance", _window())
+    frozen = ParquetPriceCache(inner, tmp_path, today=lambda: date(2026, 9, 4), frozen=True)
+    with pytest.raises(PriceSnapshotIncompleteError) as caught:
+        frozen.get_ohlcv("AAPL", START, END)
+    assert caught.value.ticker == "AAPL"
+    assert caught.value.vintage == "2026-09-04"
+    assert inner.calls == 0
+
+
+def test_an_unpinned_cache_still_fetches_and_writes(tmp_path: Path) -> None:
+    """Pinning is opt-in: the corpus runner and ad-hoc use keep the old behaviour."""
+    inner = StubProvider("yfinance", _window())
+    cache = ParquetPriceCache(inner, tmp_path, today=lambda: date(2026, 9, 4))
+    cache.get_ohlcv("AAPL", START, END)
+    cache.get_ohlcv("AAPL", START, END)
+    assert inner.calls == 1  # second call served from disk

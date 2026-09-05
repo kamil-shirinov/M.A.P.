@@ -23,6 +23,7 @@ from mapf.bootstrap import (
     build_run,
     build_symbol_index,
 )
+from mapf.core.errors import PriceSnapshotIncompleteError
 from mapf.core.hashing import new_run_id
 from mapf.core.models import Bar, Forecast, PriceWindow
 from mapf.core.ports import LLMResponse, ModelInfo, RenderedPrompt, SamplingParams
@@ -363,3 +364,11 @@ def test_a_stage_that_never_reasoned_records_nothing(tmp_path: Path) -> None:
     trace = CountingTrace(JsonlTrace(tmp_path / "t.jsonl"))
     trace.record(stage="intake", attempt=0, data={"reasoning_tokens": None})
     assert trace.reasoning_tokens == {}
+
+
+def test_a_pinned_vintage_builds_a_frozen_cache(tmp_path: Path) -> None:
+    """The wiring that makes a published number reproducible: with a vintage the
+    cache reads a stored snapshot and never reaches a provider."""
+    market = build_market_data(_settings(tmp_path), vintage=date(2026, 9, 4))
+    with pytest.raises(PriceSnapshotIncompleteError):
+        market.get_ohlcv("AAPL", date(2026, 8, 3), date(2026, 8, 7))

@@ -13,6 +13,7 @@ the module that owns it.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from uuid import UUID
 
@@ -63,10 +64,17 @@ def build_llm_provider(
     return CachingProvider(inner, settings.cache.llm_dir) if cached else inner
 
 
-def build_market_data(settings: Settings) -> MarketDataProvider:
-    """The configured chain, behind the vintage-keyed parquet cache (ADR 0012)."""
+def build_market_data(settings: Settings, *, vintage: date | None = None) -> MarketDataProvider:
+    """The configured chain, behind the vintage-keyed parquet cache (ADR 0012).
+
+    `vintage` pins the cache to a STORED SNAPSHOT and makes it read-only. Without it
+    the cache namespaces on the calendar day, so every scoring run re-fetches and the
+    corpus decays with every upstream revision.
+    """
     chain = ProviderChain([_PROVIDERS[name]() for name in settings.data.provider_order])
-    return ParquetPriceCache(chain, settings.cache.price_dir)
+    if vintage is None:
+        return ParquetPriceCache(chain, settings.cache.price_dir)
+    return ParquetPriceCache(chain, settings.cache.price_dir, today=lambda: vintage, frozen=True)
 
 
 def build_dividends(settings: Settings) -> DividendSource:
