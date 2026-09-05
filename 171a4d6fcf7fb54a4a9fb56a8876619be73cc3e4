@@ -1681,3 +1681,113 @@ THE DIFF, VERBATIM
 
 -Convert the narrative above into the required object, following the three rules. Copy the stated numbers exactly; write the justifications in your own words.
 +Produce the three scenarios from the material facts above, following the three rules. Write each justification before its numbers.
+
+=============================================================================
+RECORD 17 — the FOUR-arm ablation: arm D, what cannot be isolated, and the
+comparison hierarchy. Registered before any arm runs.
+=============================================================================
+
+Supersedes record 15's three-arm design and incorporates record 16's correction.
+
+  ARM A  frozen system            intake -> analyst 12B t=0.7 -> structuralist 4B t=0
+  ARM B  capped analyst           as A, analyst max_tokens 1000 (18% of its 5,585 mean)
+  ARM C  no analyst, small model  intake -> structuralist 4B t=0 on the no-analyst prompt
+  ARM D  no analyst, large model  intake -> structuralist 12B t=0 on the no-analyst prompt
+
+Arm D exists because record 16 established that A-C moves three things at once:
+the analyst, the model doing the forecasting, and the prompt. D holds the model at
+12B so that D-C isolates model size with the prompt held constant, and A-D isolates
+the analyst with the model held constant.
+
+IMPLEMENTATION NOTE. Arms C and D run the ordinary pipeline with a PASS-THROUGH
+analyst: an object satisfying the analyst's interface that wraps intake's facts as
+the narrative and makes no model call. Nothing in `execute` changes, so artifact
+writing, the truncation refusal and forecast assembly are identical across all four
+arms. The no-analyst prompt reuses the existing `{{narrative}}` slot, so no request
+model changes either: 11 changed lines of 25.
+
+-----------------------------------------------------------------------------
+WHAT FOUR ARMS STILL CANNOT ISOLATE
+-----------------------------------------------------------------------------
+**No comparison in this design moves exactly one thing, and that is a property of
+the architecture rather than a gap in the experiment.**
+
+Removing the analyst forces a prompt change, because the frozen structuralist's
+instructions refer to something that is no longer present -- its rule 1 is "copy
+the ESTIMATE numbers from the narrative", and without an analyst there are no
+ESTIMATE lines and nothing to copy. So:
+
+  D - C   CLEAN. Model size, prompt and pipeline held constant. The only clean
+          comparison in the design.
+  A - D   the analyst, with the forecasting model held at 12B -- but the prompt
+          differs, necessarily.
+  A - B   the token budget, prompt and model held constant, but confounded by
+          DRAW NOISE because A is a cached temperature-0.7 draw and B is a fresh
+          one. Gated on sigma_draw below.
+  A - C   three things at once. Descriptive only.
+  B - C, B - D   the same, plus the cap. Descriptive only.
+
+**THE ANALYST'S CONTRIBUTION IS NOT CLEANLY IDENTIFIABLE BY ABLATION IN THIS
+ARCHITECTURE.** A-D is the closest available and still carries the prompt change.
+Stating it now, before any number exists, so that a small A-D difference is not
+later read as a clean measurement of what the analyst adds. The only way to remove
+the confound entirely would be an architecture whose structuralist prompt does not
+name its upstream -- which is a redesign, not an experiment.
+
+-----------------------------------------------------------------------------
+COMPARISON HIERARCHY AND MULTIPLICITY, FIXED NOW
+-----------------------------------------------------------------------------
+Four arms give six pairwise tests on a design whose stated prior is that nothing
+differs. Testing six and reporting the smallest interval would manufacture a result.
+
+  PRIMARY, family of two, family-wise error controlled by Bonferroni:
+      A - D   the analyst, model held constant
+      D - C   model size, prompt held constant
+    Each is judged at a BONFERRONI-CORRECTED 97.5% cluster-robust interval --
+    bootstrap percentiles 1.25 and 98.75 rather than 2.5 and 97.5. A primary that
+    excludes zero at 95% but not at 97.5% IS REPORTED AS NOT ESTABLISHED.
+
+  SECONDARY, one test, reported at an uncorrected 95% interval and explicitly NOT
+  part of the family:
+      A - B   the token budget, additionally gated on sigma_draw
+
+  REPORTED BUT NOT TESTED: A-C, B-C, B-D. Point estimates and intervals are shown
+  for completeness; NO INFERENTIAL CLAIM is made from them and they carry no
+  correction because none is being claimed.
+
+The primary pair was chosen for being the two least confounded comparisons
+available, before seeing any number. It is not revisable after.
+
+-----------------------------------------------------------------------------
+SIGMA_DRAW -- unchanged from record 15, restated because the gate is load-bearing
+-----------------------------------------------------------------------------
+60-item subsample, chosen by the corpus execution seed, 23 blocks.
+  d_i = CRPS(cached draw) - CRPS(fresh uncapped draw), per item
+  decompose by 10-day block: sigma_b^2 between, sigma_w^2 within
+  SE_349 = sqrt( ( sigma_b^2 + sigma_w^2 / 8.31 ) / 42 )
+  GATE: |A - B| > 2 x SE_349, else the cap effect is NOT ESTABLISHED
+sigma_b, sigma_w, sigma_draw and SE_349 are all reported whatever they are.
+
+-----------------------------------------------------------------------------
+PREDICTIONS AND POWER
+-----------------------------------------------------------------------------
+PRIOR, unchanged: THE ARMS WILL BE HARD TO TELL APART. P(up) spans 0.369-0.631 and
+the volatility slope is near 0.4; most of what reaches the forecast is the document
+and the trailing volatility, both of which survive removing the analyst.
+
+  ALL FOUR INDISTINGUISHABLE  ->  no component measurably improves CRPS on this
+    corpus, and the 12B analyst -- 86.7% of all generated tokens -- is the most
+    expensive part with no demonstrated benefit. The most likely outcome.
+  A BETTER THAN D  ->  the analyst contributes beyond its model size. The
+    architecture's hypothesis gets its first support, with the prompt caveat.
+  D BETTER THAN C  ->  model size matters more than the pipeline stage. The clean
+    comparison, and the one whose result is least arguable.
+  D BETTER THAN A  ->  the analyst actively harms at fixed model size. Reported
+    prominently and not explained away.
+  P(up) SPAN WIDENS WITHOUT THE ANALYST  ->  the three-scenario frame compresses
+    the directional claim (Findings #46). Independent of the CRPS result.
+
+POWER: at 349 items over 42 blocks, expect a CRPS interval half-width near 0.0008
+against a mean near 0.032 at 95%; the Bonferroni primaries are wider still. THE
+DESIGN CAN DETECT ROUGHLY A 2.5-3% DIFFERENCE AND CANNOT DETECT 1%. A null is
+reported as "no difference larger than about 3%", never as "no difference".
