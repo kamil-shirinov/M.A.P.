@@ -4,11 +4,110 @@ Turns unstructured financial news into **calibrated, falsifiable probabilistic p
 forecasts** using local open-weight models. Three specialised agents run in sequence;
 the output is a schema-validated JSON forecast plus a chart.
 
-> **Status: Phase 1 code complete, first live run in progress.** All eight acceptance
-> criteria pass as tests against recorded fixtures, with no inference server and no
-> network. What has *not* yet happened is a full run against a real backend — so no
-> claim is made here about forecast quality, and none should be inferred. The prompts
-> have been tested for structure, never for whether a 3B model produces useful facts.
+> **Status: Phases 1 to 3 complete.** 701 forecasts across two years of filings on a
+> pre-registered corpus. The system's stated uncertainty was measured, found to be too
+> narrow, corrected by a two-parameter map fitted on half the data, and the correction
+> was tested once on the other half — where it improved both scoring rules on data it
+> had never seen. The forecasts themselves remain worse than a random walk. The
+> holdout has been spent and cannot be spent again.
+
+---
+
+## Results
+
+The corpus was frozen and committed before any inference ran; the commit order is the
+pre-registration. **356 filings from after the models' training cutoff and 353 from
+before it**, 120 companies, 8-K Item 2.02 exhibits, a five-session horizon, point-in-time
+aligned so the overnight announcement gap falls outside the window.
+
+**701 forecasts completed. 8 failed** — every one an agent generating its full token
+budget and emitting no answer. All are named in `M.A.P.-vault/`.
+
+> **Log score is the negative log predictive density: lower is better.** Stated because
+> "improved from −0.949 to −1.237" reads as worse to almost every reader.
+
+### Phase 2 — the measurement
+
+Development half, **175 items in 18 date clusters**, cluster-robust intervals throughout.
+
+| | vs random walk | vs GARCH | vs earnings-scaled RW |
+| --- | --- | --- | --- |
+| CRPS | worse by 5.4% | indistinguishable | indistinguishable |
+| Log score | worse by 12.9% | worse by 12.0% | indistinguishable |
+
+**Calibration ratio 0.733, 95% CI [0.637, 0.801].** The interval excludes 1.0, so the
+over-confidence is measured rather than suspected. This was the question the phase was
+redesigned around after a power analysis showed directional skill was undetectable at
+any affordable sample size.
+
+**Directional accuracy 49.7%** (87 of 175). P(up) spans 0.369 to 0.631 with a median of
+0.513 — the system does not so much get direction wrong as decline to have a view. All
+three baselines set mean zero by construction and score identically, so this is a
+comparison against a coin.
+
+**No measurable training-cutoff leakage.** Clean band 0.0318 against ambiguous 0.0335, a
+difference of **−0.0017 with an interval from −0.0093 to +0.0060**. The system scores
+marginally worse on the filings it might have memorised — the direction that embarrasses
+the contamination hypothesis rather than supporting it. This design could have detected
+gross memorisation and could not have detected a subtle familiarity effect of a few
+percent, and this sentence is the write-up saying so.
+
+### Phase 3 — the correction, and the one-shot test
+
+A two-parameter map `z → (z − a) / b`, fitted on the development half only, by minimising
+the log score. Form, objective, success condition and predicted failure mode were all
+committed before the fit ran.
+
+Fitted: **a = −0.076** (covers zero, as predicted — there was no directional tilt to
+remove), **b = 1.331** (excludes 1, so the intervals genuinely needed widening).
+
+**The pre-registered success condition failed on development.** The corrected body came
+out over-dispersed, which is the exact failure mode recorded in advance: a scale fitted
+to the log score lets a handful of extreme items pull it up and over-widen the ordinary
+ones.
+
+The holdout was then spent, once, on **173 items**.
+
+| | corrected | uncorrected | difference |
+| --- | --- | --- | --- |
+| Log score | **−1.237** | −0.949 | **−0.288 [−0.453, −0.111]** |
+| CRPS | **0.0378** | 0.0387 | **−0.0009 [−0.0018, −0.0001]** |
+
+Both intervals exclude zero. **The correction generalises to data the fit never saw.**
+
+Corrected, the calibration ratio moves from 0.592 to 0.788 and the body's dispersion from
+1.380 to 1.037, an interval covering 1.0. The tail ratio does not move — 1.175 to 1.183 —
+exactly as predicted, because a location-and-scale map cannot change kurtosis.
+
+**Two claims that must not be merged.** The calibration correction generalises out of
+sample. The forecasting did not improve: corrected, the system now beats the
+earnings-scaled random walk on CRPS, and still loses to GARCH and to the plain random
+walk on both rules. *A better-calibrated statement of the same information is not a
+better forecast.*
+
+**And the development failure was not refuted.** The condition failed on development by
+0.0019 and passed on the holdout — but the two halves are not distinguishable from each
+other. The difference in their uncorrected calibration ratios is **+0.098 with an
+interval from −0.058 to +0.249**, and the same holds for every dispersion statistic
+compared across the split. Two marginal calls landing on opposite sides of 1.0 in samples
+a test cannot separate. The defensible statement is that the correction is approximately
+right, and whether it slightly over- or under-corrects is unresolved at this sample size.
+
+### Registered replications
+
+Two findings developed on the development half were given pre-registered replication
+tests on the second band, written before any of its items were scored.
+
+**Cross-sectional volatility compression: replicated**, against both baselines. The
+system's volatilities span about half the range a trailing-volatility baseline does — an
+attenuation-corrected slope near 0.4 where 1.0 is correct, with every registered
+prediction met and the effect monotone across three cut depths. This is the project's
+only finding established out of sample.
+
+**Heavier-than-normal tails: partial.** The exceedance counts replicated emphatically;
+the tail ratio's interval missed excluding 1.0 by 0.005. Registered in advance as a
+possible split outcome, and reported as a miss rather than rounded. The Student-t
+successor it would have triggered stays unadopted.
 
 ---
 
@@ -41,11 +140,32 @@ from the SEC's `company_tickers_exchange.json` (~10k US-listed companies). Non-U
 listings work only if you already know the suffixed ticker (`.L`, `.TO`, `.DE`); they do
 not appear in name search. There is no global name coverage.
 
+**Nearly two-thirds of the clean band cannot be reconstructed from a commit.** 208 of
+351 completed items were produced while the working tree had uncommitted changes, so no
+code digest was recorded. Development continued against a live run for days, which was a
+mistake. The honest figure is **214 of 349 at the moment the band finished**; correcting
+an unrelated defect later happened to clean six. The second band has none — **350 of 350
+carry one digest at one commit** — so the defect was fixed rather than merely survived.
+
+What survives this: the forecast-governing surface was verified against the frozen record
+at every launch. What does not: that verification did not cover the truncation
+parameters, one of which drifted mid-band under an unchanged identifier, affecting six
+items that were found and re-run.
+
+**The price vintage pinned nothing until 5 September 2026.** Every manifest recorded
+`fetched_on: 2026-08-14`. No price was ever fetched on that date. The cache was keyed on
+the real calendar day in every code path, so the corpus was built across at least seven
+daily snapshots while every manifest asserted a single one that never existed. What
+protected the result was not the pin but a drift guard written for a different purpose,
+which refuses to score an item whose recorded spot has moved. The corpus now exists at
+one deliberately pinned snapshot of **701 windows** — the first time in the project's
+history that has been true.
+
 **"Reproducible" is four separate claims here. Three hold; the fourth does not.**
 
 | claim | verdict |
 | --- | --- |
-| **Pre-registered** — the corpus, the bands and every threshold were fixed before any result was seen | **holds**, and the commit order proves it |
+| **Pre-registered** — the corpus, the bands and every threshold were fixed before any result was seen | **holds**, and the commit order proves it. **Fourteen pre-registration records** are stored as git notes on `refs/notes/commits`, each written before the result it constrains. GitHub does not display notes in the web interface — read them with `git log --show-notes`. They fix the statistics, the predicted direction, and the interpretation of every outcome including those that would disconfirm |
 | **Auditable** — every prompt and every raw response is preserved in `runs/<run_id>/trace.jsonl` | **holds**; a run is refused if any trace is missing or empty |
 | **Replayable from cache** — re-reading a completed run returns byte-identical output | **holds** |
 | **Re-derivable** — a cold cache reproduces the same forecasts | **does not hold** |
@@ -60,6 +180,22 @@ So a re-run from a cold cache produces *similar* forecasts, not identical ones. 
 is exact is replay **from the cache** — which is why the cache is provenance
 infrastructure and not an optimisation.
 
+**Scoring was non-reproducible for a second, unrelated reason.** Until the vintage was
+pinned, prices were re-fetched on every run, and an upstream split or correction rewrites
+history retroactively. Three items were lost to a genuine SCCO split the provider applied
+25 days late. Note that dropping those items is *conservative rather than correct* — a
+return is scale-invariant under a split, so they are scoreable once the recorded spot is
+rescaled. The guard refuses because it cannot distinguish a split from genuine drift.
+
+**One phase opened without its criteria committed.** Phase 1's eight acceptance criteria
+were committed in the initial commit, before a line of `src/` existed. **Phase 2's seven
+were never committed at all.** They were written in advance, in a brief that only ever
+existed as a chat message, and by the standard applied everywhere else here — git history
+is the pre-registration — that is the same as not having them. Every decision made
+*during* the phases was committed as it happened: thirty-three ADRs and fourteen
+timestamped notes. The gap was in the opening statement only, and Phase 3 opened with its
+criteria committed.
+
 **The quality checks read prose, not the forecast.** Every run records whether figures in
 a scenario's *justification* trace back to a material fact. That check does **not** cover
 `price_return`, `annualised_vol` or `probability_weight` — the numbers actually scored.
@@ -69,8 +205,14 @@ bounds and the ordering invariant. Read a clean `ungrounded_numerals` as "the pr
 nothing invented", never as "the forecast is supported".
 
 The three-agent architecture is a **hypothesis**, not a result. Whether it beats a
-single-agent baseline is an open question that Phase 3's ablation study exists to answer.
-Nothing here claims it is better.
+single-agent baseline is an open question, and **the ablation that would answer it is
+unscheduled** — it is not part of Phase 3, which was the calibration correction. It is
+the next experiment worth running. Nothing here claims the architecture is better.
+
+**The corpus is a reusable benchmark.** 709 filings identified by accession number, with
+recorded outcomes, two baselines scored, a frozen protocol and a pinned price snapshot.
+Any future model can be run against the identical panel with one configuration change,
+because the backend is named only in configuration and never in code.
 
 ---
 
@@ -283,4 +425,4 @@ belong in the file.
 
 ## Licence
 
-Not yet chosen.
+MIT.
