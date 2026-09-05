@@ -1234,3 +1234,99 @@ A shift and a scale cannot alter kurtosis, and they did not. Record 3 called thi
 a prediction rather than a disappointment, and it holds. Student-t remains NOT
 adopted: its trigger was replication of the tail excess on the ambiguous band under
 record 2, which came back PARTIAL, and partial is not replication.
+
+=============================================================================
+RECORD 13 — one snapshot for the whole corpus; the SCCO stratum; and a
+pre-commitment to report every re-derived verdict
+written 2026-09-05, BEFORE any figure is re-derived and before the holdout is spent
+=============================================================================
+
+-----------------------------------------------------------------------------
+PART A — why a single snapshot had to be materialised
+-----------------------------------------------------------------------------
+The holdout pre-flight found its artifacts complete -- 346 items across both
+bands, every one with a forecast, a trace of at least three events, a manifest,
+and (outside the known ADR 0030 dirty stratum) a digest -- and found ZERO of its
+346 price windows in the pinned 2026-09-04 snapshot. That snapshot held only what
+had been scored by then. The cache is read-only under a pin, so the spend would
+have raised PriceSnapshotIncompleteError partway through.
+
+Three options existed and the operator chose (c): materialise ONE snapshot
+covering both bands and both splits, re-derive the development fit on it, and
+score the holdout on it.
+
+OPERATOR'S REASONING, recorded as given: it is the only option where "the
+correction was fitted and tested on one snapshot" is true without qualification,
+and re-deriving onto a deliberately pinned vintage IMPROVES the published
+numbers' standing rather than weakening it. The choice was forced by the data
+state and made before any holdout number existed.
+
+Materialised 2026-09-05: 701 of 701 windows, zero failures. Only price windows
+were fetched -- no outcome was compared to any forecast and no score computed --
+so this does not spend the holdout under ADR 0031.
+
+-----------------------------------------------------------------------------
+PART B — the SCCO stratum, and why dropping is CONSERVATIVE rather than CORRECT
+-----------------------------------------------------------------------------
+Three items -- SCCO 2026-01-29, 2026-04-30, 2026-07-23 -- fail SpotDriftError
+against any post-split snapshot, so the development half is 175, not 178. They are
+a REPORTED STRATUM, not a silent exclusion.
+
+The mechanism, established rather than assumed: SCCO split 1.012 on 2026-08-11 and
+Yahoo applied it to the historical series about 25 days late. 1/1.012 = 0.988142,
+matching the observed factor exactly. It is NOT a dividend: D/P for the same date
+is 0.5497%, less than half the drift, and cumulative dividend adjustment would give
+different factors for the three dates while the observed factors are identical.
+**ADR 0003's premise holds** -- `Close` under auto_adjust=False is split-adjusted,
+and a split adjustment is what that basis promises.
+
+DROPPING THEM IS CONSERVATIVE, NOT CORRECT. A split is a known multiplicative
+transform, and a RETURN IS SCALE-INVARIANT UNDER IT: both endpoints move by the
+same factor, so the realised return is unchanged. Those three items are perfectly
+scoreable once the recorded spot is rescaled by the split factor. What the guard
+cannot do is tell a split from genuine drift -- a rewritten price and a corrected
+price look identical -- so it refuses, which is the right behaviour for a guard
+that must not be fooled and the wrong answer for these three items.
+
+SPLIT-AWARE DRIFT HANDLING GOES ON THE PHASE 5 LIST as the real fix: consult the
+split history between the recorded fetch and the scoring vintage, rescale the
+recorded spot by the cumulative factor, and refuse only the residual. NOT NOW, and
+explicitly NOT BEFORE THE HOLDOUT -- changing what SpotDriftError admits while a
+one-shot test is pending is the kind of adjustment that must not happen with a
+result in view.
+
+-----------------------------------------------------------------------------
+PART C — PRE-COMMITMENT: every re-derived verdict is reported, whatever it says
+-----------------------------------------------------------------------------
+Written BEFORE the re-derivations run.
+
+Re-derived onto 2026-09-05: the development scores, the leakage estimate, and the
+three pre-registered replications of records 2, 4 and 6.
+
+EVERY ONE OF THEM IS REPORTED, INCLUDING ANY WHOSE VERDICT FLIPS. Specifically:
+if the tails replication moves from PARTIAL to replicating or to failing; if
+compression stops replicating against either baseline; if the leakage interval
+stops spanning zero in either direction; if the success condition changes side --
+each is reported as found, beside its previous value.
+
+A provider correction forcing a re-evaluation is legitimate. CHOOSING WHICH
+RE-EVALUATION TO REPORT IS NOT. The whole set was named before any of it ran, so
+there is no subset to select afterwards.
+
+-----------------------------------------------------------------------------
+PART D — the first complete single-vintage snapshot in the project's history
+-----------------------------------------------------------------------------
+Recorded as a PROVENANCE GAIN, not as a correction forced on us.
+
+Before today, every published figure rested on whichever daily fetch happened to
+be current when the command ran: the corpus spot prices came from at least seven
+different daily snapshots (08-28, 08-30, 08-31, 09-01, 09-02, 09-03, 09-04), the
+development scores from the 09-02 fetch, and the leakage estimate from the 09-04
+fetch. Nothing was wrong with any of them individually -- the numbers were checked
+and held, 178 of 178 agreeing to the cent between 09-02 and 09-04 -- but no single
+stored state existed that a reader could point at and re-run.
+
+**701 of 701 windows at one vintage is the first time this corpus has had one.**
+The write-up should say that: the project gained a reproducibility property it did
+not previously have, prompted by a provider action that the existing guards caught
+correctly. The guards worked; what was missing was the snapshot, and now it exists.
