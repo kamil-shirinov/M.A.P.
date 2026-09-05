@@ -1986,3 +1986,55 @@ TWO ITEMS FOR THE WRITE-UP, FIXED NOW
    reasoning and nothing came back. This is the practical finding of the whole
    arm-B episode and should not be buried inside the explanation of why the arm
    was dropped.
+
+=============================================================================
+RECORD 21 — the decision rule for arm D's cost, fixed BEFORE the number exists.
+Written 2026-09-05. Arm C is mid-run; arm D has not started; no cost measurement
+has been taken and no comparison has been computed for any arm.
+=============================================================================
+
+MEASURE, DO NOT EXTRAPOLATE. Arm D's cost will be measured on its FIRST TEN ITEMS
+and reported before anything is decided. The 5,585-token analyst mean must NOT be
+carried across: it was produced by the analyst's own prompt asking for three
+scenarios with reasoning, while arm D runs the structuralist's forecasting prompt,
+which is a different task on the same model and could reason far more or far less.
+Extrapolating a token count across prompts is a guess wearing a measurement's
+clothes.
+
+THE RULE, fixed now so it is not made when the number arrives:
+
+  <= ~45 hours   RUN THE FULL 349. Nothing downstream is blocked and the machine
+                 is idle overnight either way.
+  >  ~45 hours   REDUCE D's SAMPLE, registered as an amendment BEFORE D RUNS.
+                 Never partway through -- a sample cut mid-run is a sample chosen
+                 with partial results visible, however innocent the motive.
+  THE CONTROL    KEPT REGARDLESS. Ten hours of fifty is not the lever, and it is
+                 the only re-derivation measurement in the project.
+
+-----------------------------------------------------------------------------
+WHY HALVING D IS MORE EXPENSIVE THAN IT LOOKS
+-----------------------------------------------------------------------------
+**Every comparison in this design is paired on D's items.** Both primaries need D:
+A-D and D-C. So restricting D to one band does not halve one arm -- it restricts
+THE WHOLE EXPERIMENT to that band. Arm A and arm C would still hold 349 items each,
+and 174 of them would be unusable for either primary.
+
+The cost lands on the only thing this design has to offer. Its stated prediction is
+that nothing differs, so its value is the TIGHTNESS OF THE NULL, and cutting the
+sample loosens exactly that:
+
+    42 blocks over 349 items   detectable difference ~2.5%
+    24 blocks over 174 items   detectable difference ~3.3%   (ambiguous only)
+    18 blocks over 175 items   detectable difference ~3.8%   (clean only)
+
+A wider null is a weaker null. "No difference larger than 2.5%" is a claim about
+the architecture; "no difference larger than 3.8%" is closer to a shrug. The
+pre-registered prediction is that all arms are indistinguishable, and the entire
+worth of confirming it lies in how small a difference could have been ruled out.
+
+It also destroys the pre-registered band split of record 17, which reports the two
+bands separately so that pooling is a measurement rather than an assumption. With D
+on one band there is nothing to split.
+
+None of that makes the cut wrong if the cost is genuinely prohibitive. It makes the
+cut EXPENSIVE, and the record says so before the number arrives rather than after.
