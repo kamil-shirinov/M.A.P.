@@ -344,7 +344,7 @@ miscalibration there is.
 
 **KS versus Anderson–Darling** — KS is driven by the largest gap between the empirical and uniform CDFs,
 which for a symmetric departure sits in the middle where the curves cross anyway. A² carries a 1/(u(1−u))
-weight and is built for the ends. *On the development half they disagree* — KS 0.0726 (p=0.291), A² 3.044
+weight and is built for the ends. *On the development half they disagree* — KS 0.0698 (p=0.345), A² 2.838
 against 2.492 — and the disagreement locates the problem in the tails.
 
 **Aggregation is not diagnosis** — the calibration ratio is a quotient of root-mean-squares and is
@@ -395,3 +395,14 @@ is the first complete single-vintage snapshot this corpus has had.*
 SCCO items are scoreable once the recorded spot is rescaled by the split factor, because a return is
 scale-invariant under a split; `SpotDriftError` refuses because it cannot tell a split from genuine
 drift. *Recording the distinction is what keeps a known limitation from hardening into a believed one.*
+
+**Narrating versus stating** — a document that *narrates an event* records what was true at that event; a
+document that *states current status* states current truth. The Timeline's earlier sections and dated
+Findings entries keep their original figures; STATE.md and the closing sections carry the present ones.
+*ADRs are the strongest case of narrating:* an ADR overwritten to match later data destroys the only
+evidence that the reasoning fitted the evidence available when the decision was made, so ADRs are
+**amended, never edited**.
+
+**Superseded marker** — one greppable string, `[superseded YYYY-MM-DD -> target]`, rather than prose, so
+every stale figure in the vault can be found in a single search. Prose annotations cannot be enumerated,
+which means nobody can answer "what else is out of date" without re-reading everything.

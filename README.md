@@ -86,9 +86,9 @@ walk on both rules. *A better-calibrated statement of the same information is no
 better forecast.*
 
 **And the development failure was not refuted.** The condition failed on development by
-0.0019 and passed on the holdout — but the two halves are not distinguishable from each
-other. The difference in their uncorrected calibration ratios is **+0.098 with an
-interval from −0.058 to +0.249**, and the same holds for every dispersion statistic
+0.0069 and passed on the holdout — but the two halves are not distinguishable from each
+other. The difference in their uncorrected calibration ratios is **+0.100 with an
+interval from −0.065 to +0.249**, and the same holds for every dispersion statistic
 compared across the split. Two marginal calls landing on opposite sides of 1.0 in samples
 a test cannot separate. The defensible statement is that the correction is approximately
 right, and whether it slightly over- or under-corrects is unresolved at this sample size.
@@ -425,4 +425,5 @@ belong in the file.
 
 ## Licence
 
-MIT.
+Copyright (c) 2026 Kamil Shirinov. All rights reserved. You are welcome to
+read this code; it is not licensed for reuse.

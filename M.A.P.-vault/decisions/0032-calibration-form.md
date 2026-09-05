@@ -90,6 +90,24 @@ that makes the log score and the PIT worse while making the headline ratio look 
 `b` is therefore fitted by **minimising the development log score**, which weighs every
 item once and is the rule that punishes a wrongly-placed tail.
 
+## Amendment, 2026-09-05 — the figures above are the evidence this decision rested on
+
+**Every number in this ADR is the 178-item development half on the 2026-09-02 price
+vintage, and none of it is edited.** An ADR records what was believed when the decision
+was made; overwriting it would destroy the only evidence that the reasoning matched the
+evidence available at the time.
+
+Three events moved the corpus afterwards: six stale-truncation re-runs, three SCCO items
+excluded by `SpotDriftError` after a split the provider applied 25 days late, and a
+re-derivation onto one pinned 2026-09-05 snapshot. On that basis the development half is
+**175 items**, and the dispersion table above reads MAD-scale 1.0864, RMS `z` 1.3242 and
+tail ratio 1.2267.
+
+**None of it changes the decision.** The form, the objective, the argument for the log
+score over the calibration ratio, and the expectation that `a` fits near zero all survive
+the re-derivation unchanged. See [[0033-phase-3-outcome]] for the current figures and the
+outcome.
+
 ## Consequences
 
 - Phase 3 fits `a` and `b` on the development half by minimising its log score, then

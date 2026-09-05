@@ -48,7 +48,7 @@ wherever this phase is reported.
 
 **1 · The success condition did not specify its estimator.** Record 3 said
 "cluster-robust 95% CI from the same moving-block bootstrap" without saying whether
-`a` and `b` are refitted inside each resample. Refitted it fails by 0.0019; held
+`a` and `b` are refitted inside each resample. Refitted it fails by 0.0069; held
 fixed it passes. Both estimands are legitimate and answer different questions — the
 fixed reading describes what the holdout actually does, the refitted one asks
 whether the procedure calibrates on a fresh sample. **Called FAIL on the refitted

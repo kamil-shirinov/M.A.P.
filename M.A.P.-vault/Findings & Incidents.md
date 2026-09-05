@@ -1456,6 +1456,8 @@ parameters so two bases can never again share a name.
 
 ## 43 · I read a histogram and called it a tilt
 
+> `[superseded 2026-09-05 -> Timeline §16]` — figures are the 178-item development half on the 2026-09-02 vintage. The finding stands; the numbers are superseded.
+
 Reporting the first development scores, I described the PIT as "tilted, not U-shaped",
 on the strength of the bottom bin holding 28 items against 17.8 expected.
 
@@ -1501,6 +1503,8 @@ run rather than reached for when a bar looks tall.
 ---
 
 ## 44 · The calibration ratio and the PIT disagreed, and both were right
+
+> `[superseded 2026-09-05 -> Timeline §16]` — figures are the 178-item development half on the 2026-09-02 vintage. The finding stands; the numbers are superseded.
 
 `stated sigma / realised = 0.733 [0.637, 0.798]` says clearly under-dispersed. The PIT
 says the body is fine. These are not compatible readings of one distribution, so one of
@@ -1571,6 +1575,8 @@ the natural companion to the ablation in #46.
 ---
 
 ## 46 · The system declines to commit to a direction — an architecture result, not a scoring one
+
+> `[superseded 2026-09-05 -> Timeline §16]` — figures are the 178-item development half on the 2026-09-02 vintage. The finding stands; the numbers are superseded.
 
 | | |
 | --- | --- |
@@ -1757,7 +1763,7 @@ consistent with 1.0 — **failed on development and passed on the holdout.**
 
 | | interval | verdict |
 | --- | --- | --- |
-| development, corrected | [0.6997, **0.9931**] | excludes 1.0 by **0.0019** → FAIL |
+| development, corrected | [0.6997, **0.9931**] | excludes 1.0 by **0.0069** → FAIL |
 | holdout, corrected | [0.8711, 1.2514] | covers 1.0 → pass |
 
 The obvious reading is that the holdout refuted the development failure. **It did
@@ -1774,7 +1780,7 @@ The two halves are not distinguishable from each other on any dispersion statist
 Intervals overlap on 54–67% of the narrower one; every difference covers zero.
 
 **So the FAIL and the PASS are two marginal calls landing on either side of 1.0 in
-samples a test cannot separate.** One excludes 1.0 by 0.0019; the other covers it.
+samples a test cannot separate.** One excludes 1.0 by 0.0069; the other covers it.
 Neither is evidence about the other, and a write-up saying "the holdout vindicated
 the correction's calibration" would be reading a coin flip as a verdict.
 
@@ -1791,7 +1797,7 @@ It also compounds the earlier defect. The development verdict was already decide
 by a **specification gap** rather than by the data: record 3 did not say whether
 `a` and `b` are refitted inside each bootstrap resample, the refitted reading fails
 and the fixed reading passes, and the gap between those readings is much larger
-than the 0.0019 margin. So the FAIL half of this comparison was a judgement call,
+than the 0.0069 margin. So the FAIL half of this comparison was a judgement call,
 and the PASS half is a sample the FAIL cannot be distinguished from. **Two marginal
 calls, one of them made by an unspecified estimator, in samples that agree.**
 
@@ -1809,3 +1815,56 @@ now cost twice: **a threshold is not a pre-registration unless the estimator is
 also pre-registered.** The resampling scheme, what is refitted inside it, and the
 null all have to be fixed, or the condition still has to be decided when it is read
 — and it will be read with the answer visible.
+
+---
+
+## 50 · The sentence travelled further than the number
+
+Sweeping the vault for figures superseded by the SCCO exclusions turned up something
+that was not staleness. **The margin was wrong, and its direction was reversed.**
+
+The pre-registered success condition's corrected MAD-scale interval is `[0.6997,
+0.9931]` on the settled 2026-09-05 vintage. `1.0 − 0.9931 = 0.0069`. I wrote **0.0019**
+— the margin belonging to the superseded `[0.6981, 0.9981]` — into the Timeline,
+Findings #49, STATE.md, ADR 0033 and the README, **paired in every case with the 09-05
+interval it does not belong to**. Corrected in all eight places.
+
+### The reversal, which is the part worth recording
+
+Reporting the re-derivation on 2026-09-04 I wrote that the margin *"tightened from
+0.0069"*, and drew the inference that **"the earlier figure was partly the drifted
+sample"** — that the three SCCO items had inflated the margin and removing them
+sharpened it.
+
+**The direction is backwards.** 0.0019 is the 09-04 figure and 0.0069 is 09-05, so the
+margin **widened**. The interpretation was built entirely on the reversal and is
+unsupported: nothing shows the drifted sample inflated anything.
+
+**A number and a story about it do not decay at the same rate.** The number was checked
+twice and corrected within a day. The sentence explaining it was quoted forward into a
+report and would have gone into the vault unchallenged, because it read as a reasonable
+account of a movement that never happened. An explanation is harder to falsify than the
+figure it explains — it has no units, nothing recomputes it, and it survives on
+plausibility.
+
+**What the sweep suggests:** when a figure is corrected, the sentence interpreting it
+must be re-derived rather than re-read. Checking that a number is right does not check
+that the reason given for it is still the reason.
+
+### The audit that found it
+
+Twenty-four locations across five files, in four classes: eight genuine errors, five
+stale figures in current-status documents, nine historical figures in narrative
+sections, and two in ADRs. Only the first class was wrong when written. The rest are the
+ordinary decay of a corpus that moved three times — six stale-truncation re-runs, three
+`SpotDriftError` exclusions, and a re-derivation onto one pinned vintage — and they are
+now marked `[superseded 2026-09-05 -> …]` rather than rewritten.
+
+**One hypothesis in the audit was itself wrong, and is recorded because it was.** I
+proposed that two published calibration intervals differed because `calibration_interval`
+silently drops resamples whose ratio is undefined, and that the published figure might be
+conditioned on that without saying so. Measured: **0 dropped of 2000, and 0 of 4000.**
+The difference was the bootstrap draw count — 2000 in production against 4000 in an
+ad-hoc script — which is Monte Carlo noise and nothing else. The vault now quotes the
+production settings throughout, and the drop path is documented as existing and never
+having fired on this data.

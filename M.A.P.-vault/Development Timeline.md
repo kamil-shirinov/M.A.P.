@@ -428,6 +428,12 @@ truncates slightly more than needed.
 
 ## 14 · The development half, scored
 
+> **`[superseded 2026-09-05 -> §16]`** — every figure in this section is the 2026-09-02 price vintage at 178
+> development items. Three SCCO items were later excluded by `SpotDriftError` after a
+> split the provider applied late, and the corpus was re-derived onto one pinned
+> snapshot. The narrative and the reasoning stand; the numbers are superseded by §16.
+
+
 178 items, 18 date clusters. The holdout is untouched and there is a committed record
 proving it ([[0031-holdout-spend]]).
 
@@ -527,12 +533,12 @@ notes all exist to replace.
 | # | criterion | met by |
 | --- | --- | --- |
 | 1 | Monte Carlo over the scenario mixture | `eval/montecarlo.py`; the cone is inverted from the mixture, not sampled, so it cannot disagree with the scenarios |
-| 2 | Baselines fitted per item | random walk, GARCH, earnings-scaled random walk — 178 of 178, none defaulted |
+| 2 | Baselines fitted per item | random walk, GARCH, earnings-scaled random walk — 175 of 175, none defaulted |
 | 3 | Proper scoring rules | CRPS, log score, Brier — all three reported against every baseline |
 | 4 | A pre-registered panel | [[0018-corpus-band-and-panel-shape]], frozen before any inference, amended only in its own commits |
 | 5 | Both bands executed under the protocol | clean 351/356, ambiguous 350/353, every item with a forecast, a trace and a digest |
 | 6 | Calibration reported with measured uncertainty | ratio 0.733 [0.637, 0.798]; PIT tilt tested rather than read off a histogram; **no tilt established** |
-| 7 | **The leakage estimate** | **clean 0.03189 vs ambiguous 0.03330, difference −0.00141 [−0.00904, +0.00647]** |
+| 7 | **The leakage estimate** | **clean 0.03179 vs ambiguous 0.03348, difference −0.00169 [−0.00934, +0.00603]** |
 
 ### The number the phase exists for
 
@@ -544,7 +550,7 @@ had memorised outcomes would score *better* on the ambiguous band, and that gap 
 be the leakage. It scores slightly **worse** there, by about 4%, with an interval from
 −0.009 to +0.006 that comfortably contains zero.
 
-Not proof of no leakage; 177 items over 24 date clusters cannot deliver that. But no
+Not proof of no leakage; 174 items over 24 date clusters cannot deliver that. But no
 sign of it, with the point estimate leaning the way that embarrasses the contamination
 hypothesis rather than supporting it. **The headline result — that M.A.P. is
 indistinguishable from GARCH on CRPS and worse than the random walk — is not an
@@ -573,7 +579,7 @@ true and they point in opposite directions.**
 > **Log score convention.** Throughout this project the log score is the *negative*
 > log predictive density, so **lower is better**. −1.237 is better than −0.949. The
 > convention is stated here because a number that improves by getting smaller is
-> exactly the kind of unlabelled direction this vault has recorded five times.
+> exactly the kind of unlabelled direction this vault has recorded six times.
 
 ### The fit
 
@@ -602,7 +608,7 @@ Corrected MAD-scale of z: **1.0864 → 0.8165**.
 Record 3 said "judged by the cluster-robust 95% CI from the same moving-block
 bootstrap" and **did not say whether `a` and `b` are refitted inside each
 resample.** The two readings disagree, and the distance between the failing bound
-and 1.0 — **0.0019** — is far smaller than the distance between the readings.
+and 1.0 — **0.0069** — is far smaller than the distance between the readings.
 
 Both estimands are legitimate. The **fixed** reading describes what happens next,
 since the holdout applies `a` and `b` without refitting. The **refitted** reading
@@ -692,13 +698,14 @@ each other:
 
 | statistic | development | holdout | difference | |
 | --- | --- | --- | --- | --- |
-| uncorrected calibration ratio | [0.6380, 0.8030] | [0.4967, 0.7483] | +0.0978 [−0.0584, +0.2485] | **not distinguishable** |
-| uncorrected MAD-scale | [0.9430, 1.4173] | [1.1589, 1.6649] | −0.1645 [−0.5779, +0.1349] | **not distinguishable** |
-| **corrected MAD-scale** | [0.7088, 1.0653] | [0.8711, 1.2514] | −0.1236 [−0.4343, +0.1014] | **not distinguishable** |
+| uncorrected calibration ratio | [0.6372, 0.8008] | [0.4937, 0.7489] | +0.1001 [−0.0651, +0.2493] | **not distinguishable** |
+| uncorrected MAD-scale | [0.9406, 1.4173] | [1.1608, 1.6675] | −0.1584 [−0.5694, +0.1340] | **not distinguishable** |
+| **corrected MAD-scale** | [0.7069, 1.0653] | [0.8725, 1.2533] | −0.1191 [−0.4280, +0.1007] | **not distinguishable** |
 
-The intervals overlap on 54–67% of the narrower one, and every difference covers
+All three bootstraps use the production settings — 2000 draws, 10-day blocks, seed
+20260813. The intervals overlap on 54–68% of the narrower one, and every difference covers
 zero. **The FAIL and the PASS are two marginal calls landing either side of 1.0 in
-samples that cannot be told apart** — one excluding 1.0 by 0.0019, the other
+samples that cannot be told apart** — one excluding 1.0 by 0.0069, the other
 covering it. Neither refutes the other, and reporting the holdout as having
 vindicated the correction's calibration would be reading a coin flip as a verdict.
 See [[Findings & Incidents]] #49.

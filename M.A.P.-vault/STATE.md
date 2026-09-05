@@ -44,7 +44,7 @@ statement of the same information is not a better forecast.
 **Two things a reader will get wrong unless told:**
 
 1. The development success condition **FAILED** ([0.6997, 0.9931], excluding 1.0 by
-   0.0019) and the holdout **passed** ([0.8711, 1.2514]). The holdout did **not**
+   0.0069) and the holdout **passed** ([0.8725, 1.2533]). The holdout did **not**
    refute the failure — the two halves are not distinguishable from each other,
    difference −0.1236 [−0.4343, +0.1014]. Two marginal calls either side of 1.0 in
    samples a test cannot separate ([[Findings & Incidents]] #49).
@@ -67,7 +67,7 @@ prediction, which is what makes it the next experiment rather than a loose end.
 
 ### Open questions carried forward
 
-- **`ungrounded`** 151 clean / 115 ambiguous — still an open question. Named test
+- **`ungrounded`** 147 clean / 115 ambiguous — still an open question. Named test
   unchanged: partition the flagged numerals by whether they match a value the
   forecast itself emitted.
 - **Volatility compression** replicated out of sample against both baselines

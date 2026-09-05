@@ -261,6 +261,12 @@ def calibration_interval(
             # Dropping it is the only option that does not invent one; if EVERY
             # draw is like that the interval is refused below rather than widened
             # to hide it.
+            #
+            # MEASURED, 2026-09-05: on the development half this fires 0 times in
+            # 2000 draws and 0 in 4000, so no published interval here is
+            # conditioned on the ratio being defined. Recorded because the
+            # possibility that it silently was became a hypothesis worth ruling
+            # out (Findings #50) rather than assuming either way.
             continue
     if not ratios:
         raise AggregationError("no bootstrap resample produced a defined ratio")
