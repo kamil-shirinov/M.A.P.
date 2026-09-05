@@ -1418,3 +1418,161 @@ carries `calibration` naming the fitted a and b rather than null -- this is a
 holdout scored with something to test, and the record must say so.
 
 THE HOLDOUT IS SPENT ONCE. There is no second run under any outcome.
+
+=============================================================================
+RECORD 15 — the three-arm ablation, PRE-REGISTERED BEFORE ANY ARM RUNS
+written 2026-09-05. No ablation inference has been performed.
+=============================================================================
+
+QUESTION. Does the analyst agent improve forecast quality, and if so does its
+LENGTH matter? Two arms would confound "reasoning helps" with "reasoning at length
+helps", so there are three.
+
+  ARM A  the frozen system, analyst unchanged
+  ARM B  analyst capped near 1,000 max_tokens (18% of its 5,585-token mean)
+  ARM C  no analyst; the structuralist reads intake's output directly
+
+SAMPLE. Pooled development halves of both bands: clean 175 + ambiguous 174 = 349
+scoreable items over 42 occupied 10-day blocks. Pooled because the estimand is a
+PAIRED difference between arms on the same items, so band membership cancels; the
+leakage estimate found none measurable (-0.00169 [-0.00934, +0.00603]); and 42
+clusters is the binding constraint on power. The two bands are ALSO reported
+separately as a pre-registered split, so the pooling objection becomes a
+measurement rather than an assumption.
+
+COST, verified before committing. Arm A is a pure cache replay -- confirmed on AAPL
+2026-01-29: three cache hits of three, forecast byte-identical to the stored one
+ignoring run_id. Corpus-wide, 741 of 746 intake keys reconstruct to cached files.
+The analyst is 86.7% of all generated tokens, so removing or capping it is what
+makes this an overnight run rather than a fortnight.
+
+-----------------------------------------------------------------------------
+THE DRAW-NOISE CONFOUND, AND ITS ESTIMATOR -- SPECIFIED IN FULL
+-----------------------------------------------------------------------------
+THE PROBLEM. The analyst runs at temperature 0.7 with seed 20260809 requested, and
+this backend honours seeds only partially -- measured previously at 2 of 5 replays
+byte-identical. Arm A is a CACHED draw; arm B is a FRESH one. So
+
+    A - B  =  the cap effect  +  the difference between two independent draws
+
+and attributing the whole of it to the cap is the error this control exists to
+prevent.
+
+THE CONTROL. Fresh UNCAPPED analyst draws on 60 items -- same prompt, same
+sampling, same everything as arm A, the only difference being that the call is
+made rather than replayed. The 60 are chosen by the CORPUS'S OWN EXECUTION SEED
+(numpy default_rng(20260830).permutation, first 60 of the shuffled 355 loaded
+items), not by hand. They occupy 23 blocks, sizes min 1, median 2, max 8, mean 2.61.
+
+THE ESTIMATOR, written out because a threshold without one is not a
+pre-registration -- the defect that cost the Phase 3 success condition:
+
+  1. For each of the 60 subsample items, the paired per-item difference
+         d_i = CRPS(cached draw)  -  CRPS(fresh uncapped draw)
+     scored identically to every other arm: vintage 2026-09-05 pinned, realised
+     bar pinned, same baselines.
+
+  2. Decompose d into cluster components by 10-day block, one-way random effects:
+         sigma_b^2  between-block variance of the block means
+         sigma_w^2  within-block variance of items about their block mean
+     sigma_draw is reported as the per-item SD, sqrt(sigma_b^2 + sigma_w^2), and
+     both components are reported separately.
+
+  3. The implied cluster-robust standard error of a MEAN paired difference at the
+     full comparison size is then computed DIRECTLY, not by rescaling:
+
+         SE_349 = sqrt( ( sigma_b^2 + sigma_w^2 / n_bar ) / G )
+         with G = 42 blocks and n_bar = 349/42 = 8.31 items per block.
+
+  4. THE GATE:  |A - B|  >  2 x SE_349.
+     If it fails, THE CAP EFFECT IS NOT ESTABLISHED whatever the A-B interval says,
+     because that interval would be measuring draw noise with a cap-shaped label.
+
+WHY THE SCALING IS WRITTEN AS A FORMULA AND NOT A FACTOR. The obvious shortcut is
+to scale the subsample's standard error by sqrt(349/60) = 2.41. That is the
+NO-CLUSTERING limit and it is wrong here. Scaling by clusters instead gives
+sqrt(23/42) = 0.74. The two differ by a factor of 3.3, and the correct ratio lies
+between them, determined by the measured decomposition:
+
+    all variance within-block  (sigma_b = 0)  ->  ratio 0.41  (= 1/2.41)
+    all variance between-block (sigma_w = 0)  ->  ratio 0.74
+
+Using 2.41 would make SE_349 roughly 1.8x too small and the gate correspondingly
+too easy to pass. Using 0.74 blindly would make it too strict if the noise is
+mostly within-block. The formula in step 3 needs no ratio at all, which is why it
+is the specification. sigma_draw, sigma_b, sigma_w and SE_349 are ALL REPORTED
+whatever they are.
+
+ARM C DOES NOT HAVE THIS PROBLEM, and the reason is structural: removing the
+analyst removes the only stochastic component. Intake and structuralist both run at
+temperature 0. So A-C is confounded by the prompt change but NOT by draw noise, and
+is the cleaner architecture comparison; A-B is the cleaner length comparison but
+only if the gate above clears; B-C carries both confounds.
+
+-----------------------------------------------------------------------------
+THE PROMPT CONFOUND, STATED UP FRONT
+-----------------------------------------------------------------------------
+Arm C needs a different structuralist prompt, so it changes the architecture AND
+the prompt together. Any arm-C difference is attributable to either. The change is
+minimal -- the input-block header and the sentence naming what is being read;
+nothing about the schema, the ordering invariant, the scenario definitions or the
+output contract -- and the diff is recorded VERBATIM in the ADR so a reader can
+judge the size of the confound rather than take my word for it.
+
+Arm B has a weaker form of the same problem: a capped analyst produces truncated
+reasoning, which is a different input distribution and not merely a shorter one.
+
+NONE OF THE THREE ARMS IS THE FROZEN SYSTEM EXCEPT A. B and C are new
+configurations, their forecasts are NOT corpus artifacts, they are written outside
+runs/, and they are never scored against the holdout, which is spent.
+
+-----------------------------------------------------------------------------
+PRICE IDENTITY -- a property, not a hope
+-----------------------------------------------------------------------------
+All arms score against vintage 2026-09-05, pinned and READ-ONLY; a missing window
+refuses rather than fetching. All 355 loaded items carry a realised-bar pin, and
+the last scoring produced zero RealisedDriftError. The pin is keyed on
+(ticker, as_of, horizon) and NOT on the arm, so every arm meets the same recorded
+outcome or refuses. NO ARM CAN DIFFER BECAUSE ITS PRICES MOVED.
+
+-----------------------------------------------------------------------------
+PREDICTION AND THE READING OF EVERY OUTCOME
+-----------------------------------------------------------------------------
+PRIOR, stated before running: THE ARMS WILL BE HARD TO TELL APART. The system
+barely commits to a direction (P(up) 0.369-0.631) and compresses volatility to a
+slope near 0.4; most of what reaches the forecast is the document and the trailing
+volatility, both of which survive removing the analyst. A null is only worth
+reporting if it was predicted, and it is predicted here.
+
+PRIMARY: CRPS, paired across arms on the same items, cluster-robust moving-block
+bootstrap, 10-day blocks, 4000 draws, seed 20260813.
+SECONDARY: log score (lower is better); P(up) span and median per arm; the
+volatility-compression slope per arm.
+
+  ALL THREE INDISTINGUISHABLE ON CRPS
+    The analyst does not measurably improve forecast quality on this corpus. The
+    most likely outcome, and it makes the 12B model -- 86.7% of all generation --
+    the most expensive component with no demonstrated benefit.
+
+  A BETTER THAN C, B IN BETWEEN
+    Reasoning helps and length helps monotonically. The architecture's hypothesis
+    is supported for the first time.
+
+  A ~ B, BOTH BETTER THAN C  (subject to the gate)
+    Reasoning helps, length does not. The cap is nearly free and becomes the
+    default.
+
+  C BETTER THAN A
+    The analyst actively harms. Reported prominently rather than explained away.
+    The strongest result available here and the one most likely to be disbelieved,
+    including by me.
+
+  P(up) SPAN WIDENS WITHOUT THE ANALYST
+    The three-scenario frame is compressing the directional claim -- the specific
+    prediction of Findings #46, and independent of the CRPS result.
+
+POWER, stated in advance. At 349 items over 42 blocks the CRPS interval half-width
+was about 0.0010 on 175 items, so expect about 0.0008 pooled against a mean CRPS of
+about 0.032. THE ABLATION CAN DETECT ABOUT A 2.5% DIFFERENCE BETWEEN ARMS AND
+CANNOT DETECT 1%. A null is reported as "no difference larger than about 2.5%",
+never as "no difference".
