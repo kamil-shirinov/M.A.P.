@@ -406,3 +406,10 @@ evidence that the reasoning fitted the evidence available when the decision was 
 **Superseded marker** — one greppable string, `[superseded YYYY-MM-DD -> target]`, rather than prose, so
 every stale figure in the vault can be found in a single search. Prose annotations cannot be enumerated,
 which means nobody can answer "what else is out of date" without re-reading everything.
+
+**Amending a pre-registration** — a pre-registration may be amended to make a caveat *stronger* before the
+result exists; it may never be edited to look as though the error was not made. **A pre-registration
+amended to look as though the error never happened is worthless** — its whole value is being a record of
+what was believed in advance, and a record that silently improves itself is not one. *The worked example
+is record 16 contradicting record 15:* record 15 called the no-analyst prompt change "minimal", building
+it showed 11 of 25 lines change, and record 16 says so while leaving the original sentence standing.
