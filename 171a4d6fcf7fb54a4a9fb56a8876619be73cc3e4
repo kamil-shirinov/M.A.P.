@@ -1791,3 +1791,38 @@ POWER: at 349 items over 42 blocks, expect a CRPS interval half-width near 0.000
 against a mean near 0.032 at 95%; the Bonferroni primaries are wider still. THE
 DESIGN CAN DETECT ROUGHLY A 2.5-3% DIFFERENCE AND CANNOT DETECT 1%. A null is
 reported as "no difference larger than about 3%", never as "no difference".
+
+=============================================================================
+RECORD 18 — implementation notes for record 17, before launch
+=============================================================================
+
+TRANSCRIPTION FIDELITY IS MEANINGLESS IN ARMS C AND D, by construction.
+
+The fidelity check compares the structuralist's emitted numbers against the
+analyst's `ESTIMATE` lines. Arms C and D have no analyst, so there are no ESTIMATE
+lines and every scenario records as `unparseable`. Verified on a smoke-test item:
+fidelity `{parsed: [], unparseable: [bullish, base_case, bearish]}` with the run
+otherwise succeeding.
+
+This is the check working, not failing: in arms C and D the structuralist is
+AUTHORING the numbers rather than transcribing them, so there is nothing to
+transcribe and nothing to verify. **Transcription fidelity is therefore not
+comparable across arms and is excluded from every comparison.** Arms A and B keep
+it and it stays meaningful there.
+
+THE PASS-THROUGH ANALYST RECORDS ITSELF AS ABSENT. Its manifest entry reads
+`model_id: "none (arm C/D: analyst removed)"`. Recording the real 12B there would
+assert an inference that never happened -- the sixth-instance shape of Findings #39,
+committed deliberately. Caught in a smoke test before launch, not after.
+
+WHAT WAS VERIFIED BEFORE COMMITTING THE RUN
+  arm A   3 of 3 cache hits, forecast byte-identical to the stored one (AAPL
+          2026-01-29), so the control is a replay and not a re-run
+  arm C   analyst absent in the manifest, structuralist on
+          structuralist_noanalyst.v1, a different base_case than arm A on the
+          same item -- so the arms genuinely differ
+  price   vintage 2026-09-05 pinned read-only for every arm; 355 realised-bar
+          pins; zero RealisedDriftError on the last scoring
+
+OUTPUTS GO TO `var/ablation/<arm>/`, NEVER `runs/`. They are not corpus artifacts,
+they are not scored against the holdout, and they do not enter the ledger.
