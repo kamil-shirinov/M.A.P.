@@ -1113,3 +1113,124 @@ evidence rather than the assertion.
 
 AFTER THE RETRY THE BAND IS CLOSED. No further resumption, no further retries,
 whatever EVR does.
+
+=============================================================================
+RECORD 12 — the holdout WILL be spent, decided by the operator HAVING SEEN
+the development fit; and the success condition is FAILED on the refitted reading
+written 2026-09-05, before the holdout is touched
+=============================================================================
+
+-----------------------------------------------------------------------------
+PART A — the price vintage, fixed before anything else
+-----------------------------------------------------------------------------
+The development half scored 175 of 178 on 2026-09-05. Three SCCO items failed
+SpotDriftError by exactly -1.1858% each -- one multiplicative factor across three
+unrelated dates. SCCO's split-adjusted Close read 204.2374 on every cached
+snapshot from 08-28 through 09-04 and 201.8156 on 09-05: an upstream retroactive
+adjustment to the column ADR 0003 treats as split-adjusted-only.
+
+Three items in one day means the corpus decays with every ex-dividend date, and a
+holdout scored against a moving source is reproducible by nobody, including us.
+
+Fixed: `map evaluate --vintage` pins the parquet cache to a stored snapshot and
+makes it READ-ONLY -- a missing window refuses rather than fetching. Default
+2026-09-04, the last snapshot before the rewrite and the one every published
+number rests on. Confirmed: 178 of 178, zero unscored, leakage back to
+-0.00141 [-0.00904, +0.00647] exactly. The published numbers and the holdout now
+share one data state.
+
+-----------------------------------------------------------------------------
+PART B — THE HOLDOUT WILL BE SPENT. Decided by the operator, having seen the fit.
+-----------------------------------------------------------------------------
+STATED PLAINLY BECAUSE IT IS THE KIND OF THING THAT IS USUALLY BURIED: the
+pre-registration is SILENT on whether a failed development condition still spends
+the holdout. ADR 0032's only sentence about sequencing -- "Phase 3 fits a and b on
+the development half by minimising its log score, then reports the holdout once" --
+is unconditional on its face. Record 3 defines what FAILS means and says nothing
+about the consequence. ADR 0031 governs how the holdout is spent, not whether.
+No conditional statement exists anywhere in either ADR or in records 1-11.
+
+So this decision could not be made by consulting the record, and it was made with
+the development fit already visible. That is written down rather than smoothed
+over.
+
+THE DECISION: the holdout is spent, on the pre-registered correction, regardless
+of the failed success condition.
+
+THE REASONING: declining to spend would condition the holdout on a development
+result. That is precisely the selection the holdout exists to prevent. A holdout
+spent only when the fit looks good is not a holdout -- it is a second development
+set with a publication filter, and the asymmetry would be invisible in the
+reported number. Spending it unconditionally costs a possibly-uninformative test;
+declining costs the instrument's meaning.
+
+Note also what is NOT being consumed: THE AMBIGUOUS BAND REMAINS UNUSED FOR
+CALIBRATION. It was drawn for the leakage estimate, which is now reported, and no
+part of Phase 3 fits anything on it. It is therefore available to test a future
+per-item volatility map -- the successor named in record 6 Part C -- on a sample
+that has never had a correction fitted to it. That successor is new work with its
+own ADR and is not being started here.
+
+-----------------------------------------------------------------------------
+PART C — the success condition FAILED, and a specification gap decided it
+-----------------------------------------------------------------------------
+Fitted on the development half, log-score objective, closed form (the objective
+makes this the normal MLE, so there is no optimiser to misconfigure):
+
+    a = -0.0786   cluster-robust CI [-0.4334, +0.1669]   covers 0, as predicted
+    b =  1.3310   cluster-robust CI [ 1.2425,  1.4969]   excludes 1
+
+    corrected MAD-scale of z:  1.1052 -> 0.8304
+
+    parameters REFITTED per resample   CI [0.6981, 0.9981]   EXCLUDES 1.0 -> FAIL
+    parameters held at the estimate    CI [0.6993, 1.0623]   covers 1.0
+
+VERDICT: FAILED, on the refitted reading. Margin 0.0019.
+
+**A SPECIFICATION GAP DECIDED THIS, NOT THE DATA.** Record 3 said "judged by the
+cluster-robust 95% CI from the same moving-block bootstrap" and did not say whether
+a and b are refitted inside each resample. The two readings disagree, and the
+distance between the failing bound and 1.0 is smaller than the distance between
+the two readings.
+
+BOTH ESTIMANDS ARE LEGITIMATE AND THEY ANSWER DIFFERENT QUESTIONS:
+
+  FIXED-PARAMETER reading -- describes WHAT HAPPENS NEXT. The holdout will be
+  scored with a and b fixed at the development estimates; it does not refit. So
+  the fixed reading is the one whose estimand matches the operation actually
+  about to be performed.
+
+  REFITTED reading -- describes WHETHER THE PROCEDURE CALIBRATES on a fresh
+  sample. It carries the uncertainty in a and b, which is real and which the
+  fixed reading omits.
+
+Neither was specified, and choosing between them now is choosing with the answer
+visible. The call recorded here is FAILED on the refitted reading, because that is
+the treatment that accounts for parameter uncertainty and the one that would have
+been chosen before seeing the numbers -- but the fixed reading's estimand argument
+is recorded beside it because it is the better description of the holdout step,
+and a reader should not have to reconstruct it.
+
+SECOND NEAR-MISS THIS FORTNIGHT of the same kind: a pre-registered threshold that
+did not specify enough to be evaluated without a fresh judgement. The first was
+ADR 0032's original A2 condition, which named the 2.492 iid critical value on a
+panel with 18 clusters and had to be replaced by record 3. Both were written
+carefully, both looked complete, and both needed a decision at evaluation time
+that the author had not realised was open.
+
+The generalisable form: A THRESHOLD IS NOT A PRE-REGISTRATION UNLESS THE ESTIMATOR
+IS ALSO PRE-REGISTERED. Naming the statistic, the level and the direction is not
+enough; the resampling scheme, what is refitted inside it, and the null all have to
+be fixed too, or the condition still has a degree of freedom when it is read.
+
+-----------------------------------------------------------------------------
+PART D — the tail prediction, confirmed exactly
+-----------------------------------------------------------------------------
+    tail ratio  1.2064 -> 1.2043     predicted UNCHANGED
+    |z| > 2.5      11 -> 5           Gaussian expectation 2.21
+    |z| > 3         7 -> 3           Gaussian expectation 0.48
+
+A shift and a scale cannot alter kurtosis, and they did not. Record 3 called this
+a prediction rather than a disappointment, and it holds. Student-t remains NOT
+adopted: its trigger was replication of the tail excess on the ambiguous band under
+record 2, which came back PARTIAL, and partial is not replication.
