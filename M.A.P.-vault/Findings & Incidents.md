@@ -1747,3 +1747,65 @@ at which "we keep catching it" stops being reassurance and starts being a measur
 of how often it happens — and because the candidate design is not hypothetical. It
 exists, it is running, and it was written for the same failure in a context where the
 consequence was a screenshot rather than a scored result.
+
+---
+
+## 49 · A failed development condition and a passed holdout, on samples that cannot be told apart
+
+The pre-registered Phase 3 success condition — the corrected MAD-scale of `z`
+consistent with 1.0 — **failed on development and passed on the holdout.**
+
+| | interval | verdict |
+| --- | --- | --- |
+| development, corrected | [0.6997, **0.9931**] | excludes 1.0 by **0.0019** → FAIL |
+| holdout, corrected | [0.8711, 1.2514] | covers 1.0 → pass |
+
+The obvious reading is that the holdout refuted the development failure. **It did
+not**, and the test that shows this was run before the interpretation was written.
+
+The two halves are not distinguishable from each other on any dispersion statistic:
+
+| statistic | development | holdout | difference (dev − holdout) | |
+| --- | --- | --- | --- | --- |
+| uncorrected calibration ratio | [0.6380, 0.8030] | [0.4967, 0.7483] | +0.0978 [−0.0584, +0.2485] | not distinguishable |
+| uncorrected MAD-scale | [0.9430, 1.4173] | [1.1589, 1.6649] | −0.1645 [−0.5779, +0.1349] | not distinguishable |
+| **corrected MAD-scale** | [0.7088, 1.0653] | [0.8711, 1.2514] | −0.1236 [−0.4343, +0.1014] | not distinguishable |
+
+Intervals overlap on 54–67% of the narrower one; every difference covers zero.
+
+**So the FAIL and the PASS are two marginal calls landing on either side of 1.0 in
+samples a test cannot separate.** One excludes 1.0 by 0.0019; the other covers it.
+Neither is evidence about the other, and a write-up saying "the holdout vindicated
+the correction's calibration" would be reading a coin flip as a verdict.
+
+### Why this is worth its own entry
+
+**The error it prevents is one nobody would notice.** Every individual statement
+would be true — the condition failed, the holdout passed, the correction
+generalised on both primaries — and the conclusion drawn from them would be false.
+There is no bug, no miscomputation, and no test that could have caught it. The only
+defence is asking "are these two samples different?" before treating one as
+commentary on the other.
+
+It also compounds the earlier defect. The development verdict was already decided
+by a **specification gap** rather than by the data: record 3 did not say whether
+`a` and `b` are refitted inside each bootstrap resample, the refitted reading fails
+and the fixed reading passes, and the gap between those readings is much larger
+than the 0.0019 margin. So the FAIL half of this comparison was a judgement call,
+and the PASS half is a sample the FAIL cannot be distinguished from. **Two marginal
+calls, one of them made by an unspecified estimator, in samples that agree.**
+
+The pre-registered reading still governs and is unchanged: the primary test was
+corrected-versus-uncorrected on the holdout, both intervals excluded zero, and the
+correction generalises. What is withdrawn is any claim that the holdout said
+something about the *development condition*.
+
+**Second near-miss this fortnight of the same shape** — a threshold that named the
+statistic, the level and the direction, and still left a degree of freedom at
+evaluation time. The first was ADR 0032's original A² condition, which cited the
+iid 2.492 critical value for a panel with 18 clusters and had to be replaced by
+record 3. The generalisable rule, recorded there and repeated here because it has
+now cost twice: **a threshold is not a pre-registration unless the estimator is
+also pre-registered.** The resampling scheme, what is refitted inside it, and the
+null all have to be fixed, or the condition still has to be decided when it is read
+— and it will be read with the answer visible.

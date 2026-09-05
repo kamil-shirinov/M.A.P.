@@ -563,3 +563,158 @@ numbers different from the ones just published.
 [[0032-calibration-form]] and amended by git note records 3 and 7. The holdout is
 unspent.
 
+---
+
+## 16 · Phase 3: the correction generalises, the forecasting does not improve
+
+**Two claims, kept apart all the way through this section, because they are both
+true and they point in opposite directions.**
+
+> **Log score convention.** Throughout this project the log score is the *negative*
+> log predictive density, so **lower is better**. −1.237 is better than −0.949. The
+> convention is stated here because a number that improves by getting smaller is
+> exactly the kind of unlabelled direction this vault has recorded five times.
+
+### The fit
+
+`z -> (z - a) / b`, both parameters on the development half, objective the log
+score. The objective makes this the normal MLE, so the fit is closed form and there
+is no optimiser to misconfigure.
+
+| | value | cluster-robust CI | |
+| --- | --- | --- | --- |
+| `a` location | **−0.0757** | [−0.4426, +0.1880] | covers 0, exactly as ADR 0032 predicted |
+| `b` scale | **1.3305** | [1.2405, 1.4941] | excludes 1 |
+
+`a` fitting to near zero is the result ADR 0032 said it would be, not a wasted
+parameter: it was carried so that a location error appearing later could not be a
+parameter chosen after seeing the holdout.
+
+### The development success condition FAILED, and a specification gap decided it
+
+Corrected MAD-scale of z: **1.0864 → 0.8165**.
+
+| bootstrap treatment | CI | verdict |
+| --- | --- | --- |
+| parameters **refitted** per resample | [0.6997, **0.9931**] | **excludes 1.0 → FAIL** |
+| parameters held at the estimate | [0.7088, 1.0653] | covers 1.0 |
+
+Record 3 said "judged by the cluster-robust 95% CI from the same moving-block
+bootstrap" and **did not say whether `a` and `b` are refitted inside each
+resample.** The two readings disagree, and the distance between the failing bound
+and 1.0 — **0.0019** — is far smaller than the distance between the readings.
+
+Both estimands are legitimate. The **fixed** reading describes what happens next,
+since the holdout applies `a` and `b` without refitting. The **refitted** reading
+asks whether the procedure calibrates on a fresh sample, and carries the parameter
+uncertainty the fixed one omits. Called **FAIL** on the refitted reading, which is
+the treatment that accounts for that uncertainty — but the verdict rests on a
+choice the pre-registration left open. Second time this fortnight; see
+[[Findings & Incidents]] #49.
+
+### One snapshot, first in the project's history
+
+Mid-phase the development half silently scored 175 instead of 178. Three SCCO items
+failed `SpotDriftError` by exactly −1.1858% each. Diagnosed rather than assumed:
+SCCO **split 1.012** on 2026-08-11 and the provider applied it about 25 days late.
+1/1.012 = 0.988142, matching exactly. It is *not* a dividend — D/P for that date is
+0.5497%, less than half — so **[[0003-price-adjustment-semantics]]'s premise holds**:
+`Close` is split-adjusted, and a split adjustment is what that basis promises.
+
+The holdout pre-flight then found **zero of its 346 price windows** in the pinned
+snapshot, which held only what had been scored by then. So one snapshot was
+materialised covering both bands and both splits: **701 of 701 windows at a single
+vintage — the first time this corpus has had one.** Every earlier figure rested on
+whichever daily fetch was current. The guards worked; what was missing was the
+snapshot.
+
+Cost: three SCCO items, reported as a stratum. **Dropping them is conservative
+rather than correct** — a return is scale-invariant under a split, so they are
+scoreable once the recorded spot is rescaled. The guard cannot tell a split from
+genuine drift, which is why it refuses. Split-aware handling is on the Phase 5 list,
+deliberately not before the holdout.
+
+Re-derived on the new vintage, **every verdict held**: `a` and `b` moved by 0.003
+and 0.0005, the success condition still failed, leakage still spanned zero, the
+tails replication stayed PARTIAL and compression still replicated. The commitment to
+report all of them whatever they said was recorded before they ran (record 13).
+
+### The holdout was spent, and who decided that
+
+**The pre-registration was silent.** ADR 0032's only sentence about sequencing —
+"then reports the holdout once" — is unconditional on its face; record 3 defines
+what FAILS means and says nothing about the consequence; ADR 0031 governs how the
+holdout is spent, not whether. No conditional statement existed anywhere.
+
+So the decision could not be made by consulting the record, and **Kamil made it
+having already seen the failed development fit.** That is recorded rather than
+smoothed over. The reasoning: declining would condition the holdout on a
+development result, which is precisely the selection the holdout exists to prevent —
+a holdout spent only when the fit looks good is a second development set with a
+publication filter, and the asymmetry would be invisible in the reported number.
+
+The report was then fixed in git note record 14 — the primary test, seven secondary
+measures, and the reading of every outcome including the disconfirming ones —
+**before the spend**.
+
+### The result
+
+**173 items, `a` and `b` fixed, no refit.**
+
+| | corrected | uncorrected | difference | |
+| --- | --- | --- | --- | --- |
+| **log score** *(lower is better)* | **−1.23725** | −0.94947 | **−0.28778 [−0.45255, −0.11117]** | **better** |
+| **CRPS** *(lower is better)* | **0.03782** | 0.03873 | **−0.00090 [−0.00178, −0.00012]** | **better** |
+
+Both intervals exclude zero in favour of the corrected forecast, on 173 items over
+22 clusters that had never been examined. **The correction generalises.**
+
+Secondary measures:
+
+| | before | after |
+| --- | --- | --- |
+| calibration ratio | 0.5922 [0.4937, 0.7489] | 0.7879 [0.6568, 0.9964] |
+| MAD-scale of z | 1.3795 [1.1589, 1.6649] | **1.0368 [0.8711, 1.2514]** — covers 1.0 |
+| tail ratio | 1.1747 | 1.1833 |
+| PIT tilt | 0.5410 | 0.5512 — not established |
+| Anderson–Darling | 12.204 | 4.145 *(cluster-robust 5% point 5.084)* |
+| \|z\|>2.5 | 16 (9 blk) | 9 (7 blk) *(expectation 2.15)* |
+| \|z\|>3.0 | 11 (8 blk) | 3 (3 blk) *(expectation 0.47)* |
+
+Strata: **dirty-tree 102 of 173**, truncated 2, degeneration retries 4,
+`SpotDriftError` exclusions 0.
+
+### The holdout did NOT refute the development failure
+
+The obvious reading — development failed, holdout passed, so the failure was a
+fluke — **does not survive testing.** The two halves are not distinguishable from
+each other:
+
+| statistic | development | holdout | difference | |
+| --- | --- | --- | --- | --- |
+| uncorrected calibration ratio | [0.6380, 0.8030] | [0.4967, 0.7483] | +0.0978 [−0.0584, +0.2485] | **not distinguishable** |
+| uncorrected MAD-scale | [0.9430, 1.4173] | [1.1589, 1.6649] | −0.1645 [−0.5779, +0.1349] | **not distinguishable** |
+| **corrected MAD-scale** | [0.7088, 1.0653] | [0.8711, 1.2514] | −0.1236 [−0.4343, +0.1014] | **not distinguishable** |
+
+The intervals overlap on 54–67% of the narrower one, and every difference covers
+zero. **The FAIL and the PASS are two marginal calls landing either side of 1.0 in
+samples that cannot be told apart** — one excluding 1.0 by 0.0019, the other
+covering it. Neither refutes the other, and reporting the holdout as having
+vindicated the correction's calibration would be reading a coin flip as a verdict.
+See [[Findings & Incidents]] #49.
+
+### What did and did not improve
+
+**The calibration correction generalises out of sample.** That is established: both
+primary measures, both intervals excluding zero, on a sample never examined.
+
+**The forecasting did not improve.** Corrected, the system now beats the
+earnings-scaled random walk on CRPS — a change from indistinguishable — and still
+**loses to GARCH and to the plain random walk on both CRPS and the log score**, as
+it did uncorrected. A better-calibrated statement of the same information is worth
+having and is not the same as a better forecast.
+
+**Next:** the three-agent ablation ([[Findings & Incidents]] #46), which has a
+specific prediction to test rather than being a loose end. The holdout is spent and
+cannot be reused.
+

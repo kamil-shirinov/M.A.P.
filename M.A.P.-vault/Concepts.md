@@ -375,3 +375,23 @@ Yahoo. Named gap, candidate design already running in the front end.
 **Uncommitted pre-registration** — an intention written in advance and never committed, which this project
 treats as equivalent to no pre-registration at all. Git history is the evidence; a brief that cannot be
 shown is the thing the freeze commits and the git notes exist to replace ([[Development Timeline]] §15).
+
+**Marginal calls on indistinguishable samples** — two verdicts landing either side of a threshold in
+samples a test cannot separate. Neither is evidence about the other, and treating one as commentary on
+the other reads a coin flip as a verdict ([[Findings & Incidents]] #49). *The defence is asking whether
+the samples differ* before letting one interpret the other.
+
+**Estimator-completeness of a threshold** — a pre-registered condition is only complete if the estimator
+is fixed too: the resampling scheme, what is refitted inside it, and the null. Naming the statistic, the
+level and the direction leaves a degree of freedom that gets decided at reading time, with the answer
+visible. *Cost twice in one fortnight* — ADR 0032's iid A² point, and record 3's unspecified refit.
+
+**Frozen vintage** — a price snapshot pinned by date and READ-ONLY, so a missing window refuses rather
+than fetching. Without the read-only half the pin is cosmetic: a miss stores today's series under the
+pinned name, which is the calendar-keyed cache wearing a fixed label. *701 of 701 windows at one vintage
+is the first complete single-vintage snapshot this corpus has had.*
+
+**Conservative versus correct** — a guard that refuses a case it could in principle handle. The three
+SCCO items are scoreable once the recorded spot is rescaled by the split factor, because a return is
+scale-invariant under a split; `SpotDriftError` refuses because it cannot tell a split from genuine
+drift. *Recording the distinction is what keeps a known limitation from hardening into a believed one.*

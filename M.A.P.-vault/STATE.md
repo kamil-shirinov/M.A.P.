@@ -13,83 +13,76 @@
 
 ## Current phase
 
-**Phase 3 — the calibration correction.** Phase 2 closed on 2026-09-04. The Phase 1
-definition of done below is kept as a record of what it required, not as a live
-checklist; Phase 2's was written at its close and lives in [[Development Timeline]] §15,
-which is weaker evidence and says so.
+**Phase 4 — the ablation.** Phase 3 closed on 2026-09-05: the correction was fitted,
+the holdout was spent once, and the result is recorded in [[0033-phase-3-outcome]].
+The Phase 1 definition of done below is kept as a record of what it required, not as
+a live checklist; Phase 2's was written at its close ([[Development Timeline]] §15)
+and says so.
 
-### Where things actually are, 2026-09-04
+### Where things actually are, 2026-09-05
 
-**Phase 2 is complete.** Both bands are run, both are scored, and the leakage estimate
-— the number the two-band design exists for — is in.
+**Phase 3 is complete. THE HOLDOUT IS SPENT.** `corpus/holdout_spend.jsonl` exists,
+is committed, and names the fitted parameters. It cannot be reused.
 
-| | clean | ambiguous |
-| --- | --- | --- |
-| complete | 351 of 356 | **350 of 353** |
-| failed | 5 | 3 — ATI, TROW, UHS, all `output_truncated` at intake |
-| fidelity | 1.0 | 1.0 |
-| truncated exhibits | 9 | 9 |
-| degeneration retries | 11 | 13 |
-| **uncommitted tree** | **208** | **0** |
-| freeze | 2.6.0 | 2.6.0 |
+> **Log score convention, because it is the easiest thing here to misread:** lower
+> is better. It is the negative log predictive density. −1.237 is better than −0.949.
 
-**The leakage estimate: clean 0.03189 vs ambiguous 0.03330, difference −0.00141
-[−0.00904, +0.00647].** No measurable contamination — the model scores slightly
-*worse* on the band it might have memorised, and the interval spans zero. Read
-[[Development Timeline]] §15 before quoting it, and note that the estimate is only
-correctly oriented when the **clean** band is the one scored ([[Findings & Incidents]] #47).
+**The correction generalises.** `z -> (z - a) / b`, `a = −0.0757`, `b = 1.3305`,
+fitted on 175 development items by minimising the log score, applied unchanged to
+173 holdout items:
 
-**Development-half result** (178 items, 24 clusters): indistinguishable from GARCH and
-the earnings-scaled random walk on CRPS, **worse than the random walk by 5.4%**; worse
-than both on log score; indistinguishable from a coin flip on direction, because P(up)
-spans only 0.369–0.631. Calibration ratio 0.733 [0.637, 0.798]; **no PIT tilt
-established**; thin tails **suggestive and post-hoc, not established**.
+| | corrected | uncorrected | difference |
+| --- | --- | --- | --- |
+| log score | −1.23725 | −0.94947 | **−0.28778 [−0.45255, −0.11117]** |
+| CRPS | 0.03782 | 0.03873 | **−0.00090 [−0.00178, −0.00012]** |
 
-**Pre-registered replications, evaluated on the ambiguous band:**
+**The forecasting did not improve.** Corrected, the system beats the earnings-scaled
+random walk on CRPS — up from indistinguishable — and still loses to GARCH and the
+plain random walk on both rules. Keep the two claims apart: a better-calibrated
+statement of the same information is not a better forecast.
 
-- **Tails — PARTIAL.** The exceedance counts replicated emphatically (|z|>3 at 16.7×
-  expectation over 6 blocks); the tail ratio did not (CI [0.9945, 1.5365], missing the
-  registered threshold by 0.0055). Record 2 anticipated exactly this split. Thin tails
-  is **not withdrawn and not established**, and Student-t is **not adopted** — its
-  trigger was an explicit *if and only if it replicates*.
-- **Volatility compression — REPLICATES, fully, against both baselines.** S1 corrected
-  slope 0.409 (RW) / 0.327 (GARCH), both Frisch intervals excluding 1.0; S2 spread
-  ratios 0.516 / 0.468; S3 negative and monotone at all three cut depths. Better than
-  development, where GARCH failed to exclude 1.0. This is **new work with its own ADR**,
-  not a Phase 3 amendment.
+**Two things a reader will get wrong unless told:**
 
-**Next: Phase 3 — the calibration correction.** Pre-registered in
-[[0032-calibration-form]]: a two-parameter location-and-scale map, both parameters
-fitted on the development half, objective the **log score** not the calibration ratio,
-success condition the corrected MAD-scale consistent with 1.0. Amended by git note
-records 3 and 7 — the A² threshold is cluster-robust and S4 is withdrawn as having no
-power.
+1. The development success condition **FAILED** ([0.6997, 0.9931], excluding 1.0 by
+   0.0019) and the holdout **passed** ([0.8711, 1.2514]). The holdout did **not**
+   refute the failure — the two halves are not distinguishable from each other,
+   difference −0.1236 [−0.4343, +0.1014]. Two marginal calls either side of 1.0 in
+   samples a test cannot separate ([[Findings & Incidents]] #49).
+2. The FAIL itself rests on a **specification gap**: record 3 never said whether
+   `a` and `b` are refitted inside each bootstrap resample. Refitted it fails, held
+   fixed it passes, and the gap between readings is far larger than the margin.
 
-**THE HOLDOUT IS UNSPENT.** `corpus/holdout_spend.jsonl` does not exist, and its
-absence is the proof. It is spendable exactly once, enforced by
-[[0031-holdout-spend]], and it is not touched until Phase 3 has a fitted correction
-to test.
+**Data state.** Scoring is pinned to the **2026-09-05 snapshot**, read-only, 701 of
+701 windows across both bands and both splits — the first complete single-vintage
+snapshot this corpus has had. Three SCCO items are a `SpotDriftError` stratum
+(development is 175, not 178) after a 1.012 split the provider applied 25 days late.
+Dropping them is conservative rather than correct; split-aware handling is on the
+Phase 5 list and was deliberately not done before the holdout.
 
-**355 realised-bar pins were taken today** (`var/corpus/realised_pins.jsonl`). Phase 3
-scores these same items again; a drifting outcome between now and then would fit the
-correction against different numbers with nothing to catch it. Verified on a second
-pass: 355 unchanged, zero `RealisedDriftError`, leakage identical to the digit.
+**Next: the three-agent ablation** ([[Findings & Incidents]] #46). Run the
+structuralist on the intake summary with no analyst and compare the P(up) spans. If
+the span widens, the three-scenario frame is compressing the directional claim; if
+not, the flatness is in the model's reading of the document. It has a specific
+prediction, which is what makes it the next experiment rather than a loose end.
 
-### Open questions carried into Phase 3
+### Open questions carried forward
 
-- **`ungrounded=115`** in the ambiguous band (151 in the clean) — still an open
-  question, not a finding. Named test unchanged: partition the flagged numerals by
-  whether they match a value the forecast itself emitted.
-- **BRK-B is degenerate in both bands** — 2026-05-07 and 2025-08-04, 2 of 2 for that
-  ticker against 0 of ~690 elsewhere. Recorded as an observation with counts.
-- **The ambiguous band's runaways are at intake**, not the analyst — 3 of 3, against
-  the clean band's 7 analyst `budget_exhausted`. Different agent, same corpus design.
+- **`ungrounded`** 151 clean / 115 ambiguous — still an open question. Named test
+  unchanged: partition the flagged numerals by whether they match a value the
+  forecast itself emitted.
+- **Volatility compression** replicated out of sample against both baselines
+  (record 6). A per-item volatility map is the candidate successor — **new work with
+  its own ADR**, and the ambiguous band is still unused for calibration, so it can
+  test one.
+- **Student-t is not adopted.** Its trigger was ambiguous-band replication of the
+  tail excess, which was PARTIAL.
 - **`prices.fetched_on` is a label, not a pin** ([[Findings & Incidents]] #39, sixth
-  instance). Scoring re-fetches daily; the vintage field is asserted in 701 manifests
-  and no price was ever fetched on that date. `SpotDriftError` is what protected the
-  result. The fix is to pass `today=` at `bootstrap.py:69`.
-- **Differential exclusion** — whether the excluded items differ systematically from
-  the kept ones is still untested.
+  instance). The scoring path is now pinned; the corpus runner still is not.
+- **Value provenance** ([[Findings & Incidents]] #48) — the pipeline has provenance
+  for runs and none for values. Named gap, candidate design already running in the
+  front end.
+- **Differential exclusion** — whether excluded items differ systematically from
+  kept ones is still untested.
 
 ### Phase 1 definition of done
 
