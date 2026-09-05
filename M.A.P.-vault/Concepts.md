@@ -413,3 +413,11 @@ amended to look as though the error never happened is worthless** — its whole 
 what was believed in advance, and a record that silently improves itself is not one. *The worked example
 is record 16 contradicting record 15:* record 15 called the no-analyst prompt change "minimal", building
 it showed 11 of 25 lines change, and record 16 says so while leaving the original sentence standing.
+
+**Re-purposing a gate versus a measurement** — a gate has a decision attached and can be moved to change
+an outcome, so re-purposing one after the fact is a researcher degree of freedom. A variance measurement
+of an already-stated property has nothing to move: no hypothesis, no threshold, no branch. *The
+ablation's 60-item control was re-purposed from gating A−B to measuring whole-pipeline re-derivation
+variance* (git note record 20), and the distinction is why that is legitimate where re-purposing a test
+would not have been. **The test of whether re-purposing is safe is whether any outcome could be changed
+by it.**
