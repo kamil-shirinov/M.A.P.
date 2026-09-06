@@ -1,4 +1,4 @@
-# M.A.P. — Market's Agentic Predictor
+# M.A.P. — Market's Agentic Prognosis
 
 Turns unstructured financial news into **calibrated, falsifiable probabilistic price
 forecasts** using local open-weight models. Three specialised agents run in sequence;
