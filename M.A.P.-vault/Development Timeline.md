@@ -725,3 +725,70 @@ having and is not the same as a better forecast.
 specific prediction to test rather than being a loose end. The holdout is spent and
 cannot be reused.
 
+---
+
+## 17 · The ablation, which failed to run and produced a better result
+
+Four arms, registered across git notes 15 to 22, every design decision written down
+before the arm it governed ran.
+
+| arm | configuration | outcome |
+| --- | --- | --- |
+| **A** | frozen system | **355 / 355** — a pure cache replay, byte-identical |
+| **B** | analyst capped at 1,000 tokens | **dropped**, never ran |
+| **C** | no analyst, 4B forecasting | **355 / 355** |
+| **D** | no analyst, 12B forecasting | **abandoned**, 9 of 10 failed |
+| control | 60 items, cold re-run | **60 / 60** |
+
+### Two arms could not be made to run, and that is the result
+
+Both failed identically. A reasoning model spends its budget on reasoning **first**
+and the answer **last**, so a budget cap truncates the output rather than the
+deliberation:
+
+| budget | reasoning share | outcome |
+| --- | --- | --- |
+| 1,000 | 99.7% | no answer |
+| 12,000 | 99.98% | no answer |
+| 15,000 — the window's ceiling | 99.98% | no answer |
+
+A ceiling probe, registered with both readings fixed in advance, took the strong
+branch: **given every token a 16,384 window allows, the model does not finish.**
+So **a reasoning model's cost is not tunable by its budget**, and it does not drop
+into a fixed-budget pipeline slot. It can be made cheaper only by removing the
+agent, by choosing a model that reasons less, or by a provider-side reasoning-effort
+control this backend does not expose. See [[Findings & Incidents]] #51.
+
+Losing arm D lost **both primaries** — A−D and D−C were the entire inferential
+structure — so the ablation has **no primary and no causal claim**.
+
+### What survives, descriptively
+
+Arm A beats arm C by **13.6% on CRPS**, −0.00444 [−0.00632, −0.00253] over 349
+paired items. **Three things move together** — the analyst, the model, and
+necessarily the prompt — and the design separates none of them, so "the analyst
+helps" is one of three readings and not the established one.
+
+More interesting than the gap: without the analyst the system becomes **opinionated
+and bullish**, P(up) median 0.755 against 0.513 and a span more than twice as wide.
+The widening is #46's prediction confirmed; the bullish centre is new, and its
+resemblance to the untestable issuer-promotion hypothesis of #45 is recorded as
+speculation in [[Findings & Incidents]] #52.
+
+### The control, and a number the README needed
+
+A cold re-run of the whole pipeline on 60 items: **the aggregate does not move** —
+mean CRPS 0.03255 cached against 0.03240 cold, difference −0.00016 [−0.00072,
++0.00066] — while **individual items move 4.3% on average**, with 53% byte-identical.
+That converts "re-derivable does not hold" from a statement about strings into one
+about results.
+
+### And a guard proved itself
+
+Scoring the arms fired `RealisedDriftError` six times, all SCCO, every ratio 1.012 —
+the same late-applied split that `SpotDriftError` caught on the anchor side. The
+outcome side had no guard before Phase 3. It does now, and it has been tested by
+something other than its author ([[Findings & Incidents]] #53).
+
+**Next:** publication.
+

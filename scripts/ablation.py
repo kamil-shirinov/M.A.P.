@@ -90,6 +90,9 @@ ARMS = {
     "B": Arm("B", analyst="capped", structuralist="structuralist", max_tokens=1000),
     "C": Arm("C", analyst="none", structuralist="structuralist"),
     "D": Arm("D", analyst="none", structuralist="analyst"),
+    # DIAGNOSTIC ONLY (git note record 22). Ten items at the largest budget the
+    # 16,384 window allows. It does not become arm D and enters no comparison.
+    "probe": Arm("probe", analyst="none", structuralist="analyst", max_tokens=15000),
     "control": Arm("control", analyst="full", structuralist="structuralist"),
 }
 
@@ -111,11 +114,11 @@ def main(arm: str = typer.Argument(...), limit: int = typer.Option(0)) -> None:
     corpus = Corpus.model_validate(record["corpus"])
     items = sample()
 
-    if arm == "control":
+    if arm in ("control", "probe"):
         import numpy as np
 
         rng = np.random.default_rng(EXECUTION_SEED)
-        keep = sorted(rng.permutation(len(items))[:60])
+        keep = sorted(rng.permutation(len(items))[: 60 if arm == "control" else 10])
         items = [items[i] for i in keep]
     if limit:
         items = items[:limit]
@@ -210,7 +213,7 @@ def main(arm: str = typer.Argument(...), limit: int = typer.Option(0)) -> None:
                             # budget everywhere else (record 19).
                             sampling=(
                                 registry.spec("structuralist").sampling.model_copy(
-                                    update={"max_tokens": 12000}
+                                    update={"max_tokens": spec.max_tokens or 12000}
                                 )
                                 if spec.structuralist == "analyst"
                                 else registry.spec("structuralist").sampling

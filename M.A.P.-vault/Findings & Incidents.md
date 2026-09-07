@@ -1868,3 +1868,229 @@ The difference was the bootstrap draw count — 2000 in production against 4000 
 ad-hoc script — which is Monte Carlo noise and nothing else. The vault now quotes the
 production settings throughout, and the drop path is documented as existing and never
 having fired on this data.
+
+---
+
+## 51 · A check that fails for an incidental reason is not a check that passed
+
+Arm D of the ablation ran for two and a quarter hours and produced **one usable item
+in ten**. It should never have started, and the reason it did is a category error in
+how its smoke test was read.
+
+**The smoke test failed with `InferenceStatusError` — the 12B could not load,
+because arm C was running and this machine holds one model at a time (CLAUDE.md §3).
+I read that as environmental, fixed the sequencing, and launched.** The fix was
+correct and the inference was not: an environmental failure tells you nothing about
+whether the thing under test works. **Arm D launched having never produced a single
+successful item in any test.** Run in isolation, the smoke test would have hit
+`ModelBudgetExhaustedError` on its first item and the arm would have been abandoned
+in four minutes rather than 135.
+
+The generalisable form, and the reason this sits with the rest of [[Findings &
+Incidents]] #39: *the absence of a negative signal was substituted for the presence
+of a positive one.* A check has three outcomes — passed, failed, and did not run —
+and the third was collapsed into the first because the reason it did not run was
+one I had already explained. **An explanation for why a check could not run is not
+a result from the check.**
+
+### What arm D actually showed
+
+Every failure was identical in shape:
+
+```
+ModelBudgetExhaustedError — gemma-4-12b-qat generated 12000 tokens
+(11997 of them reasoning) and produced no answer.  finish_reason = length
+```
+
+Three visible tokens out of twelve thousand. The single success used 9,047.
+
+### The ceiling probe settles it: STRUCTURAL, not methodological
+
+*Amended 2026-09-07 after the probe registered in git note record 22, which fixed
+both readings in advance. This is that record's strong branch.*
+
+Ten items at **15,000 tokens** — the largest budget the 16,384 window allows —
+same prompt, same model, same everything as arm D:
+
+```
+7 x ModelBudgetExhaustedError   15,000 tokens, 14,997 reasoning, finish = length
+3 x PromptTooLargeError         larger documents leave under 15,000 of headroom
+```
+
+**Ten of ten failed. Not one converged.** And the three `PromptTooLargeError` cases
+mark the other edge: a 15,000 budget only fits when the document is small, so the
+ceiling is not even uniformly available.
+
+**Given every token the window physically allows, the model does not finish.** The
+rejection below was written as methodological because the evidence stopped at
+12,000. It is now closer to structural: there is no budget inside this window at
+which the task completes, so raising the budget is not a tuning option that was
+declined — it is an option that does not exist.
+
+The methodological objections stand and are no longer load-bearing:
+
+### The capacity claim, first rejected on measurement and then earned by it
+
+The tempting sentence is "the model cannot fit this task in its window". **It is not
+supported.** Measured on arm D's own traces: the prompt is **774 tokens** against a
+**16,384** window, leaving **15,610 available**. The failures were capped at 12,000
+by `max_tokens`, with **3,610 tokens of headroom unused**. The window is nowhere
+near binding.
+
+So raising the budget to ~15,000 is *physically possible*, and the refusal to do it
+is **methodological, not physical**:
+
+- it is a parameter changed after watching 12,000 fail, which is a design value
+  fitted to a failure;
+- and it creates differential attrition — the items that would still fail are
+  exactly those needing most reasoning, so the completed set biases toward filings
+  that need least, and any comparison against arm A becomes near-circular.
+
+That is a weaker rejection than a capacity limit would have been, and it is the true
+one. Whether 15,610 tokens would suffice is a **named open question**, probed
+diagnostically under git note record 22 with both readings fixed in advance.
+
+### Raising the model's context window in LM Studio: rejected on three grounds
+
+Named so that it is rejected deliberately rather than overlooked.
+
+1. It is a parameter changed after seeing a failure — the same objection as raising
+   the budget.
+2. A differently-windowed model is not comparable to arm A, which ran at 16,384.
+3. **It would not help.** The window is not the constraint; `max_tokens` is. A
+   774-token prompt leaves 15,610 available and the failures stopped at 12,000.
+   Enlarging the window changes nothing about a budget ceiling.
+
+### The strong result: two arms, two budgets an order of magnitude apart, one failure
+
+This is what the ablation produced instead of a comparison, and it is worth more.
+
+| arm | model | budget | reasoning share | outcome |
+| --- | --- | --- | --- | --- |
+| B | gemma-4-12b-qat | **1,000** | 997 / 1,000 = **99.7%** | no answer |
+| D | gemma-4-12b-qat | **12,000** | 11,997 / 12,000 = **99.98%** | no answer |
+| probe | gemma-4-12b-qat | **15,000** *(the window's ceiling)* | 14,997 / 15,000 = **99.98%** | no answer |
+
+**A reasoning model's cost is not tunable by its budget.** Across a **fifteen-fold
+range — 1,000, 12,000 and 15,000 tokens** — essentially the entire allowance went to
+reasoning every time and nothing came back. The largest of the three is the most a
+16,384-token window can give it. A budget cut does not shorten deliberation — it truncates the output,
+which is the one part you needed.
+
+The practical consequence for anyone building this kind of pipeline: **a reasoning
+model does not drop into a fixed-budget slot.** Its cost can be reduced by removing
+the agent, by choosing a model that reasons less, or by a provider-side
+reasoning-effort control — which this backend does not expose. Not by giving it
+less room.
+
+The ablation set out to measure what the analyst contributes and could not, because
+two of its four arms could not be made to run. That is a result about reasoning
+models in pipelines rather than about this pipeline, and it cost two smoke-test
+items and one abandoned arm.
+
+---
+
+## 52 · Removing the analyst makes the system opinionated and bullish
+
+The ablation lost both its primaries ([[Findings & Incidents]] #51), so **A − C is
+descriptive and nothing here is a causal claim.** 349 items paired, 42 blocks,
+scored against the pinned 2026-09-05 snapshot.
+
+| | arm A (full pipeline) | arm C (no analyst, 4B) | difference |
+| --- | --- | --- | --- |
+| CRPS | 0.03263 | 0.03707 | **−0.00444 [−0.00632, −0.00253]** |
+| log score *(lower is better)* | −1.30608 | −0.85642 | **−0.44967 [−0.56655, −0.24337]** |
+
+Arm A is better by **13.6% on CRPS**, with an interval well clear of zero.
+
+**THREE CONFOUNDS, NAMED, AND THE DESIGN SEPARATES NONE OF THEM:**
+
+1. **the analyst** is removed;
+2. **the model** doing the forecasting changes from a 12B to a 4B;
+3. **the prompt** changes, necessarily — the frozen structuralist's rule 1 is *copy
+   the ESTIMATE numbers from the narrative*, and with no analyst there are none, so
+   11 of 25 lines had to change.
+
+Arm D existed to separate (1) from (2) and could not be made to run. So "the
+analyst helps" is **one of three available readings** of this table and the
+experiment cannot say which. It could as easily be "a 12B forecasts better than a
+4B", or "the frozen prompt is better written than the one I wrote for arm C".
+
+### The part that was not predicted, and is more interesting than the gap
+
+| | P(up) range | median |
+| --- | --- | --- |
+| arm A | 0.351 – 0.631 | **0.513** |
+| arm C | 0.176 – 0.819 | **0.755** |
+
+Two things happen at once. The **span widens** — which is exactly the prediction of
+[[Findings & Incidents]] #46, that the three-scenario frame compresses the
+directional claim. And the centre **moves hard bullish**: a median P(up) of 0.755
+against arm A's 0.513.
+
+Arm C is not merely more opinionated. It is systematically opinionated in one
+direction.
+
+### A speculative connection, flagged as speculation
+
+[[Findings & Incidents]] #45 records the **issuer-promotion hypothesis** — every
+exhibit is an EX-99.1 earnings release, the issuer's own promotional text about its
+own quarter, so a model reasoning from it should skew bullish. That hypothesis was
+recorded as *untestable on this corpus*, because document type never varies and a
+null has nothing to be relative to.
+
+Arm C's bullish median is **consistent with the analyst having been buffering that
+framing**, and with the buffer being removed. It is not evidence for it. The same
+three confounds apply — a 4B model may simply be more suggestible than a 12B, and a
+prompt asking a transcriber to forecast may invite optimism on its own. **A
+correlation of one arm's median with a hypothesis nobody could test is a coincidence
+until something separates them.**
+
+What would separate them is the design already named in #45: the same tickers and
+dates forecast from a document the issuer did not write. That remains a second
+corpus, not a re-analysis, and this observation raises its value rather than
+substituting for it.
+
+---
+
+## 53 · The realised-bar pin fired for the first time, and was right
+
+`RealisedDriftError` was built during Phase 3 ([[0033-phase-3-outcome]]) for a
+failure nobody had yet seen: an outcome bar changing between one scoring and the
+next, with nothing to catch it. It sat unfired through the holdout spend and every
+re-derivation since.
+
+Scoring the ablation arms, it fired **six times, all SCCO**:
+
+```
+SCCO 2026-01-29   pin 186.0954   now 183.8887
+SCCO 2026-04-30   pin 177.7624   now 175.6545
+SCCO 2026-07-23   pin 185.0000   now 182.8063
+SCCO 2025-04-26   pin  86.9669   now  85.9356
+SCCO 2025-07-30   pin  91.7233   now  90.6357
+SCCO 2025-10-30   pin 133.7329   now 132.1471
+```
+
+Every ratio is **1.012 to four figures** — the same split the provider applied 25
+days late, which [[Findings & Incidents]] #39's sixth instance caught on the *spot*
+side as `SpotDriftError`. The pin caught the identical corporate action on the
+**outcome** side, which is the half that had no guard before Phase 3 and would have
+scored silently.
+
+Three details worth keeping:
+
+- **It fired on data the guard's author did not construct.** The pins were written
+  during the Phase 3 scoring, before the ablation existed, and the arms met them
+  months of corpus-time later.
+- **The failure was symmetric across arms.** Arms A and C each lost the same six
+  items, so the pairing was unaffected and the comparison stayed at 349. A guard
+  that dropped different items from different arms would have silently unbalanced
+  the design.
+- **It is still conservative rather than correct**, exactly as recorded in git note
+  record 13: a return is scale-invariant under a split, so those six are scoreable
+  once the recorded bar is rescaled by 1.012. The guard refuses because it cannot
+  tell a split from a genuine revision. Split-aware handling stays on the Phase 5
+  list.
+
+**A guard that has never fired is a hypothesis about a failure.** This one is now a
+measurement of one.
