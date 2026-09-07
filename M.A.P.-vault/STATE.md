@@ -13,8 +13,10 @@
 
 ## Current phase
 
-**Phase 4 — the ablation.** Phase 3 closed on 2026-09-05: the correction was fitted,
-the holdout was spent once, and the result is recorded in [[0033-phase-3-outcome]].
+**Publication.** Phase 3 closed on 2026-09-05 and the ablation on 2026-09-07. The
+correction was fitted, the holdout was spent once ([[0033-phase-3-outcome]]), and
+the ablation lost both primaries to two arms that could not be made to run
+([[Development Timeline]] §17).
 The Phase 1 definition of done below is kept as a record of what it required, not as
 a live checklist; Phase 2's was written at its close ([[Development Timeline]] §15)
 and says so.
@@ -59,11 +61,26 @@ snapshot this corpus has had. Three SCCO items are a `SpotDriftError` stratum
 Dropping them is conservative rather than correct; split-aware handling is on the
 Phase 5 list and was deliberately not done before the holdout.
 
-**Next: the three-agent ablation** ([[Findings & Incidents]] #46). Run the
-structuralist on the intake summary with no analyst and compare the P(up) spans. If
-the span widens, the three-scenario frame is compressing the directional claim; if
-not, the flatness is in the model's reading of the document. It has a specific
-prediction, which is what makes it the next experiment rather than a loose end.
+**The ablation ran and produced no primary.** Four arms; two of them — B at a
+1,000-token analyst cap and D at 12,000 on the 12B — failed identically, and losing
+D lost both A−D and D−C. A ceiling probe at 15,000, the most a 16,384 window allows,
+failed 10 of 10. **A reasoning model's cost is not tunable by its budget**
+([[Findings & Incidents]] #51).
+
+What survives is descriptive. Arm A beats arm C by 13.6% on CRPS over 349 paired
+items, with three confounds the design cannot separate. Without the analyst the
+system becomes **opinionated and bullish** — P(up) median 0.755 against 0.513, span
+more than twice as wide. The widening confirms #46's prediction; the bullish centre
+was not predicted and its resemblance to the issuer-promotion hypothesis of #45 is
+recorded as speculation in #52.
+
+**`RealisedDriftError` fired for the first time** — six SCCO items, every ratio
+1.012, the same late split caught on the outcome side ([[Findings & Incidents]] #53).
+
+**Next: publication.** The README carries the results, the ablation, and the
+result-level reproducibility number. The remaining named work is the Phase 5 list —
+split-aware drift handling, value provenance ([[Findings & Incidents]] #48), and the
+non-issuer corpus that would test #45.
 
 ### Open questions carried forward
 
