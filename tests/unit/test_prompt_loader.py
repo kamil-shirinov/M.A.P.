@@ -240,6 +240,12 @@ def test_every_shipped_template_loads() -> None:
         "structuralist.v2.md",
         "structuralist_repair.v2.md",
         "scenario_analyst.v3.md",
+        # The ablation's no-analyst structuralist (git note record 17). Shipped
+        # rather than kept in the script because a prompt that produced forecasts
+        # must be versioned and hashed like every other one -- and because this
+        # assertion is what stops a template being added to the package silently,
+        # which is precisely what adding it did until this line was written.
+        "structuralist_noanalyst.v1.md",
     }
 
 
