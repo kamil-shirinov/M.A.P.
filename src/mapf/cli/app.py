@@ -37,7 +37,7 @@ EXIT_MODEL_OUTPUT = 6
 
 app = typer.Typer(
     name="map",
-    help="Market's Agentic Predictor — calibrated, falsifiable price forecasts.",
+    help="Market's Agentic Projections — calibrated, falsifiable price forecasts.",
     no_args_is_help=True,
     add_completion=False,
 )

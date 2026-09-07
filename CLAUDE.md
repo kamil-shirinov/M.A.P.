@@ -1,4 +1,4 @@
-# CLAUDE.md — Market's Agentic Predictor (M.A.P.)
+# CLAUDE.md — Market's Agentic Projections (M.A.P.)
 
 > Save this file at the repo root (`~/Desktop/M.A.P./CLAUDE.md`). Claude Code reads it every session.
 

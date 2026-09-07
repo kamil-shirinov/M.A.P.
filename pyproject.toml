@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "map-forecaster"
 version = "0.1.0"
-description = "Market's Agentic Predictor — calibrated, falsifiable price forecasts from local open-weight models"
+description = "Market's Agentic Projections — calibrated, falsifiable price forecasts from local open-weight models"
 readme = "README.md"
 # Pinned to a single minor. A research project whose results must be reproducible
 # should not silently change interpreter across a backtest.
