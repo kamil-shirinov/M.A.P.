@@ -2038,3 +2038,42 @@ on one band there is nothing to split.
 
 None of that makes the cut wrong if the cost is genuinely prohibitive. It makes the
 cut EXPENSIVE, and the record says so before the number arrives rather than after.
+
+=============================================================================
+RECORD 22 — the ceiling probe. DIAGNOSTIC ONLY. Registered before it runs.
+Written 2026-09-07. Arms A (355/355), C (355/355) and the control (60/60) are
+complete. Arm D is abandoned at 10 items, 9 of them failures.
+=============================================================================
+
+WHAT IT IS. Ten items at the maximum budget the 16,384 window allows -- max_tokens
+15,000 -- with the same no-analyst prompt, the same 12B model, and everything else
+identical to arm D. Chosen by the same corpus execution seed, so the ten are not
+picked by hand.
+
+PURPOSE: CHARACTERISE THE FAILURE MODE. NOT repair the arm.
+
+PRE-COMMITTED, before any of it runs:
+
+  * WHATEVER IT SHOWS, IT DOES NOT BECOME ARM D. A-D and D-C remain unavailable and
+    the experiment keeps no primary. The probe enters no comparison, gates nothing
+    and corrects nothing.
+  * It is a measurement of a stated property with no inferential role, exactly as
+    the sigma_draw control became under record 20. The test of whether such a
+    re-purposing is safe is whether any outcome could be changed by it, and none
+    can: there is no comparison left for it to feed.
+
+BOTH READINGS FIXED NOW:
+
+  IT STILL FAILS TO CONVERGE  ->  Findings #51 becomes materially STRONGER:
+    "even given every token the window allows, the model does not finish." That is
+    close to the capacity claim the record currently declines to make, and it would
+    be earned by measurement rather than assumed.
+
+  IT CONVERGES  ->  Findings #51 as drafted is TOO STRONG and must be REWRITTEN
+    BEFORE PUBLICATION, not after. The finding would narrow to "the model needs
+    more than 12,000 tokens for this task", which is a tuning fact rather than a
+    structural one, and the two-arm generalisation would rest on arm B alone at one
+    budget instead of two budgets an order of magnitude apart.
+
+The second branch is the one that costs something, which is why it is written down
+first.
