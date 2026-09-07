@@ -180,6 +180,15 @@ So a re-run from a cold cache produces *similar* forecasts, not identical ones. 
 is exact is replay **from the cache** — which is why the cache is provenance
 infrastructure and not an optimisation.
 
+**Measured at the level of results, not strings.** A cold re-run of the whole
+pipeline on 60 items leaves the aggregate unmoved — mean CRPS 0.03255 cached against
+0.03240 cold, a paired difference of −0.00016 with an interval from −0.00072 to
++0.00066 — while **individual items shift by 4.3% on average and 53% come back
+byte-identical**. So non-determinism is real and visible per item, and it does not
+move the reported means. Both halves of that are worth stating: the first is why
+"re-derivable" fails, the second is why the published figures are nonetheless
+stable.
+
 **Scoring was non-reproducible for a second, unrelated reason.** Until the vintage was
 pinned, prices were re-fetched on every run, and an upstream split or correction rewrites
 history retroactively. Three items were lost to a genuine SCCO split the provider applied
@@ -204,10 +213,24 @@ is supposed to state something the source did not. Their only checks are the sch
 bounds and the ordering invariant. Read a clean `ungrounded_numerals` as "the prose cites
 nothing invented", never as "the forecast is supported".
 
-The three-agent architecture is a **hypothesis**, not a result. Whether it beats a
-single-agent baseline is an open question, and **the ablation that would answer it is
-unscheduled** — it is not part of Phase 3, which was the calibration correction. It is
-the next experiment worth running. Nothing here claims the architecture is better.
+**The three-agent architecture is a hypothesis, and the ablation that would have
+tested it could not be run.** Four arms were pre-registered; two of them — both
+requiring the 12B model to work inside a token budget — failed identically and were
+abandoned. Losing one of them lost both primary comparisons, so **the ablation has no
+primary and makes no causal claim**. What survives is descriptive: the full pipeline
+beats a no-analyst variant by 13.6% on CRPS, and three things differ between them
+(the analyst, the model size, and necessarily the prompt), so "the analyst helps" is
+one of three readings the design cannot separate. Nothing here claims the
+architecture is better.
+
+**Why the arms failed is the more useful result.** A reasoning model spends its
+budget on reasoning first and the answer last, so capping the budget truncates the
+output rather than the deliberation. At 1,000, 12,000 and 15,000 tokens — the last
+being the most a 16,384-token window allows — roughly **99.98% of the allowance went
+to reasoning and no answer was produced**, every time. *A reasoning model's cost is
+not tunable by its budget*, and it does not drop into a fixed-budget pipeline slot.
+It can be made cheaper only by removing the agent, by choosing a model that reasons
+less, or by a provider-side reasoning-effort control this backend does not expose.
 
 **The corpus is a reusable benchmark.** 709 filings identified by accession number, with
 recorded outcomes, two baselines scored, a frozen protocol and a pinned price snapshot.
