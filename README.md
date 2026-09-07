@@ -165,7 +165,7 @@ history that has been true.
 
 | claim | verdict |
 | --- | --- |
-| **Pre-registered** — the corpus, the bands and every threshold were fixed before any result was seen | **holds**, and the commit order proves it. **Fourteen pre-registration records** are stored as git notes on `refs/notes/commits`, each written before the result it constrains. GitHub does not display notes in the web interface — read them with `git log --show-notes`. They fix the statistics, the predicted direction, and the interpretation of every outcome including those that would disconfirm |
+| **Pre-registered** — the corpus, the bands and every threshold were fixed before any result was seen | **holds**, and the commit order proves it. **Twenty-two pre-registration records** are stored as git notes on `refs/notes/commits`, each written before the result it constrains. GitHub does not display notes in the web interface — read them with `git log --show-notes`. They fix the statistics, the predicted direction, and the interpretation of every outcome including those that would disconfirm |
 | **Auditable** — every prompt and every raw response is preserved in `runs/<run_id>/trace.jsonl` | **holds**; a run is refused if any trace is missing or empty |
 | **Replayable from cache** — re-reading a completed run returns byte-identical output | **holds** |
 | **Re-derivable** — a cold cache reproduces the same forecasts | **does not hold** |
