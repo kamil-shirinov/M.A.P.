@@ -409,7 +409,7 @@ forecasts are accepted. No other test depends on the exact boundary.
 
 ## Dependencies
 
-Ten at runtime. Every one is named and justified here and in `pyproject.toml`,
+Thirteen at runtime. Every one is named and justified here and in `pyproject.toml`,
 per `CLAUDE.md` §2.4 — a dependency that cannot be defended in one line does not
 belong in the file.
 
@@ -424,6 +424,9 @@ belong in the file.
 | `pyarrow` | Parquet engine for the price cache — pandas' default, and what Phase 2's columnar reads will want |
 | `yfinance` | Primary price source. An unofficial Yahoo scraper, not a supported API — hence the fallback |
 | `feedparser` | RSS/Atom dialects vary enough in practice that stdlib `xml.etree` is brittle on real feeds |
+| `numpy` | The Monte Carlo mixture, every scoring rule and the moving-block bootstrap. Pure-Python resampling over 4,000 draws on 349 items is not a slower option, it is an infeasible one |
+| `scipy` | Normal CDF and PPF for the closed-form CRPS and the PIT. Arrives with `arch` anyway; declared because relying on a transitive dependency is how a build breaks when the intermediary drops it |
+| `arch` | The GARCH(1,1) baseline. Hand-rolling a variance model to benchmark against is a bad idea in a project whose point is the benchmark: a poorly fitted baseline flatters M.A.P., and that failure is invisible in the result |
 | `plotly` | A single self-contained `chart.html`, no server and no build step |
 
 **Deliberately absent**, where a dependency would have been the obvious choice:
