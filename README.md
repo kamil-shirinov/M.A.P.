@@ -388,6 +388,60 @@ result cannot be pinned to exact weights. Richer metadata exists behind that ser
 *native* endpoint; reaching for it would make the code backend-aware, which this
 project does not do. See ADR 0001.
 
+## CLI reference — `map run`
+
+One forecast, end to end: prices, three agents in sequence, a Monte Carlo fan, and
+four artifacts under `runs/<run_id>/` (`forecast.json`, `manifest.json`,
+`trace.jsonl`, `chart.html`).
+
+```bash
+uv run map run AAPL                          # from the configured news directory
+uv run map run AAPL --from-edgar             # from the filer's latest Item 2.02 8-K
+uv run map run AAPL --horizon 21 --news-dir ./inbox
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `TICKER` | *required* | The symbol to forecast, e.g. `AAPL`. |
+| `--horizon` | `5` | Horizon in **trading** days, 1–252 (ADR 0016). |
+| `--news-dir` | `news.dir` | Read documents from this directory instead of the configured one. |
+| `--from-edgar` | off | Fetch the document from EDGAR instead. See below. |
+| `--edgar-days` | `120` | How far back `--from-edgar` searches. Minimum 1. |
+| `--fixtures` | — | Replay recorded LLM exchanges; no server needed. |
+| `--record-to` | — | Record this run's LLM exchanges as replayable fixtures. Destination is mandatory. |
+| `--config` | `config/default.toml` | Config file to load instead of the default. |
+
+Exit codes are shared across every command: `0` success, `2` bad arguments, `3`
+configuration, `4` inference, `5` data, `6` unusable model output.
+
+### `--from-edgar`
+
+Discovers the filer's most recent 8-K Item 2.02 within `--edgar-days`, takes the
+newest, fetches the earnings exhibit and cuts it to the intake budget with the same
+`head_tail_v1` rule the corpus uses (ADR 0020) — so this path and the corpus path see
+an identical document where the exhibit is identical.
+
+**It is not a corpus run.** The filing is discovered at runtime and is not in
+`corpus/frozen.json`, so the forecast is unscored, carries no band, and belongs in no
+calibration figure. The manifest says so positively: `document_source` is `"edgar"`
+here, `"news"` for the default path, and `"corpus"` for `map corpus run` (ADR 0034).
+Do not pool them.
+
+**It never falls back to news.** A ticker with no Item 2.02 in the window exits `5`
+and names the interval it searched:
+
+```
+no 8-K Item 2.02 filing for AAPL between 2026-05-11 and 2026-09-08
+```
+
+— because "there is no filing" and "you searched the wrong ninety days" have opposite
+remedies, and a silent fallback would forecast from unrelated commentary under a flag
+asserting it came from a filing. `--from-edgar` with `--news-dir` is refused outright
+(exit `2`) rather than resolved by precedence, for the same reason.
+
+It needs a symbol index (`uv run map symbols sync`) to resolve the ticker to a CIK,
+and a descriptive `data.sec.user_agent` — EDGAR returns `403` without one.
+
 ## Development
 
 ```bash
