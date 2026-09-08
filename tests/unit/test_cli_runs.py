@@ -277,3 +277,64 @@ def test_a_float32_close_is_rounded_for_reading_but_not_in_the_json(
     assert "close 311.30 on" in _invoke(tmp_path, runs).output
     body = json.loads(_invoke(tmp_path, runs, "--json").output)
     assert body["corpus"][0]["outcome"]["close"] == 311.29998779296875
+
+
+def test_the_listing_checks_documents_against_the_frozen_corpus(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+    doc = json.loads((runs / run_id / "forecast.json").read_text())["source_doc_ids"][0]
+    frozen = tmp_path / "frozen.json"
+    frozen.write_text(
+        json.dumps({"exhibits": {"by_accession": {"0000000001-26-000001": {"document_id": doc}}}}),
+        encoding="utf-8",
+    )
+
+    result = _invoke(tmp_path, runs, "--frozen", str(frozen))
+
+    assert "exhibit    document is a frozen exhibit" in result.output
+
+
+def test_a_missing_frozen_record_reads_as_unchecked_not_as_no(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`map runs` must work in a checkout with no corpus at all."""
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    result = _invoke(tmp_path, runs, "--frozen", str(tmp_path / "absent.json"))
+
+    assert result.exit_code == 0, result.output
+    assert "not checked against a frozen corpus" in result.output
+
+
+def test_a_frozen_record_without_exhibits_refuses_rather_than_checking_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty answer would read as "no run uses a frozen exhibit"."""
+    _wire(monkeypatch)
+    frozen = tmp_path / "frozen.json"
+    frozen.write_text(json.dumps({"corpus": {}}), encoding="utf-8")
+
+    result = _invoke(tmp_path, tmp_path / "runs", "--frozen", str(frozen))
+
+    assert result.exit_code == 5
+    assert "no exhibits section" in result.output
+
+
+def test_an_exhibits_section_with_no_accessions_refuses_too(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The section can be present and hold only the verification metadata. Same
+    failure, because the answer would still be an empty set posing as an answer."""
+    _wire(monkeypatch)
+    frozen = tmp_path / "frozen.json"
+    frozen.write_text(json.dumps({"exhibits": {"verified": 709}}), encoding="utf-8")
+
+    result = _invoke(tmp_path, tmp_path / "runs", "--frozen", str(frozen))
+
+    assert result.exit_code == 5
+    assert "records no exhibits by accession" in result.output

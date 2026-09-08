@@ -162,6 +162,7 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
         "scenarios",
         "document_source",
         "freeze_version",
+        "document_is_frozen_exhibit",
         "outcome",
     }
     # The only thing it computes, and it reads one field. Nothing takes both sides.
@@ -429,3 +430,72 @@ def test_a_manifest_missing_the_anchor_is_unreadable_rather_than_guessed(
 
     assert journal.populated() == ()
     assert journal.skipped.unreadable == 1
+
+
+# ---------------------------------------------------------------------------
+# Corpus membership as a positive check
+# ---------------------------------------------------------------------------
+def _doc_id_of(runs: Path, run_id: str) -> str:
+    body = json.loads((runs / run_id / "forecast.json").read_text(encoding="utf-8"))
+    return str(body["source_doc_ids"][0])
+
+
+def test_membership_is_an_equality_test_between_two_frozen_records(tmp_path: Path) -> None:
+    """Not an inference from absence. `frozen.json` records the document_id of
+    every exhibit; a forecast records the ids of the documents it read."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+
+    journal = read_journal(
+        runs, today=date(2026, 9, 8), frozen_exhibits=frozenset({_doc_id_of(runs, run_id)})
+    )
+
+    assert journal.corpus[0].document_is_frozen_exhibit is True
+
+
+def test_a_document_the_corpus_does_not_hold_reads_false(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    journal = read_journal(runs, today=date(2026, 9, 8), frozen_exhibits=frozenset({"sha256:zz"}))
+
+    assert journal.corpus[0].document_is_frozen_exhibit is False
+
+
+def test_no_map_means_unchecked_not_false(tmp_path: Path) -> None:
+    """False is a claim. The journal must work in a checkout with no corpus, and
+    saying "not a frozen exhibit" there would be an answer it never computed."""
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    assert read_journal(runs, today=date(2026, 9, 8)).corpus[0].document_is_frozen_exhibit is None
+
+
+def test_the_field_does_not_touch_what_the_writer_recorded(tmp_path: Path) -> None:
+    """An --from-edgar run whose filing the corpus happens to hold: the document
+    really is a corpus exhibit and the run really is not a corpus run. Both are
+    reported, in their own fields, and neither overwrites the other."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs, source="edgar", freeze_version=None)
+
+    entry = read_journal(
+        runs, today=date(2026, 9, 8), frozen_exhibits=frozenset({_doc_id_of(runs, run_id)})
+    ).edgar[0]
+
+    assert entry.document_is_frozen_exhibit is True
+    assert entry.document_source == "edgar"
+    assert entry.freeze_version is None
+
+
+def test_membership_never_moves_a_run_between_populations(tmp_path: Path) -> None:
+    """It is a derived label, not a classifier. Grouping stays on the recorded
+    field, so a matching document cannot promote a live run into the corpus set."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs, source="edgar", freeze_version=None)
+
+    journal = read_journal(
+        runs, today=date(2026, 9, 8), frozen_exhibits=frozenset({_doc_id_of(runs, run_id)})
+    )
+
+    assert journal.corpus == ()
+    assert len(journal.edgar) == 1

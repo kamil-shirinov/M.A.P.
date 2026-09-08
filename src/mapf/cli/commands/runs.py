@@ -17,8 +17,38 @@ import typer
 from mapf.bootstrap import build_market_data
 from mapf.cli.app import app, as_shown, fail, handle
 from mapf.core.errors import MapError
+from mapf.corpus.record import FrozenRecordError, load_frozen
 from mapf.eval.journal import SOURCES, JournalEntry, Source, read_journal
 from mapf.settings import load
+
+FROZEN = Path("corpus/frozen.json")
+
+
+def _frozen_exhibits(path: Path) -> frozenset[str] | None:
+    """The `document_id` of every exhibit the frozen corpus holds.
+
+    Composed here, at the top of the graph, and handed to the journal — which sits
+    below `mapf.corpus` and must keep working in a checkout with no corpus at all.
+
+    A missing record is `None`, not an empty set: an empty set would answer "no run
+    uses a frozen exhibit", which is a claim, where the truth is that nothing was
+    checked. Same distinction the field itself makes.
+    """
+    if not path.is_file():
+        return None
+    record = load_frozen(path)
+    exhibits = record.get("exhibits")
+    if not isinstance(exhibits, dict):
+        raise FrozenRecordError(f"{path} has no exhibits section to check against")
+    by_accession = exhibits.get("by_accession")
+    if not isinstance(by_accession, dict):
+        raise FrozenRecordError(f"{path} records no exhibits by accession")
+    return frozenset(
+        str(entry["document_id"])
+        for entry in by_accession.values()
+        if isinstance(entry, dict) and "document_id" in entry
+    )
+
 
 # What each section means, printed with it. A reader should not have to know the
 # manifest schema to know whether a number in front of them is scoreable.
@@ -46,10 +76,18 @@ def _print(source: str, entries: tuple[JournalEntry, ...]) -> None:
     typer.secho(f"\n{source}  ({len(entries)})", fg=typer.colors.CYAN, bold=True)
     typer.secho(f"  {LEGEND[source]}", fg=typer.colors.BRIGHT_BLACK)
     for entry in entries:
+        # Spelled out rather than a tick: the reader has to see that "unchecked"
+        # is a third state, and a blank column would read as "no".
+        membership = {
+            True: "document is a frozen exhibit",
+            False: "document is not in the frozen corpus",
+            None: "not checked against a frozen corpus",
+        }[entry.document_is_frozen_exhibit]
         typer.echo(
             f"  {entry.anchor_date}  {entry.ticker:<6} "
             f"spot {entry.anchor_spot:>10.2f}  h={entry.horizon_days:<3} {entry.run_id[:8]}"
         )
+        typer.secho(f"    exhibit    {membership}", fg=typer.colors.BRIGHT_BLACK)
         typer.echo(
             "    forecast   "
             + "  ".join(
@@ -84,6 +122,13 @@ def runs(
         False, "--offline", help="Skip the outcome fetch; every window reads as open."
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON instead of a listing."),
+    frozen: Path = typer.Option(
+        FROZEN,
+        help=(
+            "The frozen corpus to check each run's document against. Absent, the "
+            "membership field reads as unchecked rather than as false."
+        ),
+    ),
     config: Path | None = typer.Option(None, help="Config file to use instead of the default."),
 ) -> None:
     """List what was forecast and what happened. Never a score, never pooled."""
@@ -102,6 +147,7 @@ def runs(
             market=None if offline else build_market_data(settings),
             today=datetime.now(UTC).date(),
             limit=limit or None,
+            frozen_exhibits=_frozen_exhibits(frozen),
         )
         shown: tuple[Source, ...] = (source,) if source is not None else journal.populated()
         if as_json:

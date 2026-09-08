@@ -129,6 +129,22 @@ class JournalEntry:
     scenarios: tuple[ScenarioLine, ...]
     document_source: Source
     freeze_version: str | None
+    # DERIVED, and named for exactly what it checks. `document_source` above is
+    # what the writer recorded; this is a positive equality test between two frozen
+    # records -- the forecast's `source_doc_ids` against the `document_id` of every
+    # exhibit in `frozen.json` -- run at read time by a caller that supplies the
+    # map. It is never written into an artifact and never overwrites what was.
+    #
+    # It does NOT mean "this run is the corpus item", and must not be renamed to
+    # anything that suggests it does. 775 of the 780 readable runs match a frozen
+    # exhibit while the ledger references 701: the surplus is re-runs and repeats
+    # of the same document. A `--from-edgar` run would match too, if the filer's
+    # latest Item 2.02 happens to be one the corpus froze -- the document really is
+    # a corpus exhibit; the run is not a corpus run. Only the ledger answers that.
+    #
+    # `None` means no map was supplied, so nothing was checked. Distinct from
+    # `False`, which is a claim.
+    document_is_frozen_exhibit: bool | None
     outcome: Outcome | None
 
     @property
@@ -268,6 +284,7 @@ def _entries(
     today: date,
     limit: int | None,
     skipped: Counter[str],
+    frozen_exhibits: frozenset[str] | None,
 ) -> Iterator[JournalEntry]:
     directories = sorted((c for c in runs_dir.iterdir() if c.is_dir()), key=lambda c: c.name)
     read = [pair for d in directories if (pair := _read_run(d, skipped)) is not None]
@@ -288,6 +305,11 @@ def _entries(
             scenarios=_scenarios(forecast),
             document_source=manifest.document_source or "unknown",
             freeze_version=manifest.freeze_version,
+            document_is_frozen_exhibit=(
+                None
+                if frozen_exhibits is None
+                else any(doc in frozen_exhibits for doc in forecast.source_doc_ids)
+            ),
             outcome=None if market is None else _outcome(market, forecast, anchor, today),
         )
 
@@ -298,18 +320,25 @@ def read_journal(
     market: MarketDataProvider | None = None,
     today: date,
     limit: int | None = None,
+    frozen_exhibits: frozenset[str] | None = None,
 ) -> Journal:
     """Every readable run under `runs_dir`, grouped by document source.
 
     `market=None` reads the forecasts alone and leaves every outcome open — the
     offline path, and the one tests use. `limit` applies before grouping and after
     sorting, so it means "the N most recent runs", not "N of each kind".
+
+    `frozen_exhibits` is the set of `document_id`s the frozen corpus holds, passed
+    IN rather than loaded here: `mapf.corpus` sits above `mapf.eval`, and a journal
+    that reached for a corpus would both break the layer contract and stop working
+    in a checkout that has no corpus. Omit it and the membership field reads `None`
+    — nothing checked — rather than `False`.
     """
     if not runs_dir.is_dir():
         return Journal({})
     grouped: dict[Source, list[JournalEntry]] = {source: [] for source in SOURCES}
     counted: Counter[str] = Counter()
-    for entry in _entries(runs_dir, market, today, limit, counted):
+    for entry in _entries(runs_dir, market, today, limit, counted, frozen_exhibits):
         grouped[entry.document_source].append(entry)
     return Journal(
         {source: tuple(entries) for source, entries in grouped.items()},
