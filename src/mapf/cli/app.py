@@ -16,6 +16,9 @@ Exit codes are meaningful because a CLI is also an API:
 
 from __future__ import annotations
 
+import sys
+
+import structlog
 import typer
 
 from mapf.core.errors import (
@@ -29,6 +32,13 @@ from mapf.core.errors import (
     SymbolIndexMissingError,
 )
 from mapf.corpus.record import FrozenRecordError
+
+# Diagnostics go to stderr; stdout is the product. structlog's default logger
+# prints to stdout, which is harmless for a table and fatal for `--json`: a single
+# warning about one unreachable ticker lands inside the document and a consumer
+# gets a parse error instead of a listing. Configured here rather than per command,
+# because the next command to emit JSON should not have to rediscover this.
+structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
 
 EXIT_OK = 0
 EXIT_CONFIG = 3
@@ -112,6 +122,7 @@ from mapf.cli.commands import (  # noqa: E402,F401
     corpus,
     evaluate,
     health,
+    prices,
     run,
     search,
     symbols,

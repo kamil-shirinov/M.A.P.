@@ -442,6 +442,34 @@ asserting it came from a filing. `--from-edgar` with `--news-dir` is refused out
 It needs a symbol index (`uv run map symbols sync`) to resolve the ticker to a CIK,
 and a descriptive `data.sec.user_agent` — EDGAR returns `403` without one.
 
+## CLI reference — `map prices`
+
+A daily price series for one ticker, on demand. No inference, no artifacts, nothing
+written — a company page needs a chart before any forecast exists.
+
+```bash
+uv run map prices AAPL --days 180        # a table
+uv run map prices AAPL --days 90 --json  # for a front end
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `TICKER` | *required* | The symbol to fetch. |
+| `--days` | `180` | Calendar days of history to request. Minimum 1. |
+| `--json` | off | Emit JSON instead of a table. |
+| `--config` | `config/default.toml` | Config file to load instead of the default. |
+
+**There is no "current price" in the output, and there cannot be.** Both providers
+serve *daily bars*, so the most recent value is a close on a trading date — three
+days old on a Monday morning. The JSON pairs them in one object for that reason:
+
+```json
+"last_close": { "close": 316.22, "trading_date": "2026-09-08" }
+```
+
+A consumer cannot destructure the value without also receiving the date it belongs
+to. The table says `last close … on <date>` for the same reason.
+
 ## Development
 
 ```bash
