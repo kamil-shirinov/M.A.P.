@@ -259,7 +259,7 @@ contracts held. The forecast was written to disk, charted, and reported as a
 success — **and one of the premises underneath it did not exist.**
 
 That is not a bug that was fixed. **It is the failure mode this project is
-structurally unable to detect**, and it is documented in `mapf/agents/__init__.py`
+structurally unable to detect**, and it is documented in `src/mapf/agents/__init__.py`
 in exactly those terms, written before it happened:
 
 > A forecast can be schema-valid, internally consistent, fully traced, and built
