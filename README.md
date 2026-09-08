@@ -165,10 +165,44 @@ history that has been true.
 
 | claim | verdict |
 | --- | --- |
-| **Pre-registered** — the corpus, the bands and every threshold were fixed before any result was seen | **holds**, and the commit order proves it. **Twenty-two pre-registration records** are stored as git notes on `refs/notes/commits`, each written before the result it constrains. GitHub does not display notes in the web interface — read them with `git log --show-notes`. They fix the statistics, the predicted direction, and the interpretation of every outcome including those that would disconfirm |
+| **Pre-registered** — the corpus, the bands and every threshold were fixed before any result was seen | **holds**, and the commit order proves it. **Twenty-two pre-registration records** are stored as git notes on `refs/notes/commits`, each written before the result it constrains. They fix the statistics, the predicted direction, and the interpretation of every outcome including those that would disconfirm. **Verify them yourself — see below** |
 | **Auditable** — every prompt and every raw response is preserved in `runs/<run_id>/trace.jsonl` | **holds**; a run is refused if any trace is missing or empty |
 | **Replayable from cache** — re-reading a completed run returns byte-identical output | **holds** |
 | **Re-derivable** — a cold cache reproduces the same forecasts | **does not hold** |
+
+### Verifying the pre-registrations yourself
+
+**GitHub does not display git notes in its web interface, and `git clone` does not
+fetch them.** They are not in the repository you get by default; you have to ask for
+the ref.
+
+```
+git fetch origin 'refs/notes/*:refs/notes/*'
+```
+
+**The ordering evidence is the ref's own commit history, not the note's contents.**
+Each record was appended in a separate operation, so the ref carries one commit per
+record, each with the timestamp at which that record was written:
+
+```
+git log --format='%h %ad %s' --date=iso refs/notes/commits
+```
+
+Twenty-two commits, oldest last. Compare any record's timestamp against the commit
+that produced the result it constrains — `git log --format='%h %ad %s' --date=iso
+main` — and the claim "written before the result" is checkable rather than asserted.
+A record appended after its result would show it here, and that is the point of
+keeping them in a ref whose history cannot be rewritten without the rewrite being
+visible.
+
+Then read them:
+
+```
+git notes --ref=commits show ad71b13
+```
+
+All twenty-two are one note on that commit, about 120 KB. `git log --show-notes`
+displays it inline against the commit it annotates.
 
 Agents 1 and 3 request `temperature=0` and a fixed seed, and every run records the
 seed, the sampling parameters and the model fingerprint *as requested* — many local
