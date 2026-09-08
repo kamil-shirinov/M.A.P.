@@ -167,6 +167,11 @@ filterwarnings = ["default::DeprecationWarning", "error::DeprecationWarning:mapf
 
 [tool.coverage.report]
 exclude_also = ["if TYPE_CHECKING:", "raise NotImplementedError"]
+# The suite has been at 100% all project and nothing enforced it, so a commit
+# dropping to 80% would have passed in silence. This makes the claim a gate.
+# Note the scope: --cov=mapf measures the package, NOT scripts/, which is
+# tracked and untested.
+fail_under = 100
 
 # ---------------------------------------------------------------------------
 # Architecture boundaries — ADR 0004
