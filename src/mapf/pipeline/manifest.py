@@ -84,7 +84,7 @@ class PriceProvenance(DomainModel):
 class RunManifest(DomainModel):
     # This manifest's own format version. Distinct from, and easily confused with,
     # the forecast's.
-    manifest_version: Literal["1.8.0"] = "1.8.0"
+    manifest_version: Literal["1.9.0"] = "1.9.0"
     # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
     # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
     # to decide. With only `schema_version` here it read the manifest's own version
@@ -146,6 +146,25 @@ class RunManifest(DomainModel):
     #   "news"    `map run` over a news directory or RSS. Also outside the corpus.
     #   None      predates this field. Not a claim that it was any of the above.
     document_source: Literal["corpus", "edgar", "news"] | None = None
+
+    # WHICH EXPERIMENTAL ARM PRODUCED THIS RUN, if any.
+    #
+    # Arm A of the ablation replays the corpus from cache: its 355 forecasts are
+    # byte-identical to the corpus forecasts apart from `run_id`, and nothing in
+    # the artifact said so. They lived in `var/ablation/A/` and were therefore one
+    # `--runs-dir` away from being listed as 355 separate projections -- a
+    # directory is a convention, not a record, and it does not survive being
+    # copied, moved, or pointed at.
+    #
+    # Arms C and D leave a partial tell (`model_id: "none (arm C/D: analyst
+    # removed)"`), and arm A leaves none at all, because a faithful replay is
+    # exactly what it is. So the arm is recorded rather than inferred.
+    #
+    # `None` means "not part of an experiment" for anything written from now on,
+    # and "predates this field" for anything written before -- the same ambiguity
+    # `document_source` carries, and for the same reason it is not resolvable by
+    # backfilling: the existing arm manifests produced published results.
+    arm: str | None = None
 
     # Marks a run that is not reproducible. Phase 2 must either exclude these or
     # report them separately (ADR 0007).

@@ -88,6 +88,13 @@ def _print(source: str, entries: tuple[JournalEntry, ...]) -> None:
             f"spot {entry.anchor_spot:>10.2f}  h={entry.horizon_days:<3} {entry.run_id[:8]}"
         )
         typer.secho(f"    exhibit    {membership}", fg=typer.colors.BRIGHT_BLACK)
+        if entry.arm is not None:
+            # Loud, not grey: an arm is not a projection, and arm A's forecasts are
+            # byte-identical to the corpus runs they replay.
+            typer.secho(
+                f"    arm        {entry.arm} — an ablation run, not a projection",
+                fg=typer.colors.MAGENTA,
+            )
         typer.echo(
             "    forecast   "
             + "  ".join(

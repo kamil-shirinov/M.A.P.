@@ -56,6 +56,7 @@ def _write_run(
     *,
     ticker: str = "AAPL",
     source: str | None = "corpus",
+    arm: str | None = None,
     anchor: date = ANCHOR,
     horizon: int = 5,
     freeze_version: str | None = "2.4.0",
@@ -107,6 +108,7 @@ def _write_run(
             ),
             dividends=DividendWindow(start=anchor, end=anchor, known=False, source="none"),
             document_source=source,  # type: ignore[arg-type]
+            arm=arm,
             freeze_version=freeze_version,
             package_version="0.1.0",
             python_version="3.12.0",
@@ -162,6 +164,7 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
         "scenarios",
         "document_source",
         "freeze_version",
+        "arm",
         "document_is_frozen_exhibit",
         "outcome",
     }
@@ -499,3 +502,35 @@ def test_membership_never_moves_a_run_between_populations(tmp_path: Path) -> Non
 
     assert journal.corpus == ()
     assert len(journal.edgar) == 1
+
+
+# ---------------------------------------------------------------------------
+# Experimental arms
+# ---------------------------------------------------------------------------
+def test_an_ablation_arm_is_visible_in_the_entry(tmp_path: Path) -> None:
+    """Arm A replays the corpus from cache: its forecasts are byte-identical to
+    the corpus runs apart from run_id. A directory is a convention and does not
+    survive being copied or pointed at; the artifact has to say what it is."""
+    runs = tmp_path / "runs"
+    _write_run(runs, arm="A")
+
+    assert read_journal(runs, today=date(2026, 9, 8)).corpus[0].arm == "A"
+
+
+def test_a_run_that_is_not_an_experiment_reports_no_arm(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    assert read_journal(runs, today=date(2026, 9, 8)).corpus[0].arm is None
+
+
+def test_an_arm_does_not_move_a_run_between_populations(tmp_path: Path) -> None:
+    """Orthogonal to where the document came from. An arm A replay reads a corpus
+    exhibit and stays in the corpus population, labelled."""
+    runs = tmp_path / "runs"
+    _write_run(runs, arm="A", source="corpus")
+
+    journal = read_journal(runs, today=date(2026, 9, 8))
+
+    assert len(journal.corpus) == 1
+    assert journal.corpus[0].arm == "A"

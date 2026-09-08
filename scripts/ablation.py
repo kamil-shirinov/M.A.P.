@@ -258,6 +258,10 @@ def main(arm: str = typer.Argument(...), limit: int = typer.Option(0)) -> None:
                     today=vintage,
                     render_chart=False,
                     freeze_version=record["freeze_version"],
+                    # In the artifact, not only in index.jsonl beside it. Arm A is
+                    # a byte-identical replay of the corpus forecasts, so without
+                    # this the run itself carries no evidence of what it is.
+                    arm=arm,
                 )
                 row = {
                     "arm": arm,

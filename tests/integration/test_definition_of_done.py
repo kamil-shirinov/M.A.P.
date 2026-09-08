@@ -645,6 +645,38 @@ def test_agent_3_infidelity_is_recorded_separately_from_non_compliance(
     assert result.manifest.fidelity.max_return_divergence == pytest.approx(0.155)
 
 
+def test_an_experiment_names_its_arm_in_the_artifact(tmp_path: Path) -> None:
+    """Arm A of the ablation replays the corpus from cache, so its forecasts are
+    byte-identical to the corpus runs apart from `run_id`. It lived in
+    `var/ablation/A/` and nothing inside the run said what it was — 355 replays one
+    `--runs-dir` away from being read as 355 projections. A directory is a
+    convention; it does not survive being copied, moved or pointed at."""
+    runs_dir = tmp_path / "runs"
+    rid = new_run_id()
+    trace = CountingTrace(JsonlTrace(runs_dir / str(rid) / "trace.jsonl"))
+    result = execute(
+        RunRequest(ticker="AAPL", horizon_days=21, documents=_documents(), run_id=rid, as_of=AS_OF),
+        agents=_agents(CountingProvider(), trace),
+        market=StaticMarket(),
+        dividends=KnownDividends(),
+        trace=trace,
+        runs_dir=runs_dir,
+        today=date(2026, 8, 11),
+        arm="A",
+    )
+
+    assert result.manifest.arm == "A"
+    stored = json.loads((runs_dir / str(rid) / "manifest.json").read_text(encoding="utf-8"))
+    assert stored["arm"] == "A"
+
+
+def test_an_ordinary_run_claims_no_arm(baseline: Any) -> None:
+    """`None` is "not an experiment" for anything written from now on, and
+    "predates the field" for the arm manifests already on disk. Not resolvable by
+    backfilling those: they produced published results."""
+    assert baseline.manifest.arm is None
+
+
 def test_the_manifest_records_the_forecast_schema_version(baseline: Any) -> None:
     """ADR 0012 makes Phase 2 refuse to score across a schema boundary, and Phase 2
     reads the manifest to decide. With only the manifest's own version present it

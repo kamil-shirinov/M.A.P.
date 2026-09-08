@@ -83,6 +83,7 @@ class StoredManifest(BaseModel):
     prices: _StoredPrices
     document_source: Literal["corpus", "edgar", "news"] | None = None
     freeze_version: str | None = None
+    arm: str | None = None
 
 
 @dataclass(frozen=True)
@@ -129,6 +130,10 @@ class JournalEntry:
     scenarios: tuple[ScenarioLine, ...]
     document_source: Source
     freeze_version: str | None
+    # Which experimental arm produced this, or None. Surfaced because recording it
+    # and not showing it would leave the harm it exists to prevent: arm A is a
+    # byte-identical replay, and a reader has to be able to see that.
+    arm: str | None
     # DERIVED, and named for exactly what it checks. `document_source` above is
     # what the writer recorded; this is a positive equality test between two frozen
     # records -- the forecast's `source_doc_ids` against the `document_id` of every
@@ -305,6 +310,7 @@ def _entries(
             scenarios=_scenarios(forecast),
             document_source=manifest.document_source or "unknown",
             freeze_version=manifest.freeze_version,
+            arm=manifest.arm,
             document_is_frozen_exhibit=(
                 None
                 if frozen_exhibits is None

@@ -338,3 +338,25 @@ def test_an_exhibits_section_with_no_accessions_refuses_too(
 
     assert result.exit_code == 5
     assert "records no exhibits by accession" in result.output
+
+
+def test_an_arm_is_called_out_as_not_a_projection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    _write_run(runs, arm="A")
+
+    result = _invoke(tmp_path, runs)
+
+    assert "arm        A — an ablation run, not a projection" in result.output
+
+
+def test_a_projection_says_nothing_about_arms(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    assert "an ablation run" not in _invoke(tmp_path, runs).output
