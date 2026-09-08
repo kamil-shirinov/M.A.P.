@@ -18,6 +18,7 @@ import platform
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 from uuid import UUID
 
 import structlog
@@ -140,6 +141,7 @@ def execute(
     render_chart: bool = True,
     freeze_version: str | None = None,
     freeze_digest: str | None = None,
+    document_source: Literal["corpus", "edgar", "news"] | None = None,
 ) -> RunResult:
     """Run the pipeline once and write every artifact.
 
@@ -271,6 +273,7 @@ def execute(
         code_version=code_version(),
         freeze_version=freeze_version,
         freeze_digest=freeze_digest,
+        document_source=document_source,
         allow_nondeterministic=allow_nondeterministic,
         package_version=PACKAGE_VERSION,
         python_version=platform.python_version(),

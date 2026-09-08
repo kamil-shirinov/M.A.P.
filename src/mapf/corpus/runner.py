@@ -574,6 +574,7 @@ def _attempt(
                     if item.key in TRUNCATION_NOTES
                     else config.freeze_digest
                 ),
+                document_source="corpus",
             )
             # Inside the try, so a missing artifact fails the item like any other
             # error. In the `else` clause it would escape the handlers entirely.

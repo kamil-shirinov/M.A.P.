@@ -25,6 +25,7 @@ from mapf.agents.structuralist import StructuralistAgent
 from mapf.core.ports import DividendSource, LLMProvider, MarketDataProvider, ModelInfo
 from mapf.data.cache import ParquetPriceCache
 from mapf.data.earnings import EdgarEarningsCalendar
+from mapf.data.exhibits import EdgarExhibits
 from mapf.data.filings import EdgarFilings
 from mapf.data.providers.chain import ProviderChain
 from mapf.data.providers.dividends import NullDividendSource, YFinanceDividendSource
@@ -104,6 +105,35 @@ def build_earnings_calendar(settings: Settings, client: httpx.Client) -> EdgarEa
             throttle=Throttle(sec.requests_per_second),
         ),
         cache_dir=settings.cache.earnings_dir,
+    )
+
+
+def build_filings(settings: Settings, client: httpx.Client) -> EdgarFilings:
+    """Filing discovery for `map run --from-edgar`.
+
+    The corpus never needs this — it reads accessions from the frozen record — so
+    until now nothing outside `build_earnings_calendar` constructed one.
+    """
+    sec = settings.data.sec
+    return EdgarFilings(
+        build_symbol_index(settings),
+        user_agent=sec.user_agent,
+        client=client,
+        throttle=Throttle(sec.requests_per_second),
+    )
+
+
+def build_exhibits(settings: Settings, client: httpx.Client) -> EdgarExhibits:
+    """Exhibit fetching, for the same path.
+
+    `corpus.py` built one inline because it was the only caller. A second caller is
+    the point at which that belongs here instead.
+    """
+    sec = settings.data.sec
+    return EdgarExhibits(
+        user_agent=sec.user_agent,
+        client=client,
+        throttle=Throttle(sec.requests_per_second),
     )
 
 

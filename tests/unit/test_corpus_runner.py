@@ -351,6 +351,19 @@ def test_charts_are_never_rendered(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     assert all(call["render_chart"] is False for call in recorder.calls)
 
 
+def test_every_corpus_item_records_that_it_came_from_the_corpus(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The counterpart to `map run --from-edgar`, which records "edgar".
+
+    A `freeze_version` already implies a corpus run, but the implication runs one
+    way only: a run without one could be news, EDGAR, or a corpus run that predates
+    the field. The claim is made positively at both call sites or at neither.
+    """
+    _, _, recorder = _run(monkeypatch, [], tmp_path)
+    assert {call["document_source"] for call in recorder.calls} == {"corpus"}
+
+
 def test_rendering_is_asserted_not_merely_defaulted(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -17,6 +17,8 @@ from typer.testing import CliRunner
 
 from mapf.bootstrap import (
     build_dividends,
+    build_exhibits,
+    build_filings,
     build_http_client,
     build_llm_provider,
     build_market_data,
@@ -89,6 +91,25 @@ def test_the_symbol_index_points_at_the_configured_database(tmp_path: Path) -> N
 def test_the_http_client_uses_the_configured_timeouts(tmp_path: Path) -> None:
     with build_http_client(_settings(tmp_path)) as client:
         assert client.timeout.connect == pytest.approx(0.05)
+
+
+def test_the_edgar_pair_is_built_from_settings_not_from_literals(tmp_path: Path) -> None:
+    """`map run --from-edgar` is the second caller for both, which is the point at
+    which constructing them inline in a command stops being defensible.
+
+    The throttle is the reason this is asserted rather than assumed: SEC's fair-use
+    limit is a real ceiling, and a builder that ignored `requests_per_second` would
+    still pass every test that only checks the documents come back.
+    """
+    settings = _settings(tmp_path)
+    with build_http_client(settings) as client:
+        filings, exhibits = build_filings(settings, client), build_exhibits(settings, client)
+
+    for built in (filings, exhibits):
+        assert built._user_agent == settings.data.sec.user_agent  # noqa: SLF001
+        assert built._throttle._interval == pytest.approx(  # noqa: SLF001
+            1.0 / settings.data.sec.requests_per_second
+        )
 
 
 def test_the_trace_is_wrapped_before_the_agents_are_built(tmp_path: Path) -> None:

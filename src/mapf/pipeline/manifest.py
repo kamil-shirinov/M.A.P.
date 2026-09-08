@@ -131,6 +131,22 @@ class RunManifest(DomainModel):
     # versions would refuse a band for a difference that is not one (ADR 0029).
     freeze_digest: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
+    # WHERE THE DOCUMENT CAME FROM, stated positively.
+    #
+    # `freeze_version = None` above already implies "outside a corpus", and the
+    # comment there says why that is not enough: absence cannot distinguish a run
+    # outside a corpus from a corpus run predating the field. A reader deciding
+    # whether a forecast is part of the frozen panel should not have to infer it
+    # from a missing value.
+    #
+    #   "corpus"  produced by `map corpus run` against an accession in frozen.json
+    #   "edgar"   `map run --from-edgar`: the filer's latest Item 2.02, discovered
+    #             at runtime. OUTSIDE the frozen corpus -- unscored, no band, and
+    #             it must never be pooled with corpus items.
+    #   "news"    `map run` over a news directory or RSS. Also outside the corpus.
+    #   None      predates this field. Not a claim that it was any of the above.
+    document_source: Literal["corpus", "edgar", "news"] | None = None
+
     # Marks a run that is not reproducible. Phase 2 must either exclude these or
     # report them separately (ADR 0007).
     allow_nondeterministic: bool = False
