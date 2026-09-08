@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date, timedelta
 from hashlib import sha256
 from typing import Literal
@@ -98,6 +99,36 @@ class BandFilings(DomainModel):
     # The identifiers that make an item reproducible, parallel to `dates`.
     accessions: tuple[str, ...] = ()
 
+    def pairs(self) -> tuple[tuple[date, str | None], ...]:
+        """Each date with the accession that identifies it.
+
+        `strict=True` on the zip: two parallel tuples of different lengths would
+        otherwise pair each date with the *next* filing's accession and drop the
+        tail silently, which names the wrong filing while looking well-formed.
+        An empty `accessions` is the one legitimate asymmetry — a record frozen
+        before they were stored — and yields `None` per date rather than raising.
+        """
+        if not self.accessions:
+            return tuple((day, None) for day in self.dates)
+        return tuple(zip(self.dates, self.accessions, strict=True))
+
+
+@dataclass(frozen=True)
+class HeldFiling:
+    """One filing in the corpus, flattened out of the record's nested shape.
+
+    A view, not a stored record: it is never written to `frozen.json`, so it is a
+    dataclass rather than a `DomainModel`. `accession` is optional only because
+    `BandFilings.accessions` is — a record frozen before accessions were stored
+    carries dates alone, and reporting `None` says so rather than inventing one.
+    """
+
+    ticker: str
+    filed: date
+    accession: str | None
+    band: str
+    split: Split
+
 
 class TickerPlan(DomainModel):
     ticker: Ticker
@@ -133,6 +164,33 @@ class Corpus(DomainModel):
             if plan.ticker == ticker:
                 return plan.split
         return None
+
+    def filings_for(self, ticker: str) -> tuple[HeldFiling, ...]:
+        """Every Item 2.02 the corpus holds for one ticker, with its band and split.
+
+        The record stores this transposed — one plan per ticker, holding one
+        `BandFilings` per band, holding parallel `dates` and `accessions` — which is
+        the right shape to freeze and the wrong shape to answer a question about a
+        single company. Flattened here rather than at each call site, because the
+        pairing of a date to its accession is the part that is easy to get wrong
+        and expensive to get wrong: a mismatched pair names a different filing.
+
+        Ordered by date, then band, so two bands sharing a date are stable.
+        """
+        held = [
+            HeldFiling(
+                ticker=plan.ticker,
+                filed=filed,
+                accession=accession,
+                band=filings.band,
+                split=plan.split,
+            )
+            for plan in self.accepted
+            if plan.ticker == ticker
+            for filings in plan.filings
+            for filed, accession in filings.pairs()
+        ]
+        return tuple(sorted(held, key=lambda f: (f.filed, f.band)))
 
 
 def seeded_ordering(candidates: Sequence[str], seed: int) -> tuple[str, ...]:

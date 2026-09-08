@@ -28,6 +28,7 @@ from mapf.core.errors import (
     SymbolError,
     SymbolIndexMissingError,
 )
+from mapf.corpus.record import FrozenRecordError
 
 EXIT_OK = 0
 EXIT_CONFIG = 3
@@ -74,7 +75,7 @@ def exit_code_for(error: MapError) -> int:
         return EXIT_CONFIG
     if isinstance(error, AgentError):
         return EXIT_MODEL_OUTPUT
-    if isinstance(error, SymbolError | ProviderError):
+    if isinstance(error, SymbolError | ProviderError | FrozenRecordError):
         return EXIT_DATA
     return 1
 
@@ -93,6 +94,8 @@ def hint_for(error: MapError) -> str | None:
         )
     if isinstance(error, SymbolIndexMissingError):
         return "Run `map symbols sync` once to build the local index."
+    if isinstance(error, FrozenRecordError):
+        return "The corpus is the pre-registration. Freeze and commit it first."
     return None
 
 

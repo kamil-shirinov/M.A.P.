@@ -12,7 +12,6 @@ unintended resume is visible rather than silent.
 
 from __future__ import annotations
 
-import json
 import math
 from collections.abc import Callable, Mapping
 from datetime import date
@@ -30,6 +29,7 @@ from mapf.core.provenance import code_version, freeze_digest
 from mapf.core.tokens import AgentBudget, check_fit, estimate_tokens
 from mapf.core.truncation import plan_truncation, truncate
 from mapf.corpus.ledger import Ledger, LedgerEntry, is_terminal
+from mapf.corpus.record import load_frozen
 from mapf.corpus.runner import (
     TRUNCATION_NOTES,
     CorpusHaltedError,
@@ -53,17 +53,6 @@ app.add_typer(corpus_app, name="corpus")
 
 FROZEN = Path("corpus/frozen.json")
 LEDGER = Path("var/corpus/ledger.jsonl")
-
-
-def _load_frozen(path: Path) -> dict[str, object]:
-    if not path.is_file():
-        raise fail(
-            f"no frozen corpus at {path}",
-            5,
-            hint="The corpus is the pre-registration. Freeze and commit it first.",
-        )
-    parsed: dict[str, object] = json.loads(path.read_text(encoding="utf-8"))
-    return parsed
 
 
 def _accessions(corpus: Corpus, band: str) -> dict[tuple[str, date], tuple[str, int]]:
@@ -100,7 +89,7 @@ def corpus_run(
     """Execute one band of the frozen corpus, resuming automatically."""
     try:
         settings = load([config] if config else None)
-        record = _load_frozen(frozen)
+        record = load_frozen(frozen)
         corpus = Corpus.model_validate(record["corpus"])
         prompts = FilePromptStore()
 
