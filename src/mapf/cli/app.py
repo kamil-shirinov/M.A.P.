@@ -124,6 +124,7 @@ from mapf.cli.commands import (  # noqa: E402,F401
     health,
     prices,
     run,
+    runs,
     search,
     symbols,
 )

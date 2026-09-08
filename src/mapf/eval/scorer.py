@@ -37,7 +37,7 @@ from datetime import date
 import numpy as np
 
 from mapf.core.errors import MapError
-from mapf.core.models import ADJUSTMENT_BASIS, Bar, Forecast, PriceWindow
+from mapf.core.models import ADJUSTMENT_BASIS, Forecast, PriceWindow
 from mapf.eval.baselines import (
     BaselineError,
     History,
@@ -50,24 +50,21 @@ from mapf.eval.baselines import (
 from mapf.eval.montecarlo import DEFAULT_PATHS, crps_against, simulate
 from mapf.eval.scoring import brier, crps_normal, log_score_normal, pit
 
+# Re-exported: every existing caller imports these from here, and the split
+# exists for the journal's import contract, not to move the public surface.
+from mapf.eval.window import (
+    ScoringError,
+    WindowNotClosedError,
+    anchor_index,
+    realised_bar,
+)
+
 # Prices should match the forecast's recorded spot to the cent. A tolerance this
 # loose only catches genuine drift — a different adjustment basis or vintage —
 # rather than float noise.
 SPOT_TOLERANCE = 1e-4
 
 EPOCH = date(2000, 1, 1)
-
-
-class ScoringError(MapError):
-    """An item could not be scored."""
-
-
-class WindowNotClosedError(ScoringError):
-    """The forecast horizon has not elapsed yet.
-
-    Refused rather than skipped: silently dropping unfinished windows would shrink
-    the reportable sample without anything saying so.
-    """
 
 
 class SpotDriftError(ScoringError):
@@ -212,13 +209,10 @@ def realised_return(window: PriceWindow, as_of: date, horizon_days: int, spot: f
             "one basis and this one cannot be compared to any other item"
         )
     bars = window.bars
-    index = {bar.date: i for i, bar in enumerate(bars)}
-    start = index.get(as_of)
-    if start is None:
-        earlier = [i for i, bar in enumerate(bars) if bar.date <= as_of]
-        if not earlier:
-            raise ScoringError(f"no bar on or before {as_of} for {window.ticker}")
-        start = max(earlier)
+    # Shared with `realised_bar` rather than repeated: the return and the pinned
+    # outcome bar have to agree about which session the horizon starts on, and two
+    # copies of the same walk are two things that can drift apart.
+    start = anchor_index(window, as_of)
 
     opening = bars[start].close
     if abs(opening - spot) / spot > SPOT_TOLERANCE:
@@ -235,29 +229,6 @@ def realised_return(window: PriceWindow, as_of: date, horizon_days: int, spot: f
             f"series has {len(bars) - start - 1}"
         )
     return math.log(bars[end].close / opening)
-
-
-def realised_bar(window: PriceWindow, as_of: date, horizon_days: int) -> Bar:
-    """The bar the horizon closes on — the outcome `realised_return` divides by.
-
-    Split out so it can be pinned and compared without recomputing the return, and
-    so the pin names the same bar the score used rather than one derived separately.
-    """
-    bars = window.bars
-    index = {bar.date: i for i, bar in enumerate(bars)}
-    start = index.get(as_of)
-    if start is None:
-        earlier = [i for i, bar in enumerate(bars) if bar.date <= as_of]
-        if not earlier:
-            raise ScoringError(f"no bar on or before {as_of} for {window.ticker}")
-        start = max(earlier)
-    end = start + horizon_days
-    if end >= len(bars):
-        raise WindowNotClosedError(
-            f"{window.ticker} {as_of}: needs {horizon_days} bars after {bars[start].date}, "
-            f"series has {len(bars) - start - 1}"
-        )
-    return bars[end]
 
 
 def score_item(

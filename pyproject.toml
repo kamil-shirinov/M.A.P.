@@ -224,6 +224,15 @@ source_modules = ["mapf.corpus"]
 forbidden_modules = ["mapf.providers", "mapf.data"]
 
 [[tool.importlinter.contracts]]
+# The run journal logs what was forecast and what happened. It is not an
+# evaluation: `runs/` is a population defined after the fact, and a number
+# computed over it would still get quoted (ADR 0035).
+name = "The run journal never reaches the scoring machinery"
+type = "forbidden"
+source_modules = ["mapf.eval.journal"]
+forbidden_modules = ["mapf.eval.scoring", "mapf.eval.aggregate", "mapf.eval.baselines"]
+
+[[tool.importlinter.contracts]]
 name = "Core is a sink"
 type = "forbidden"
 source_modules = ["mapf.core"]

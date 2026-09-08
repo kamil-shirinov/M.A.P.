@@ -470,6 +470,43 @@ days old on a Monday morning. The JSON pairs them in one object for that reason:
 A consumer cannot destructure the value without also receiving the date it belongs
 to. The table says `last close … on <date>` for the same reason.
 
+## CLI reference — `map runs`
+
+The run journal: every run under `runs/` with its anchor, what was forecast from it,
+and — where the horizon has elapsed — the close it landed on.
+
+```bash
+uv run map runs --limit 10                 # ten most recent, outcomes fetched
+uv run map runs --offline                  # no network; every window reads as open
+uv run map runs --source edgar --json      # one population, machine-readable
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--runs-dir` | `runs` | Where run artifacts live. |
+| `--source` | all | One population only: `corpus`, `edgar`, `news`, `unknown`. |
+| `--limit` | `20` | Most recent N by anchor date. `0` for all of them. |
+| `--offline` | off | Skip the outcome fetch entirely. |
+| `--json` | off | Emit JSON instead of a listing. |
+| `--config` | `config/default.toml` | Config file to load instead of the default. |
+
+**Nothing here is a score** (ADR 0035). It logs what was forecast and what happened,
+per item — no accuracy, no rolling CRPS, no hit rate, not even a realised return.
+`runs/` is whatever has been run, a population defined after the fact by curiosity
+and retries; a number over it would be real arithmetic on an unreal sample. Scores
+come from `map evaluate` over the pre-registered panel in `corpus/frozen.json`,
+against a pinned vintage, with the holdout spendable once (ADR 0031).
+
+**Populations are never pooled.** Output is grouped by the manifest's
+`document_source` — `corpus`, `edgar`, `news`, `unknown` — in both the listing and
+the JSON, with per-section counts and no total. A `--from-edgar` run is outside
+`frozen.json` and stays outside every scored set (ADR 0034). Runs written before that
+field existed report as `unknown`, which is not a claim either way.
+
+The listing also reports directories it could not read — 47 of the 826 present today
+are pre-manifest captures or a schema 1.0.0 forecast — rather than dropping them
+quietly and looking like a complete history of a smaller number.
+
 ## Development
 
 ```bash

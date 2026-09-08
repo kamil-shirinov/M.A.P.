@@ -1,0 +1,431 @@
+"""The run journal: what was forecast, what happened, and what it refuses to be.
+
+Two of these tests are worth more than the rest. One pins that no entry can be
+turned into a score by reaching for an attribute; the other pins that corpus and
+live runs have no shared accessor to be pooled through. Both are properties of the
+types, so they fail on the change rather than on a review someone skips.
+"""
+
+from __future__ import annotations
+
+import json
+from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+
+from mapf.core.models import Bar, Forecast, PriceWindow, Scenario, ScenarioSet
+from mapf.core.ports import SamplingParams
+from mapf.eval.journal import SOURCES, Journal, JournalEntry, Outcome, read_journal
+from mapf.pipeline.manifest import (
+    AgentRecord,
+    DividendWindow,
+    PriceProvenance,
+    RunManifest,
+)
+
+ANCHOR = date(2026, 8, 3)
+
+
+def _scenarios() -> ScenarioSet:
+    return ScenarioSet(
+        bullish=Scenario(
+            justification="A sufficiently long justification for the bullish branch.",
+            probability_weight=0.25,
+            price_return=0.045,
+            annualised_vol=0.30,
+        ),
+        base_case=Scenario(
+            justification="A sufficiently long justification for the base branch.",
+            probability_weight=0.60,
+            price_return=0.008,
+            annualised_vol=0.28,
+        ),
+        bearish=Scenario(
+            justification="A sufficiently long justification for the bearish branch.",
+            probability_weight=0.15,
+            price_return=-0.082,
+            annualised_vol=0.41,
+        ),
+    )
+
+
+def _write_run(
+    runs_dir: Path,
+    *,
+    ticker: str = "AAPL",
+    source: str | None = "corpus",
+    anchor: date = ANCHOR,
+    horizon: int = 5,
+    freeze_version: str | None = "2.4.0",
+    manifest: bool = True,
+) -> str:
+    run_id = uuid4()
+    directory = runs_dir / str(run_id)
+    directory.mkdir(parents=True)
+    forecast = Forecast(
+        run_id=run_id,
+        ticker=ticker,
+        as_of=datetime.combine(anchor, datetime.min.time(), tzinfo=UTC) + timedelta(days=1),
+        horizon_days=horizon,
+        spot_price=201.0,
+        source_doc_ids=("sha256:" + "a" * 64,),
+        model_versions={"intake": "fp-i", "analyst": "fp-a", "structuralist": "fp-s"},
+        scenarios=_scenarios(),
+    )
+    (directory / "forecast.json").write_text(forecast.model_dump_json(), encoding="utf-8")
+    if manifest:
+        record = RunManifest(
+            forecast_schema_version="2.0.0",
+            run_id=run_id,
+            ticker=ticker,
+            as_of=forecast.as_of,
+            horizon_days=horizon,
+            spot_price=201.0,
+            source_doc_ids=forecast.source_doc_ids,
+            agents=(
+                AgentRecord(
+                    alias="intake",
+                    model_id="llama",
+                    fingerprint="fp-i",
+                    fingerprint_source="tag",
+                    sampling=SamplingParams(temperature=0.0),
+                    template_name="intake",
+                    template_version="v1",
+                    template_sha256="0" * 64,
+                ),
+            ),
+            prices=PriceProvenance(
+                provider="yfinance",
+                adjustment="split_adjusted",
+                fetched_on=anchor,
+                window_start=anchor - timedelta(days=30),
+                window_end=anchor,
+                last_trading_date=anchor,
+                bars=20,
+            ),
+            dividends=DividendWindow(start=anchor, end=anchor, known=False, source="none"),
+            document_source=source,  # type: ignore[arg-type]
+            freeze_version=freeze_version,
+            package_version="0.1.0",
+            python_version="3.12.0",
+        )
+        (directory / "manifest.json").write_text(record.model_dump_json(), encoding="utf-8")
+    return str(run_id)
+
+
+class _Market:
+    """A series long enough for some anchors and not others."""
+
+    def __init__(self, sessions: int = 30) -> None:
+        self._sessions = sessions
+        self.asked: list[str] = []
+
+    def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+        self.asked.append(ticker)
+        return PriceWindow(
+            ticker=ticker,
+            provider="yfinance",
+            adjustment="split_adjusted",
+            bars=tuple(
+                Bar(
+                    date=ANCHOR + timedelta(days=i),
+                    open=200.0 + i,
+                    high=203.0 + i,
+                    low=199.0 + i,
+                    close=201.0 + i,
+                    volume=1_000,
+                )
+                for i in range(self._sessions)
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# The two constraints
+# ---------------------------------------------------------------------------
+def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score() -> None:
+    """`runs/` is a population defined after the fact — by curiosity, retries and
+    interrupted evenings. A number computed over it would be real arithmetic on an
+    unreal sample, and it would be quoted. The entry carries both sides and
+    combines them nowhere."""
+    carried = set(JournalEntry.__dataclass_fields__)
+    derived = {name for name in dir(JournalEntry) if not name.startswith("_")} - carried
+
+    assert carried == {
+        "run_id",
+        "ticker",
+        "anchor_date",
+        "anchor_spot",
+        "horizon_days",
+        "scenarios",
+        "document_source",
+        "freeze_version",
+        "outcome",
+    }
+    # The only thing it computes, and it reads one field. Nothing takes both sides.
+    assert derived == {"window_elapsed"}
+
+
+def test_the_journal_has_no_pooled_accessor_to_concatenate_populations() -> None:
+    """Separability by construction rather than by discipline: an --from-edgar run
+    is outside frozen.json, and a combined tuple would put it one `sum()` away from
+    a corpus statistic."""
+    journal = Journal({})
+
+    assert not hasattr(journal, "entries")
+    assert not hasattr(journal, "all")
+    with pytest.raises(TypeError):
+        list(journal)  # type: ignore[call-overload]
+    with pytest.raises(TypeError):
+        len(journal)  # type: ignore[arg-type]
+
+
+def test_a_live_run_never_lands_in_the_corpus_population(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    corpus_id = _write_run(runs, source="corpus", ticker="AAA")
+    edgar_id = _write_run(runs, source="edgar", ticker="BBB", freeze_version=None)
+    news_id = _write_run(runs, source="news", ticker="CCC", freeze_version=None)
+
+    journal = read_journal(runs, today=date(2026, 9, 8))
+
+    assert [e.run_id for e in journal.corpus] == [corpus_id]
+    assert [e.run_id for e in journal.edgar] == [edgar_id]
+    assert [e.run_id for e in journal.news] == [news_id]
+
+
+def test_a_manifest_predating_the_field_is_its_own_population(tmp_path: Path) -> None:
+    """Not a synonym for either. `None` was never a claim about the source."""
+    runs = tmp_path / "runs"
+    unknown_id = _write_run(runs, source=None)
+
+    journal = read_journal(runs, today=date(2026, 9, 8))
+
+    assert [e.run_id for e in journal.unknown] == [unknown_id]
+    assert journal.corpus == ()
+
+
+# ---------------------------------------------------------------------------
+# What it reads
+# ---------------------------------------------------------------------------
+def test_each_entry_carries_the_anchor_and_the_three_scenarios(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    entry = read_journal(runs, today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.ticker == "AAPL"
+    assert entry.anchor_date == ANCHOR
+    assert entry.anchor_spot == 201.0
+    assert [line.name for line in entry.scenarios] == ["bullish", "base_case", "bearish"]
+    assert [line.price_return for line in entry.scenarios] == [0.045, 0.008, -0.082]
+    assert [line.probability_weight for line in entry.scenarios] == [0.25, 0.60, 0.15]
+
+
+def test_the_anchor_is_the_session_the_spot_was_read_from_not_as_of(tmp_path: Path) -> None:
+    """`as_of` is the day after the filing for a corpus item, and a wall clock for a
+    live one. Neither is the bar the forecast opened from."""
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    entry = read_journal(runs, today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.anchor_date == ANCHOR
+    assert entry.anchor_date != date(2026, 8, 4)
+
+
+def test_an_elapsed_window_records_the_close_it_landed_on(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    entry = read_journal(runs, market=_Market(), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.window_elapsed is True
+    assert entry.outcome == Outcome(
+        trading_date=ANCHOR + timedelta(days=5),
+        close=206.0,
+        provider="yfinance",
+        adjustment="split_adjusted",
+    )
+
+
+def test_an_open_window_is_reported_as_open_not_dropped(tmp_path: Path) -> None:
+    """A listing that silently omitted unfinished runs would shrink with the
+    calendar and look like a shorter history than it is."""
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=60)
+
+    entry = read_journal(runs, market=_Market(sessions=10), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.window_elapsed is False
+    assert entry.outcome is None
+
+
+def test_without_a_market_every_window_reads_as_open(tmp_path: Path) -> None:
+    """The offline path. No network in a unit test, ever."""
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    entry = read_journal(runs, market=None, today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.outcome is None
+
+
+def test_a_provider_failure_leaves_one_entry_open_rather_than_failing_the_listing(
+    tmp_path: Path,
+) -> None:
+    class _Broken:
+        def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+            raise RuntimeError("upstream is down")
+
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    entry = read_journal(runs, market=_Broken(), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.outcome is None
+
+
+# ---------------------------------------------------------------------------
+# What it skips
+# ---------------------------------------------------------------------------
+def test_a_run_without_a_manifest_is_skipped_rather_than_placed_by_guess(
+    tmp_path: Path,
+) -> None:
+    """`runs/` holds pre-manifest captures. Without a manifest there is no
+    document_source and no recorded anchor session, so any placement is invention."""
+    runs = tmp_path / "runs"
+    _write_run(runs, manifest=False)
+
+    assert read_journal(runs, today=date(2026, 9, 8)).populated() == ()
+
+
+def test_an_unparseable_forecast_does_not_stop_the_readable_ones(tmp_path: Path) -> None:
+    """Schema 1.x artifacts are still in there and parse as neither."""
+    runs = tmp_path / "runs"
+    good = _write_run(runs)
+    broken = runs / "not-a-uuid"
+    broken.mkdir()
+    (broken / "forecast.json").write_text(json.dumps({"schema_version": "1.0.0"}), encoding="utf-8")
+    (broken / "manifest.json").write_text("{}", encoding="utf-8")
+
+    journal = read_journal(runs, today=date(2026, 9, 8))
+
+    assert [e.run_id for e in journal.corpus] == [good]
+
+
+def test_a_missing_runs_directory_is_an_empty_journal_not_a_failure(tmp_path: Path) -> None:
+    assert read_journal(tmp_path / "absent", today=date(2026, 9, 8)).populated() == ()
+
+
+def test_a_stray_file_beside_the_run_directories_is_ignored(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "README.md").write_text("not a run", encoding="utf-8")
+    _write_run(runs)
+
+    assert len(read_journal(runs, today=date(2026, 9, 8)).corpus) == 1
+
+
+# ---------------------------------------------------------------------------
+# Ordering and limit
+# ---------------------------------------------------------------------------
+def test_the_limit_keeps_the_most_recent_anchors_not_the_lowest_uuids(
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs, anchor=date(2026, 1, 5), ticker="OLD")
+    recent = _write_run(runs, anchor=date(2026, 8, 3), ticker="NEW")
+
+    journal = read_journal(runs, today=date(2026, 9, 8), limit=1)
+
+    assert [e.run_id for e in journal.corpus] == [recent]
+
+
+def test_the_limit_is_taken_before_grouping_so_it_means_n_runs_not_n_of_each(
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs, anchor=date(2026, 8, 3), source="corpus")
+    _write_run(runs, anchor=date(2026, 7, 3), source="edgar", freeze_version=None)
+
+    journal = read_journal(runs, today=date(2026, 9, 8), limit=1)
+
+    assert len(journal.corpus) == 1
+    assert journal.edgar == ()
+
+
+def test_every_source_name_is_reachable_through_of() -> None:
+    journal = Journal({})
+    assert all(journal.of(source) == () for source in SOURCES)
+    assert SOURCES == ("corpus", "edgar", "news", "unknown")
+
+
+# ---------------------------------------------------------------------------
+# What it could not read
+# ---------------------------------------------------------------------------
+def test_directories_it_cannot_place_are_counted_not_dropped(tmp_path: Path) -> None:
+    """Silent attrition is the failure mode this project treats as a defect. 47 of
+    826 real run directories are unreadable, and a listing that showed 779 with no
+    remark would read as a complete history."""
+    runs = tmp_path / "runs"
+    _write_run(runs)
+    _write_run(runs, manifest=False)
+    broken = runs / "legacy"
+    broken.mkdir()
+    (broken / "forecast.json").write_text(json.dumps({"schema_version": "1.0.0"}), encoding="utf-8")
+    (broken / "manifest.json").write_text("{}", encoding="utf-8")
+
+    journal = read_journal(runs, today=date(2026, 9, 8))
+
+    assert len(journal.corpus) == 1
+    assert journal.skipped.no_artifacts == 1
+    assert journal.skipped.unreadable == 1
+
+
+def test_the_skipped_count_is_taken_before_the_limit(tmp_path: Path) -> None:
+    """It answers "what is here that this cannot show", which a limit must not
+    change — otherwise `--limit 1` would report a clean directory."""
+    runs = tmp_path / "runs"
+    _write_run(runs)
+    _write_run(runs, manifest=False)
+
+    assert read_journal(runs, today=date(2026, 9, 8), limit=1).skipped.no_artifacts == 1
+
+
+def test_a_manifest_from_an_older_format_version_still_reads(tmp_path: Path) -> None:
+    """`RunManifest` pins `manifest_version` to a Literal, so bumping it to 1.8.0
+    made all 831 stored 1.7.0 manifests fail to validate. That is right for a
+    writer and unusable for a reader, which is why the journal has its own."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+    path = runs / run_id / "manifest.json"
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    stored["manifest_version"] = "1.2.0"
+    stored["a_field_this_version_never_had"] = True
+    path.write_text(json.dumps(stored), encoding="utf-8")
+
+    journal = read_journal(runs, today=date(2026, 9, 8))
+
+    assert len(journal.corpus) == 1
+    assert journal.skipped.unreadable == 0
+
+
+def test_a_manifest_missing_the_anchor_is_unreadable_rather_than_guessed(
+    tmp_path: Path,
+) -> None:
+    """The reader is permissive about fields it does not use and strict about the
+    four it does. Without `prices.last_trading_date` there is no anchor, and an
+    invented one would re-time the horizon."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+    path = runs / run_id / "manifest.json"
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    del stored["prices"]
+    path.write_text(json.dumps(stored), encoding="utf-8")
+
+    journal = read_journal(runs, today=date(2026, 9, 8))
+
+    assert journal.populated() == ()
+    assert journal.skipped.unreadable == 1
