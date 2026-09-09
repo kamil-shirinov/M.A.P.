@@ -553,6 +553,59 @@ The listing also reports directories it could not read — 47 of the 826 present
 are pre-manifest captures or a schema 1.0.0 forecast — rather than dropping them
 quietly and looking like a complete history of a smaller number.
 
+## CLI reference — `map export`
+
+The readable state as flat JSON, for a front end with no server behind it.
+
+```bash
+uv run map export --out ./export          # write it
+uv run map export --out ./export --check  # has anything moved since?
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--out` | *required* | Directory to write into. |
+| `--check` | off | Compare an existing export against this checkout. Writes nothing. |
+| `--snapshot` | `2026-09-05` | Price vintage the series and outcomes are read from. |
+| `--frozen` · `--ledger-path` · `--runs-dir` · `--scores-dir` | repo paths | The inputs. |
+| `--allow-partial` | off | Write what can be read, recording every absence in the manifest. |
+
+```
+manifest.json    identity of every input — read this first
+universe.json    the 120 companies that have something to show      eager
+corpus.json      all 709 held filings, each with the runs that read it
+runs/by_source/{corpus,edgar,news,unknown}.json
+symbols.json     the full 10,398-row index                          lazy
+prices/<TICKER>.json                                                lazy
+scores/<band>.<split>.<vintage>.<digest>.json                       lazy
+```
+
+**3.96 MB total, 1.57 MB of it eager.** Only prices, symbols and scores are lazy.
+
+**Populations cannot be pooled.** There is no combined runs file — the four files
+mirror `Journal`'s four accessors, so a consumer that wants everything concatenates
+on purpose (ADR 0035). Records come from the same serialiser `map runs --json` uses.
+
+**Every absence is stated, never a missing file.** An input that could not be read is
+named in the manifest with its consequence. Missing inputs stop the export unless
+`--allow-partial` is passed; the frozen corpus stops it either way. This includes the
+holdout: `scores.absent` says the holdout was scored once, that its per-item scores
+were never persisted and cannot be recovered, and what survives instead — so a reader
+learns why there is no holdout record rather than inferring it from a gap.
+
+**Staleness is checkable, not just dated.** The manifest records the identity of all
+seven inputs — freeze version and digest, commit and forecast digest, ledger size,
+symbol-index vintage, price snapshot. `--check` re-derives them and names what moved:
+
+```
+same       freeze.digest: 7cf4ae3de9a2e56b…
+moved      ledger.resolved: 701 -> 709
+check      1 of 7 inputs have moved
+```
+
+It reports rather than refuses. Whether a moved input matters depends on which one,
+and only the reader knows that.
+
 ## Development
 
 ```bash

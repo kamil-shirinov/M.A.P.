@@ -466,3 +466,134 @@ def test_a_config_failure_is_a_sentence_not_a_traceback(tmp_path: Path) -> None:
 
     assert result.exit_code == EXIT_CONFIG
     assert "MAP_DATA__SEC__USER_AGENT" in result.output
+
+
+# ---------------------------------------------------------------------------
+# --check
+# ---------------------------------------------------------------------------
+def _check(tmp_path: Path, *args: str) -> object:
+    return runner.invoke(
+        app,
+        [
+            "export",
+            "--check",
+            "--out",
+            str(tmp_path / "export"),
+            "--frozen",
+            str(_frozen(tmp_path)),
+            "--ledger-path",
+            str(tmp_path / "ledger.jsonl"),
+            "--snapshot",
+            VINTAGE.isoformat(),
+            *args,
+            "--config",
+            str(_config(tmp_path)),
+        ],
+    )
+
+
+def test_check_reports_a_current_export_as_current(tmp_path: Path) -> None:
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    result = _check(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert "nothing has moved; the export is current" in result.output
+
+
+def test_check_names_the_input_that_moved(tmp_path: Path) -> None:
+    """A date alone does not make staleness visible — a reader sees when it was
+    written, not whether it is still true. The identity of each input does."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    ledger = _ledger(tmp_path, run_id)
+    _export(tmp_path, "--ledger-path", str(ledger))
+
+    # A second item lands in the ledger after the export was written.
+    with ledger.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "ticker": "AAPL",
+                    "band": "clean",
+                    "filing_date": "2026-05-01",
+                    "status": "complete",
+                    "run_id": _write_run(tmp_path / "runs"),
+                }
+            )
+            + "\n"
+        )
+
+    result = _check(tmp_path, "--ledger-path", str(ledger))
+
+    assert "moved      ledger.resolved: 1 -> 2" in result.output
+    assert "1 of 7 inputs have moved" in result.output
+
+
+def test_check_writes_nothing(tmp_path: Path) -> None:
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+    before = {p.name: p.stat().st_mtime_ns for p in (tmp_path / "export").rglob("*")}
+
+    _check(tmp_path)
+
+    after = {p.name: p.stat().st_mtime_ns for p in (tmp_path / "export").rglob("*")}
+    assert before == after
+
+
+def test_check_repeats_the_absences_the_export_recorded(tmp_path: Path) -> None:
+    """A reader checking freshness also learns what was never in it. Silence here
+    would make a stated absence look like a gap after all."""
+    _ready(tmp_path)
+    _write_run(tmp_path / "runs")
+    _export(tmp_path, "--ledger-path", str(tmp_path / "absent.jsonl"), "--allow-partial")
+
+    result = _check(tmp_path, "--ledger-path", str(tmp_path / "absent.jsonl"))
+
+    assert "absent     ledger:" in result.output
+    assert "absent     scores/holdout:" in result.output
+    assert "cannot be recovered" in result.output
+
+
+def test_check_on_a_directory_with_no_export_says_so(tmp_path: Path) -> None:
+    _ready(tmp_path)
+
+    result = _check(tmp_path)
+
+    assert result.exit_code == EXIT_DATA
+    assert "no export at" in result.output
+    assert "map export --out" in result.output
+
+
+def test_a_format_change_is_reported_before_anything_else(tmp_path: Path) -> None:
+    """A front end is entitled to refuse a shape it does not know, and comparing
+    identities across two formats compares fields that may not mean the same thing."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+    manifest = tmp_path / "export" / "manifest.json"
+    body = json.loads(manifest.read_text(encoding="utf-8"))
+    body["export_version"] = "0.9.0"
+    manifest.write_text(json.dumps(body), encoding="utf-8")
+
+    result = _check(tmp_path)
+
+    assert "format     export is 0.9.0" in result.output
+    assert "re-export before comparing" in result.output
+
+
+def test_check_survives_an_input_that_has_since_disappeared(tmp_path: Path) -> None:
+    """The symbol index is untracked, so a fresh clone of a machine that had one is
+    exactly this case. It reads as moved, not as a crash."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+    (tmp_path / "symbols.sqlite").unlink()
+
+    result = _check(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert "moved      symbols.synced_on: 2026-08-11 -> None" in result.output

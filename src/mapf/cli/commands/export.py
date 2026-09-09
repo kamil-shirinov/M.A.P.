@@ -100,6 +100,14 @@ def export(
     runs_dir: Path = typer.Option(Path("runs"), help="Where run artifacts live."),
     scores_dir: Path = typer.Option(SCORES_DIR, help="Where scoring passes are recorded."),
     snapshot: str = typer.Option(SCORING_VINTAGE, "--snapshot", help="Price vintage to read."),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help=(
+            "Compare an existing export against this checkout and report what has "
+            "moved. Writes nothing."
+        ),
+    ),
     allow_partial: bool = typer.Option(
         False,
         "--allow-partial",
@@ -114,6 +122,9 @@ def export(
     try:
         settings = load([config] if config else None)
         vintage = date.fromisoformat(snapshot)
+        if check:
+            _check(out, settings, frozen=frozen, ledger_path=ledger_path, vintage=vintage)
+            return
         absent: list[dict[str, object]] = []
         sizes: dict[str, int] = {}
 
@@ -343,3 +354,97 @@ def _widest(prices: Any, cache_dir: Path, ticker: str, vintage: date) -> Any:
         if best is None or span > best[0]:
             best = (span, first, last)
     return None if best is None else prices.covering(ticker, best[1], best[2])
+
+
+def _live_identity(
+    settings: Any, *, frozen: Path, ledger_path: Path, vintage: date
+) -> dict[str, object]:
+    """What an export written from this checkout right now would stamp.
+
+    Assembled from the same read paths the export uses, so a difference here is a
+    difference in the data and never in how the two were derived.
+    """
+    version = code_version()
+    record = load_frozen(frozen) if frozen.is_file() else {}
+    return {
+        "freeze.version": record.get("freeze_version"),
+        "freeze.digest": freeze_digest(record, truncated=False) if record else None,
+        "code.commit": version.commit,
+        "code.forecast_digest": version.forecast_digest,
+        "ledger.resolved": len(Ledger(ledger_path).resolved()) if ledger_path.is_file() else None,
+        "symbols.synced_on": _synced_on(settings),
+        "prices.snapshot": vintage.isoformat(),
+    }
+
+
+def _synced_on(settings: Any) -> str | None:
+    if not settings.data.sec.symbols_db.is_file():
+        return None
+    synced = build_symbol_index(settings).synced_on()
+    return synced.isoformat() if synced else None
+
+
+def _exported_identity(manifest: dict[str, Any]) -> dict[str, object]:
+    """The same keys, read back out of an export's manifest."""
+    return {
+        "freeze.version": manifest.get("freeze", {}).get("version"),
+        "freeze.digest": manifest.get("freeze", {}).get("digest"),
+        "code.commit": manifest.get("code", {}).get("commit"),
+        "code.forecast_digest": manifest.get("code", {}).get("forecast_digest"),
+        "ledger.resolved": manifest.get("ledger", {}).get("resolved"),
+        "symbols.synced_on": manifest.get("symbols", {}).get("synced_on"),
+        "prices.snapshot": manifest.get("prices", {}).get("snapshot"),
+    }
+
+
+def _check(out: Path, settings: Any, *, frozen: Path, ledger_path: Path, vintage: date) -> None:
+    """Report what has moved under an export since it was written.
+
+    Staleness is the cost of a copy, and a date alone does not make it visible: a
+    reader seeing `exported_at` learns when, not whether it is still true. So the
+    manifest records the IDENTITY of every input, and this re-derives all seven from
+    the live checkout and names the ones that differ.
+
+    It writes nothing and refuses nothing on its own account. A stale export is a
+    fact to report, not an error to raise — whether it matters depends on which
+    field moved, and only the reader knows that.
+    """
+    manifest_path = out / "manifest.json"
+    if not manifest_path.is_file():
+        raise fail(f"no export at {out}", 5, hint=f"Run `map export --out {out}` first.")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
+    if manifest.get("export_version") != EXPORT_VERSION:
+        typer.secho(
+            f"format     export is {manifest.get('export_version')}, this build writes "
+            f"{EXPORT_VERSION} — re-export before comparing anything else",
+            fg=typer.colors.RED,
+        )
+
+    typer.secho(f"exported   {manifest.get('exported_at')}", fg=typer.colors.GREEN)
+    was, now = (
+        _exported_identity(manifest),
+        _live_identity(settings, frozen=frozen, ledger_path=ledger_path, vintage=vintage),
+    )
+    moved = {key: (was[key], now[key]) for key in now if was[key] != now[key]}
+    for key in sorted(now):
+        if key in moved:
+            typer.secho(
+                f"moved      {key}: {moved[key][0]} -> {moved[key][1]}", fg=typer.colors.YELLOW
+            )
+        else:
+            typer.echo(f"same       {key}: {now[key]}")
+
+    # Absences travel with the export, so a reader checking freshness also learns
+    # what was never in it. Silence here would make an absence look like a gap.
+    for gap in manifest.get("absent", []):
+        typer.secho(f"absent     {gap['what']}: {gap['reason']}", fg=typer.colors.YELLOW)
+    for gap in manifest.get("scores", {}).get("absent", []):
+        typer.secho(f"absent     scores/{gap['split']}: {gap['reason']}", fg=typer.colors.YELLOW)
+
+    typer.secho(
+        f"check      {len(moved)} of {len(now)} inputs have moved"
+        if moved
+        else "check      nothing has moved; the export is current",
+        fg=typer.colors.YELLOW if moved else typer.colors.GREEN,
+    )
