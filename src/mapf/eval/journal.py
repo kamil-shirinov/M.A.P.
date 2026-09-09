@@ -44,7 +44,12 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from mapf.core.models import Forecast, PriceWindow
 from mapf.core.ports import PriceSnapshotIndex
-from mapf.eval.window import ScoringError, WindowNotClosedError, realised_bar
+from mapf.eval.window import (
+    SPOT_TOLERANCE,
+    ScoringError,
+    WindowNotClosedError,
+    realised_bar,
+)
 
 _logger = structlog.get_logger(__name__)
 
@@ -138,6 +143,31 @@ OutcomeStatus = Literal["closed", "window_open", "absent_from_snapshot", "not_re
 
 
 @dataclass(frozen=True)
+class AnchorDrift:
+    """The snapshot disagrees with the price the forecast was produced from.
+
+    A corporate action applied after the run — the corpus holds one, a 1.012 split
+    — re-bases every prior close, so the anchor bar in a later snapshot is not the
+    bar the forecast opened on. Scoring refuses an item in this state
+    (`SpotDriftError`), because a return whose endpoints come from two adjustment
+    bases is wrong while every individual number stays plausible.
+
+    **Named for what it checks, not for what scoring does about it.** "Scoring
+    declined this" would be false for the three drifted runs no scoring pass ever
+    attempted — one repeat, two outside the corpus. The drift is a fact about the
+    price series; the consequence for scoring is a consequence.
+
+    Reported rather than hidden, and reported rather than used to drop the outcome:
+    an outcome that exists and is not comparable is a different fact from an
+    outcome that does not exist, and the journal never omits a row (ADR 0035).
+    """
+
+    recorded_spot: float
+    snapshot_close: float
+    ratio: float
+
+
+@dataclass(frozen=True)
 class Outcome:
     """A close RETRIEVED from a named snapshot. Never a stored result.
 
@@ -211,6 +241,11 @@ class JournalEntry:
     # `corpus_relation` is "ledger_item"; it carries band and filing date so a
     # consumer never re-derives them from the anchor.
     ledger_item: LedgerItem | None
+    # Set when the snapshot's close at the anchor disagrees with `anchor_spot`
+    # beyond `SPOT_TOLERANCE`. `None` means they agree OR that no window was
+    # available to compare — `outcome_status` says which: the check is possible
+    # exactly when it reads "closed" or "window_open".
+    anchor_drift: AnchorDrift | None
     outcome: Outcome | None
     # Why there is or is not a close, per run. It replaces a `window_elapsed`
     # boolean, which could not tell "the horizon has not elapsed" from "the
@@ -325,9 +360,23 @@ def _scenarios(forecast: Forecast) -> tuple[ScenarioLine, ...]:
     )
 
 
+def _drift(window: PriceWindow, anchor: date, spot: float) -> AnchorDrift | None:
+    """Whether the snapshot's anchor bar is the bar the forecast opened on.
+
+    Two prices compared, which is not a score: nothing here reads a forecast's
+    scenarios, and the import contract that keeps this module away from the scoring
+    machinery is untouched. The tolerance is the one scoring uses, shared from
+    `mapf.eval.window` rather than copied, so the two cannot drift apart.
+    """
+    bar = next((b for b in window.bars if b.date == anchor), None)
+    if bar is None or abs(bar.close - spot) / spot <= SPOT_TOLERANCE:
+        return None
+    return AnchorDrift(recorded_spot=spot, snapshot_close=bar.close, ratio=bar.close / spot)
+
+
 def _outcome(
     snapshot: PriceSnapshotIndex, forecast: Forecast, anchor: date, today: date
-) -> tuple[Outcome | None, OutcomeStatus]:
+) -> tuple[Outcome | None, OutcomeStatus, AnchorDrift | None]:
     """The close the horizon landed on, retrieved from the snapshot, and why not.
 
     Three distinguishable answers, and the reason they are distinguished: a run
@@ -338,18 +387,19 @@ def _outcome(
     """
     window: PriceWindow | None = snapshot.covering(forecast.ticker, anchor, anchor)
     if window is None:
-        return None, "absent_from_snapshot"
+        return None, "absent_from_snapshot", None
+    drift = _drift(window, anchor, forecast.spot_price)
     try:
         bar = realised_bar(window, anchor, forecast.horizon_days)
     except WindowNotClosedError:
-        return None, "window_open"
+        return None, "window_open", drift
     except ScoringError:
         # The window spans the anchor by filename but holds no bar on or before it
         # — a gap in the stored series. Same answer as no window at all, because
         # the snapshot cannot reach this anchor either way. Typed rather than a
         # bare `except`, so a genuine bug here still surfaces as one.
         _logger.warning("journal_snapshot_gap", ticker=forecast.ticker, anchor=str(anchor))
-        return None, "absent_from_snapshot"
+        return None, "absent_from_snapshot", None
     return (
         Outcome(
             trading_date=bar.date,
@@ -360,6 +410,7 @@ def _outcome(
             retrieved_on=today,
         ),
         "closed",
+        drift,
     )
 
 
@@ -403,8 +454,8 @@ def _entries(
         )
         item = None if ledger_items is None else ledger_items.get(run_id)
         relation = _relation(is_exhibit, item)
-        outcome, status = (
-            (None, "not_requested")
+        outcome, status, drift = (
+            (None, "not_requested", None)
             if snapshot is None
             else _outcome(snapshot, forecast, anchor, today)
         )
@@ -424,6 +475,7 @@ def _entries(
             document_is_frozen_exhibit=is_exhibit,
             corpus_relation=relation,
             ledger_item=item,
+            anchor_drift=drift,
             outcome=outcome,
             outcome_status=status,
         )

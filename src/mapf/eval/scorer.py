@@ -53,16 +53,12 @@ from mapf.eval.scoring import brier, crps_normal, log_score_normal, pit
 # Re-exported: every existing caller imports these from here, and the split
 # exists for the journal's import contract, not to move the public surface.
 from mapf.eval.window import (
+    SPOT_TOLERANCE,
     ScoringError,
     WindowNotClosedError,
     anchor_index,
     realised_bar,
 )
-
-# Prices should match the forecast's recorded spot to the cent. A tolerance this
-# loose only catches genuine drift — a different adjustment basis or vintage —
-# rather than float noise.
-SPOT_TOLERANCE = 1e-4
 
 EPOCH = date(2000, 1, 1)
 

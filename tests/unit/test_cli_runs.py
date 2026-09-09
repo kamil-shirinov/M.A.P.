@@ -558,3 +558,46 @@ def test_neither_map_supplied_reads_as_not_compared(
     )
 
     assert "not compared (no frozen corpus or ledger supplied)" in result.output
+
+
+def test_a_drifted_anchor_is_called_out_in_the_listing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A guard that fires correctly and a reader who never learns it fired is the
+    failure this exists to prevent (Findings #55)."""
+    from tests.unit.test_journal import _Rebased
+
+    _wire(monkeypatch, _Rebased())
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    result = _invoke(tmp_path, runs)
+
+    assert "drift      snapshot closes" in result.output
+    assert "scoring refuses items in this state" in result.output
+    # The outcome is still shown. It exists; it is not comparable.
+    assert "outcome    close" in result.output
+
+
+def test_an_agreeing_anchor_says_nothing_about_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    assert "drift" not in _invoke(tmp_path, runs).output
+
+
+def test_the_json_carries_the_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.unit.test_journal import _Rebased
+
+    _wire(monkeypatch, _Rebased())
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    entry = json.loads(_invoke(tmp_path, runs, "--json").output)["corpus"][0]
+
+    assert entry["anchor_drift"]["ratio"] == pytest.approx(1.012)
+    assert entry["anchor_drift"]["recorded_spot"] == 201.0
+    assert entry["outcome"] is not None

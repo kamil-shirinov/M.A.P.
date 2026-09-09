@@ -117,6 +117,8 @@ def as_dict(entry: JournalEntry) -> dict[str, object]:
             **asdict(entry.ledger_item),
             "filing_date": entry.ledger_item.filing_date.isoformat(),
         }
+    if entry.anchor_drift is not None:
+        body["anchor_drift"] = asdict(entry.anchor_drift)
     if entry.outcome is not None:
         body["outcome"] = {
             **asdict(entry.outcome),
@@ -155,6 +157,14 @@ def _print(source: str, entries: tuple[JournalEntry, ...]) -> None:
                 for line in entry.scenarios
             )
         )
+        if entry.anchor_drift is not None:
+            d = entry.anchor_drift
+            typer.secho(
+                f"    drift      snapshot closes {d.snapshot_close:.2f} at this anchor, "
+                f"forecast opened from {d.recorded_spot:.2f} (x{d.ratio:.4f}) — "
+                f"scoring refuses items in this state",
+                fg=typer.colors.RED,
+            )
         if entry.outcome is None:
             typer.secho(f"    outcome    {OUTCOME_LEGEND[entry.outcome_status]}", fg=YELLOW)
         else:

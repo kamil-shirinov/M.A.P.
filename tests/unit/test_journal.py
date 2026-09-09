@@ -185,6 +185,7 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
         "document_is_frozen_exhibit",
         "corpus_relation",
         "ledger_item",
+        "anchor_drift",
         "outcome",
         "outcome_status",
     }
@@ -714,3 +715,103 @@ def test_corpus_relation_never_moves_a_run_between_populations(tmp_path: Path) -
 
     assert journal.corpus == ()
     assert journal.edgar[0].corpus_relation == "ledger_item"
+
+
+# ---------------------------------------------------------------------------
+# Anchor drift — a guard firing where the consumer can see it
+# ---------------------------------------------------------------------------
+class _Rebased:
+    """A snapshot re-based by a corporate action after the run was written."""
+
+    vintage = VINTAGE
+
+    def __init__(self, factor: float = 1.012) -> None:
+        self._factor = factor
+
+    def covering(self, ticker: str, start: date, end: date) -> PriceWindow:
+        return PriceWindow(
+            ticker=ticker,
+            provider="yfinance",
+            adjustment="split_adjusted",
+            bars=tuple(
+                Bar(
+                    date=ANCHOR + timedelta(days=i),
+                    open=(200.0 + i) * self._factor,
+                    high=(203.0 + i) * self._factor,
+                    low=(199.0 + i) * self._factor,
+                    close=(201.0 + i) * self._factor,
+                    volume=1_000,
+                )
+                for i in range(30)
+            ),
+        )
+
+
+def test_an_anchor_the_snapshot_disagrees_with_is_reported(tmp_path: Path) -> None:
+    """The corpus holds a 1.012 split. After it, the anchor bar in a later snapshot
+    is not the bar the forecast opened on, and scoring refuses the item — but the
+    journal is not scoring and would otherwise publish the outcome silently."""
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    entry = read_journal(runs, snapshot=_Rebased(), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.anchor_drift is not None
+    assert entry.anchor_drift.recorded_spot == 201.0
+    assert entry.anchor_drift.ratio == pytest.approx(1.012)
+
+
+def test_drift_does_not_suppress_the_outcome(tmp_path: Path) -> None:
+    """An outcome that exists and is not comparable is a different fact from an
+    outcome that does not exist. The row is never omitted (ADR 0035)."""
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    entry = read_journal(runs, snapshot=_Rebased(), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.outcome_status == "closed"
+    assert entry.outcome is not None
+
+
+def test_an_agreeing_anchor_reports_no_drift(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    entry = read_journal(runs, snapshot=_Snapshot(), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.anchor_drift is None
+
+
+def test_drift_is_checked_on_an_open_window_too(tmp_path: Path) -> None:
+    """It is a fact about the price series, not about the horizon."""
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=60)
+
+    entry = read_journal(runs, snapshot=_Rebased(), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.outcome_status == "window_open"
+    assert entry.anchor_drift is not None
+
+
+def test_drift_is_reported_for_runs_no_scoring_pass_ever_attempted(tmp_path: Path) -> None:
+    """Three of the nine real drifted runs are a repeat and two outside the corpus.
+    A field named "scoring declined this" would be false for all three, which is why
+    it is named for the drift instead."""
+    runs = tmp_path / "runs"
+    _write_run(runs, source="edgar", freeze_version=None)
+
+    entry = read_journal(runs, snapshot=_Rebased(), today=date(2026, 9, 8)).edgar[0]
+
+    assert entry.corpus_relation == "unchecked"
+    assert entry.anchor_drift is not None
+
+
+def test_noise_below_the_scoring_tolerance_is_not_drift(tmp_path: Path) -> None:
+    """The same tolerance scoring uses, shared rather than copied, so a run this
+    calls clean is one scoring would accept."""
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    entry = read_journal(runs, snapshot=_Rebased(1 + 1e-6), today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.anchor_drift is None

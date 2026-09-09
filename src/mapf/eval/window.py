@@ -29,6 +29,14 @@ class WindowNotClosedError(ScoringError):
     """
 
 
+# Prices should match the forecast's recorded spot to the cent. A tolerance this
+# loose only catches genuine drift — a corporate action, a different adjustment
+# basis or vintage — rather than float noise. Lives here rather than in `scorer`
+# so the run journal can use it: `scorer` reaches the scoring machinery, and the
+# journal is forbidden to (ADR 0035).
+SPOT_TOLERANCE = 1e-4
+
+
 def anchor_index(window: PriceWindow, as_of: date) -> int:
     """The index of the session a forecast opens from.
 

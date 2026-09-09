@@ -2198,3 +2198,82 @@ and the fix has a failure mode the current rule does not.
 export taken mid-edit ships an identity that says nothing. The same already applies
 to running the corpus, and now to writing about it.
 
+---
+
+## 55 · A guard fired correctly, and nothing downstream ever said so
+
+`SpotDriftError` did its job. The corpus holds a 1.012 split, and after it the anchor bar
+in a later snapshot is not the bar the forecast opened on — so scoring refused SCCO's
+three clean/dev items. They are the `"unscored": {"SpotDriftError": 3}` in the scoring
+record, and SCCO appears nowhere among the 175 scored.
+
+The export then published SCCO's outcomes anyway, from the same snapshot, formatted
+exactly like the other 771.
+
+**Both halves are individually correct.** Scoring refuses an item whose endpoints span
+two adjustment bases. The journal is not scoring — it logs what was forecast and what the
+price did, and its outcome path deliberately has no drift check, because a drift check
+that suppressed a row would be the journal deciding what is worth reporting. Each is
+right. The composition publishes a number that every published figure excludes, with
+nothing marking it.
+
+**This is a general shape, not an SCCO one.** A guard's output is a refusal, and a
+refusal is visible only to whoever asked. Everything downstream of the refusing call sees
+an ordinary absence — or, here, an ordinary presence — and no amount of care in either
+component produces the marker, because neither component is wrong.
+
+### What was built
+
+`JournalEntry.anchor_drift`, set when the snapshot's close at the anchor disagrees with
+the price the forecast recorded, beyond the tolerance scoring itself uses. The tolerance
+moved from `scorer` to `window` so both read one constant; the journal cannot import
+`scorer` without reaching the scoring machinery its contract forbids.
+
+Nine of 779 runs carry it: seven SCCO at ×0.988142 and two AAPL at ×1.007509.
+
+**Marked, not excluded.** An outcome that exists and is not comparable is a different
+fact from an outcome that does not exist, and the four-value `outcome_status` discipline
+says never omit a row. The marker is what stops the two from looking identical.
+
+**Named for the drift, not for the refusal.** Six of the nine are ledger items; one is a
+repeat and two are outside the corpus, and no scoring pass ever attempted those three. A
+field called "scoring declined this" would be false for a third of the cases it covers.
+The drift is a fact about the price series; what scoring does about it is a consequence,
+stated in the sentence a UI shows rather than in the field name.
+
+### What is still not covered
+
+The realised bar has the same exposure and no marker. `RealisedDriftError` pins the
+outcome at first scoring, and the pins live in `mapf.corpus` — above `mapf.eval` — so the
+journal cannot read them without breaking the layer contract. The export's outcome is
+honestly labelled with the snapshot it came from, which is weaker than a comparison
+against the pin and is what there is. Recorded here rather than left to be rediscovered.
+
+---
+
+## 56 · The longest window is not the most recent one
+
+`map export` picked each company's price series with "the window covering the widest
+span". Every window in the scoring vintage is about 764 days, so span was effectively a
+tie across all candidates and the winner was whichever the filesystem happened to yield
+first.
+
+**92 of 120 charts ended before data the same vintage held** — median 273 days behind,
+maximum 551. **296 of 779 runs had an anchor date past the end of their own company's
+chart**, so a run marker could not be placed on 38% of them. ZTS is the clearest: the
+export shipped `2023-02-15 .. 2025-03-20` while `2024-08-07 .. 2026-09-10` sat in the
+same directory, covering the run and reaching seventeen months further forward.
+
+Nothing was missing and no vintage was wrong. All 120 tickers had windows; the selection
+read the wrong field.
+
+Selecting on **latest end date, span only as a tie-break**, takes anchors-off-chart from
+296 to **0** and costs nothing: the latest-ending window is a full 764 days in every one
+of the 92 cases, so no chart got shorter. Confined to `_widest`; `covering()` and the
+outcome path are untouched, and outcomes were never affected — they require a window that
+*spans* the anchor, which is a different question and a different call.
+
+The residual 32 charts whose last bar precedes the vintage's latest window *boundary* are
+an artifact of comparing a bar date to a requested end date six days in the future. Every
+bar the vintage holds is exported.
+

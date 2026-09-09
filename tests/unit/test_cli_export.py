@@ -188,6 +188,7 @@ def test_a_run_record_is_the_same_object_map_runs_emits(
         "freeze_version",
         "horizon_days",
         "ledger_item",
+        "anchor_drift",
         "outcome",
         "outcome_status",
         "run_id",
@@ -742,3 +743,38 @@ def test_an_absence_with_no_list_prints_one_line(monkeypatch: pytest.MonkeyPatch
     export_module._print_absence({"what": "scores", "reason": "no scoring pass has been recorded"})
 
     assert len(printed) == 1
+
+
+def test_the_chart_takes_the_most_recent_window_not_the_longest(tmp_path: Path) -> None:
+    """Selecting on span alone put 92 of 120 charts a median 273 days behind data
+    the same vintage held: every window is about 764 days, so span was effectively a
+    tie and the winner was whichever the filesystem yielded first."""
+    from tests.unit.test_data_prices import _store
+
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    prices = tmp_path / "prices"
+    _store(prices, "AAPL", VINTAGE.isoformat(), date(2025, 1, 6), 40)  # older, longer
+    _store(prices, "AAPL", VINTAGE.isoformat(), date(2026, 1, 5), 30)  # newer, shorter
+
+    result = _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    assert result.exit_code == 0, result.output
+    bars = _read(tmp_path, "prices/AAPL.json")["bars"]
+    assert bars[-1][0] == "2026-02-03"
+    assert len(bars) == 30
+
+
+def test_span_still_breaks_a_tie_on_the_end_date(tmp_path: Path) -> None:
+    """Two windows ending the same day: take the one reaching further back."""
+    from tests.unit.test_data_prices import _store
+
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    prices = tmp_path / "prices"
+    _store(prices, "AAPL", VINTAGE.isoformat(), date(2026, 1, 25), 10)
+    _store(prices, "AAPL", VINTAGE.isoformat(), date(2026, 1, 5), 30)
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    assert len(_read(tmp_path, "prices/AAPL.json")["bars"]) == 30

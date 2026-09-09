@@ -413,24 +413,29 @@ def export(
 def _widest(prices: Any, cache_dir: Path, ticker: str, vintage: date) -> Any:
     """The longest window the vintage holds for one ticker.
 
-    A company chart wants as much history as the snapshot has, which is a different
-    question from the one `covering` answers for an outcome — there the anchor is
-    known and the window must span it. Here there is no anchor, so the range is
-    read off the filenames the vintage actually stored.
+    A company chart wants the most RECENT history the snapshot has, which is a
+    different question from the one `covering` answers for an outcome — there the
+    anchor is known and the window must span it. Here there is no anchor, so the
+    range is read off the filenames the vintage actually stored.
     """
     directory = cache_dir / ticker.upper() / "split_adjusted" / vintage.isoformat()
     if not directory.is_dir():
         return None
-    best: tuple[int, date, date] | None = None
+    best: tuple[date, int, date] | None = None
     for path in directory.glob("*.parquet"):
         try:
             first, last = (date.fromisoformat(part) for part in path.stem.split("__"))
         except ValueError:
             continue
-        span = (last - first).days
-        if best is None or span > best[0]:
-            best = (span, first, last)
-    return None if best is None else prices.covering(ticker, best[1], best[2])
+        # LATEST END first, span only as a tie-break. Selecting on span alone put
+        # 92 of 120 charts a median 273 days behind data the same vintage held --
+        # every window here is about 764 days, so span was effectively a tie and
+        # the winner was whichever the filesystem yielded first. A company page
+        # ending before the runs drawn on it is worse than a shorter one.
+        candidate = (last, (last - first).days, first)
+        if best is None or candidate > best:
+            best = candidate
+    return None if best is None else prices.covering(ticker, best[2], best[0])
 
 
 def _live_identity(

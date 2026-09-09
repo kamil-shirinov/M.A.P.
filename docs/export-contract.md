@@ -108,8 +108,12 @@ runs shows 701 and misstates the corpus.
 | `document_is_frozen_exhibit` | bool \| null | Whether this run's document hash matches an exhibit in `frozen.json`. **null = not checked.** |
 | `corpus_relation` | see §3 | Where the run stands to the pre-registered panel. **Use this, not the two fields above.** |
 | `ledger_item` | object \| null | `{ticker, band, filing_date}` — present only when `corpus_relation` is `ledger_item`. |
+| `anchor_drift` | object \| null | Set when the snapshot's close at the anchor disagrees with `anchor_spot`. See §4a. |
 | `outcome` | object \| null | The realised close. Present only when `outcome_status` is `closed`. |
 | `outcome_status` | see §4 | Why there is or is not an outcome. |
+
+**Rows are sorted by `anchor_date`, newest first**, within each of the four files. Do
+not re-sort to display most-recent-first; you already have it.
 
 **`ledger_item.filing_date` is carried, never derivable.** A corpus forecast is dated the
 day *after* the filing it reads. Only **66 of 701** have `filing_date == anchor_date`.
@@ -128,8 +132,12 @@ over it would be real arithmetic on an unreal sample. Scores come from `scores/`
   "bars": [["2024-07-31", 222.0800018310547], …, ["2026-09-03", 328.2099914550781]] }
 ```
 
-`bars` is `[date, close]` pairs, ascending, from the **longest window the pinned vintage
-holds** — median 526 bars, about two years. Closes only; there is no OHLC here.
+`bars` is `[date, close]` pairs, ascending, from the **most recent window the pinned
+vintage holds** — median 526 bars, about two years. Closes only; there is no OHLC here.
+
+Every run's `anchor_date` falls inside its company's series, so a run marker can always
+be placed. (Selecting the *longest* window instead put 296 of 779 anchors off the end of
+their own chart; see Findings #56.)
 
 `snapshot` is the vintage, and it matters: these are not live prices. The same file read
 next month says the same thing. Show the snapshot date near any chart.
@@ -244,6 +252,45 @@ hold its outcome — the bar did not exist when the run was written. Show it as
 
 ---
 
+## 4a. `anchor_drift` — the snapshot disagrees with the run
+
+```json
+"anchor_drift": { "recorded_spot": 185.0, "snapshot_close": 182.806, "ratio": 0.988142 }
+```
+
+`null` on 770 of 779 runs. Present on **9**, where the close at the anchor in the pinned
+snapshot is not the price the forecast was produced from — 7 SCCO at ×0.988142 (the
+corpus holds a 1.012 split) and 2 AAPL at ×1.007509.
+
+**Scoring refuses these items.** A return whose endpoints come from two adjustment bases
+is wrong while every individual number stays plausible, so `SpotDriftError` fires and the
+item is not scored. The three SCCO clean/dev items are exactly the `"unscored":
+{"SpotDriftError": 3}` in the scoring record, and **SCCO appears nowhere among the 175
+scored items**.
+
+**But the outcome is still exported, and must be.** An outcome that exists and is not
+comparable is a different fact from an outcome that does not exist, and the journal never
+omits a row. The marker is what stops those two facts looking identical.
+
+Sentence for the UI:
+
+> *The price series has been re-based since this run — a corporate action applied
+> afterwards. This outcome is not part of any published score.*
+
+Do not show a drifted outcome beside undrifted ones without the marker, and do not put
+one in any figure that aggregates outcomes.
+
+**Named for the drift, not for "scoring declined it."** Of the 9, six are `ledger_item`,
+one is `repeat_of_exhibit` and two are `outside_corpus` — the last three were never
+attempted by any scoring pass, so "declined" would be false for them. The drift is a fact
+about the price series; the consequence for scoring is a consequence.
+
+`null` means the anchor agrees **or** that no window was available to compare.
+`outcome_status` tells you which: the check is possible exactly when it reads `closed` or
+`window_open`.
+
+---
+
 ## 5. Absence — three different meanings
 
 The export distinguishes these, and a UI should too.
@@ -329,7 +376,7 @@ that may not mean the same thing.
 
 ---
 
-## 8. Three things a consumer will get wrong
+## 8. Five things a consumer will get wrong
 
 ### `ledger.items_settled` is **not** a run count
 
@@ -391,6 +438,43 @@ protection.
 is non-empty in *any* file, documentation included, so an export taken mid-edit ships an
 identity that says nothing — and the record-selection rule in §8 has nothing to work
 against. Commit first. (Findings #54.)
+
+---
+
+### A scenario return and a realised return are not the same quantity
+
+**`scenarios[].price_return` is a simple return. `items[].realised_return` is a log
+return.** The simulation converts with `math.log1p(price_return)`; the scorer computes
+`log(close / open)`.
+
+One `asPercent()` helper applied to both is wrong. At these magnitudes the gap is 0.1–0.3
+percentage points — small, systematic, and invisible in review because both numbers look
+like plausible returns.
+
+| Quantity | Convention | To a price | To compare |
+|---|---|---|---|
+| `scenarios[].price_return` | simple | `anchor_spot × (1 + r)` | `log1p(r)` |
+| `items[].realised_return` | log | `anchor_spot × exp(r)` | `expm1(r)` |
+
+`annualised_vol` is also a decimal fraction — `0.22` is 22% annualised, not 0.22%.
+
+**Do not compare a scenario's return to a realised return without converting one.** If a
+UI wants "was the base case close to what happened", convert the realised log return with
+`expm1` and compare to `price_return`, or convert both to prices off `anchor_spot`.
+
+### 78 runs are reachable from no company page
+
+`corpus.json`'s `filings[].runs` lists **only ledger runs — 701**. The 74
+`repeat_of_exhibit` and 4 `outside_corpus` runs exist in `runs/by_source/` and are linked
+from nothing.
+
+This is correct: a filing's `runs` array answers *"which run is the panel's run for this
+item"*, and a repeat is not. But a UI that builds company pages solely from `corpus.json`
+will never surface those 78, and a user who reaches one from a global run list will find
+no company page linking back to it.
+
+If you want every run for a company, filter `runs/by_source/*.json` on `ticker` — and
+show `corpus_relation` beside each, so a repeat is not mistaken for a panel item.
 
 ---
 
