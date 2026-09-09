@@ -147,6 +147,7 @@ def evaluate(
             "default, so the holdout cannot be scored by omission."
         ),
     ),
+    config: Path | None = typer.Option(None, help="Config file to use instead of the default."),
     check: bool = typer.Option(
         False,
         "--check",
@@ -316,7 +317,12 @@ def evaluate(
             ((label, count),) = versions.most_common()
             typer.secho(f"code       digest {label} ({count} runs)", fg=typer.colors.GREEN)
 
-        settings = load()
+        # Honours --config like every other command. It did not: a bare `load()`
+        # always read the working directory's config, so `map evaluate --config X`
+        # would have silently ignored X, and the test suite had no way to supply its
+        # own — which is why 33 tests loaded the repository's real config/default.toml
+        # and failed on a fresh clone for want of a SEC credential.
+        settings = load([config] if config else None)
         forecasts = load_band(ledger, corpus, runs_dir, band, split)
         typer.secho(
             f"loaded     {len(forecasts)} forecasts, from the ledger and not by "

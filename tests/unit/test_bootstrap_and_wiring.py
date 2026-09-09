@@ -410,3 +410,24 @@ def test_the_price_snapshot_reads_the_configured_cache_at_the_named_vintage(
     assert snapshot.vintage == date(2026, 9, 5)
     # Nothing stored under that vintage yet, and it does not go looking elsewhere.
     assert snapshot.covering("AAPL", date(2026, 8, 3), date(2026, 8, 3)) is None
+
+
+def test_the_earnings_calendar_is_built_from_settings_like_its_siblings(
+    tmp_path: Path,
+) -> None:
+    """Covered directly because `test_cli_evaluate` now patches it out everywhere:
+    its autouse offline fixture used to leave the real calendar in place, which
+    reached SEC on a cache miss and only ever hit on a machine with a populated
+    `var/earnings/`. Patching it made the promise true and left this builder with
+    no exercise, so it gets its own."""
+    from mapf.bootstrap import build_earnings_calendar
+
+    settings = _settings(tmp_path)
+    with build_http_client(settings) as client:
+        calendar = build_earnings_calendar(settings, client)
+
+    filings = calendar._filings  # noqa: SLF001
+    assert filings._user_agent == settings.data.sec.user_agent  # noqa: SLF001
+    assert filings._throttle._interval == pytest.approx(  # noqa: SLF001
+        1.0 / settings.data.sec.requests_per_second
+    )

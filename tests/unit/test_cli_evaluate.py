@@ -82,12 +82,33 @@ class _Market:
         return PriceWindow(ticker=ticker, provider="fake", adjustment="split_adjusted", bars=window)
 
 
+class _NoCalendar:
+    """EDGAR answers for nothing — the case that makes the baseline weakest."""
+
+    def __init__(self) -> None:
+        self.failures = {"AAPL": "no CIK for 'AAPL'; it is not in the SEC index"}
+
+    def dates_before(self, ticker: str, as_of: date) -> tuple[date, ...]:
+        return ()
+
+
 @pytest.fixture(autouse=True)
 def _offline(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No unit test may reach the network. Ever."""
+    """No unit test may reach the network. Ever.
+
+    This patched market data alone and let the real `EdgarEarningsCalendar` be
+    built, which reached SEC on a cache miss. It never missed here, because
+    `var/earnings/` holds 120 cached filers on this machine — so the promise in
+    this docstring was kept by a directory the repository does not ship, not by
+    anything in the fixture. On a fresh clone it would have fetched.
+    """
     monkeypatch.setattr(
         "mapf.cli.commands.evaluate.build_market_data",
         lambda _settings, vintage=None: _Market(),
+    )
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.build_earnings_calendar",
+        lambda _settings, _client: _NoCalendar(),
     )
 
 
@@ -148,6 +169,12 @@ def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ig
             # store from a test (Findings #39).
             "--scores-dir",
             str(tmp_path / "scores"),
+            # And its own config. `map evaluate` had no --config at all and called a
+            # bare load(), so these tests read the repository's real
+            # config/default.toml -- which carries a placeholder SEC user-agent and
+            # is rescued on this machine only by a gitignored config/local.toml.
+            "--config",
+            str(_config(tmp_path)),
             # Unpinned: these tests serve prices from a fake provider, so there is
             # no snapshot to read and a frozen vintage would refuse every window.
             *(() if "--vintage" in args else ("--vintage", "")),
@@ -745,16 +772,6 @@ def test_leakage_is_silent_when_the_other_band_scored_nothing(tmp_path: Path) ->
     assert "leakage: not reported" not in result.output
 
 
-class _NoCalendar:
-    """EDGAR answers for nothing — the case that makes the baseline weakest."""
-
-    def __init__(self) -> None:
-        self.failures = {"AAPL": "no CIK for 'AAPL'; it is not in the SEC index"}
-
-    def dates_before(self, ticker: str, as_of: date) -> tuple[date, ...]:
-        return ()
-
-
 def test_a_baseline_that_declined_to_widen_says_so(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -777,7 +794,27 @@ def test_a_baseline_that_declined_to_widen_says_so(
     assert "earnings calendar: unavailable for 1 ticker" in result.output
 
 
-def test_a_fitted_baseline_reports_its_multiplier(tmp_path: Path) -> None:
+class _FittedCalendar:
+    """Prior earnings dates, so the multiplier has something to fit on.
+
+    Supplied explicitly. This test used to pass on the REAL calendar, which found
+    dates in `var/earnings/` — 120 cached filers this repository does not ship —
+    so it was asserting a fitted baseline on a directory a clone does not have.
+    """
+
+    failures: dict[str, str] = {}  # noqa: RUF012 - a fake's fixed empty state
+
+    def dates_before(self, ticker: str, as_of: date) -> tuple[date, ...]:
+        return tuple(as_of - timedelta(days=90 * n) for n in range(1, 9))
+
+
+def test_a_fitted_baseline_reports_its_multiplier(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "mapf.cli.commands.evaluate.build_earnings_calendar",
+        lambda _settings, _client: _FittedCalendar(),
+    )
     ids = [uuid4(), uuid4()]
     _finish(tmp_path, ids)
     for run_id in ids:
