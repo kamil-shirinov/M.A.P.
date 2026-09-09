@@ -141,6 +141,13 @@ def _invoke(tmp_path: Path, *args: str, frozen: Path | None = None):  # type: ig
             # real store would pin the corpus to values no market ever produced.
             "--pins-path",
             str(tmp_path / "realised_pins.jsonl"),
+            # And so do scoring records, for the same reason and after the same
+            # mistake: the first run of this suite against a defaulted --scores-dir
+            # wrote two fabricated AAPL passes into var/corpus/scores/, one of them
+            # labelled `holdout`. Second instance of a CLI default reaching a real
+            # store from a test (Findings #39).
+            "--scores-dir",
+            str(tmp_path / "scores"),
             # Unpinned: these tests serve prices from a fake provider, so there is
             # no snapshot to read and a frozen vintage would refuse every window.
             *(() if "--vintage" in args else ("--vintage", "")),

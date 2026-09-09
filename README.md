@@ -93,6 +93,31 @@ compared across the split. Two marginal calls landing on opposite sides of 1.0 i
 a test cannot separate. The defensible statement is that the correction is approximately
 right, and whether it slightly over- or under-corrects is unresolved at this sample size.
 
+### What survives of the holdout, and what does not
+
+**The holdout's per-item scores were not persisted and cannot be recovered.** They were
+computed once, printed once, and are gone.
+
+That is correct, not an oversight. `map evaluate --split holdout` is refused *before
+anything is computed* once the spend is recorded (ADR 0031), and it is recorded — so
+there is no re-run that could produce them, and adding one would mean defeating the
+guard. A holdout scored twice is not a holdout.
+
+What survives is in `corpus/holdout_spend.jsonl`, which is **tracked**, so its git
+history is the record of the single spend:
+
+- the calibration coefficients — `a = −0.0757`, `b = 1.3305`, `form: z → (z − a) / b`
+- what it was fitted on, its ADR, and the notes that amended it
+- the band, the item count (173), the date, the commit, the freeze version and the
+  price vintage
+
+The band-level results are the table above. Everything else — the 173 individual CRPS,
+log-score and PIT values — existed only in one terminal session.
+
+Development-half scoring passes *are* persisted, under `var/corpus/scores/`, because dev
+is re-scoreable. So the asymmetry in this repository is deliberate: you can re-derive any
+development number from an artifact, and no holdout number.
+
 ### Registered replications
 
 Two findings developed on the development half were given pre-registered replication

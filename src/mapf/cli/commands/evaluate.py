@@ -58,6 +58,7 @@ from mapf.corpus.passes import (
 )
 from mapf.corpus.pins import RealisedPins
 from mapf.corpus.runner import plan
+from mapf.corpus.scores import build_record, write_once
 from mapf.corpus.selection import Corpus
 from mapf.data.earnings import EdgarEarningsCalendar
 from mapf.eval.aggregate import (
@@ -82,6 +83,10 @@ LEDGER = Path("var/corpus/ledger.jsonl")
 # Committed, so the git history is the proof the holdout was spent once — the same
 # argument that makes the frozen corpus commit the proof it was pre-registered.
 HOLDOUT_LEDGER = Path("corpus/holdout_spend.jsonl")
+# `var/`, not `corpus/`. `corpus/` holds the pre-registration -- the frozen record
+# and the spend ledger, both tracked, both evidence. A scoring record is a computed
+# artifact and belongs beside the ledger, the pins and the price cache.
+SCORES_DIR = Path("var/corpus/scores")
 PIN_STORE = Path("var/corpus/realised_pins.jsonl")
 # One snapshot covering both bands and both splits, materialised 2026-09-05 so the
 # development fit and the holdout test rest on a single data state. The 09-04
@@ -111,6 +116,14 @@ def evaluate(
         help=(
             "The realised-bar pins. Taken at first scoring and enforced on every "
             "later one, so a revised outcome refuses instead of scoring silently."
+        ),
+    ),
+    scores_dir: Path = typer.Option(
+        SCORES_DIR,
+        help=(
+            "Where a scoring pass is recorded. Write-once per (band, split, "
+            "vintage, code digest): identical content is left alone, differing "
+            "content is refused rather than overwritten."
         ),
     ),
     passes: int = typer.Option(2, help="Passes the band was split into."),
@@ -342,6 +355,14 @@ def evaluate(
                 _structural(scores, forecasts, calendar, refuse)
             else:
                 _report(scores, band, calendar)
+                _persist(
+                    scores,
+                    directory=scores_dir,
+                    band=band,
+                    split=split,
+                    vintage=vintage,
+                    record=record,
+                )
                 other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
                 if other is not None:
                     _leakage(
@@ -770,6 +791,53 @@ def _comparisons(scores: BandScores, metric: str = "crps") -> list[Comparison]:
         if model:
             out.append(compare(model, base, days, name="M.A.P.", baseline=name))
     return out
+
+
+def _persist(
+    scores: BandScores,
+    *,
+    directory: Path,
+    band: str,
+    split: str,
+    vintage: str,
+    record: dict[str, object],
+) -> None:
+    """Write the numbers that were just printed, so reading them costs nothing.
+
+    Called only on the reporting path. `--check` computes scores and withholds
+    them by design, and a check that wrote them to disk would be a way to obtain
+    the numbers while claiming not to have looked.
+
+    The summary lines are the SAME strings `_report` showed — regenerated from the
+    same call, not re-derived by a different route — so the file cannot disagree
+    with the terminal. Nothing is computed here that was not computed already.
+
+    Only this band and split. `_leakage` scores the other band as part of the pass,
+    and that figure is a difference BETWEEN bands: written out under its own name it
+    would look like an independent scoring pass, which it was not.
+    """
+    version = code_version()
+    body = build_record(
+        scores,
+        band=band,
+        split=split,
+        vintage=vintage or "unpinned",
+        scored_on=date.today(),
+        summaries={
+            metric: summarise(_comparisons(scores, metric)) for metric in ("crps", "log score")
+        },
+        identity={
+            "commit": version.commit,
+            "forecast_digest": version.forecast_digest,
+            "freeze_version": record.get("freeze_version"),
+            "freeze_digest": freeze_digest(record, truncated=False),
+        },
+    )
+    path, written = write_once(directory, body)
+    typer.secho(
+        f"recorded   {path}" if written else f"recorded   {path} (unchanged)",
+        fg=typer.colors.GREEN,
+    )
 
 
 def _report(scores: BandScores, band: str, calendar: EdgarEarningsCalendar) -> None:

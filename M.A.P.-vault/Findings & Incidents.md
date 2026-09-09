@@ -1696,6 +1696,46 @@ The narrow lesson: *"the tests use `tmp_path`"* was true of every path the comma
 takes as an option and false of the one added as a constant. `--pins-path` now follows
 `--ledger-path` and `--runs-dir`.
 
+### It happened again, five days later, in the same file
+
+`map evaluate` gained `--scores-dir` for the persisted scoring record on 2026-09-09,
+defaulting to `var/corpus/scores/`. The first run of the suite afterwards wrote **two
+fabricated passes into the real store**:
+
+```
+var/corpus/scores/clean.dev.unpinned.dirty.json       n=1, AAPL
+var/corpus/scores/clean.holdout.unpinned.dirty.json   n=2, AAPL
+```
+
+Same file, `test_cli_evaluate.py`. Same mechanism: a module-level relative default the
+suite did not override — even though the suite had, by then, been carefully overriding
+`--ledger-path`, `--runs-dir` and `--pins-path` for exactly this reason, with a comment
+above `--pins-path` explaining why.
+
+**One of them is named `holdout`.** A file called `clean.holdout.*.json` in the real
+scoring directory, containing two AAPL rows from a fixture, in a project whose central
+protection is that the holdout was spent once. It would not have survived a reading, and
+the values are obviously wrong — but the same is true of the pins, and that argument did
+not prevent this.
+
+Two things worth saying plainly. First: **knowing the failure did not prevent the
+failure.** The comment on `--pins-path` states the lesson in the imperative, three lines
+above the place the new default should have been added, and it was not. A lesson written
+next to the code is not a mechanism either.
+
+Second, what did work: the incident surfaced within a minute because the new record is
+*write-once and refuses on differing content*. The second test to write a record under
+the same identity raised `ScoreRecordError` and the suite went red — 22 failures — rather
+than silently accumulating fixtures. The guard designed for a different purpose (a
+scoring pass that must not be regenerated casually) caught this one. The pins store,
+being append-only, gave no such signal and had to be read by hand.
+
+The narrow fix is the same as last time: `--scores-dir` now sits with the other three in
+the suite's `_invoke`. The broader one is not a fix, and this entry exists to record
+that: **the third instance of this will not be prevented by a fourth comment.** A test
+that asserts no CLI default resolves inside a tracked or real directory would be a
+mechanism. It has not been written.
+
 ### The same week, by two other routes
 
 | # | what nearly happened | mechanism | caught by |
