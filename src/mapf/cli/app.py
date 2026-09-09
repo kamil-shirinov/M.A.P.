@@ -121,6 +121,7 @@ def main() -> None:
 from mapf.cli.commands import (  # noqa: E402,F401
     corpus,
     evaluate,
+    export,
     health,
     prices,
     run,

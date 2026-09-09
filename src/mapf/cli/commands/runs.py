@@ -106,7 +106,10 @@ LEGEND: dict[str, str] = {
 }
 
 
-def _as_dict(entry: JournalEntry) -> dict[str, object]:
+def as_dict(entry: JournalEntry) -> dict[str, object]:
+    """One journal entry as JSON. Shared with `map export` deliberately: two
+    serialisers for one record are two things that drift, and the export's whole
+    claim is that it says nothing the library does not already say."""
     body = asdict(entry)
     body["anchor_date"] = entry.anchor_date.isoformat()
     if entry.ledger_item is not None:
@@ -239,7 +242,7 @@ def runs(
         if as_json:
             typer.echo(
                 json.dumps(
-                    {name: [_as_dict(e) for e in journal.of(name)] for name in shown},
+                    {name: [as_dict(e) for e in journal.of(name)] for name in shown},
                 )
             )
             return
