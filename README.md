@@ -162,8 +162,19 @@ successor it would have triggered stays unadopted.
 
 ### Phase 4 — what a reader can verify without re-running anything
 
-Phase 4 built read paths, not results. Every number below is in an artifact you can
-open; none of them is new evidence about forecasting.
+Phase 4 built read paths, not results. None of it is new evidence about forecasting.
+
+**What you can check, and with what.** The Phase 1–3 results above are verifiable from
+this repository alone: `corpus/frozen.json` is the pre-registration and its commit order
+is the proof, and `corpus/holdout_spend.jsonl` is the record of the single holdout spend.
+Phase 4's *structure* is verifiable from the source and the test suite — that the journal
+cannot compute a score, that populations have no pooled accessor, that a scoring record
+refuses to be overwritten. Phase 4's *numbers* are not: 779 runs, 701/74/4, 777 closed,
+5.19 MB all come from `var/` and `runs/`, which this repository does not ship. Clone it
+and `map export --allow-partial` writes 0.09 MB — the corpus and nothing else.
+
+That boundary is the honest claim. A reader can confirm the machinery does what is
+described here; only someone with the artifacts can confirm the counts.
 
 **`map export --out <dir>`** writes the whole readable state as flat JSON — 5.19 MB, of
 which 1.57 MB is eager. No server, no dependency. **`map export --check`** re-derives

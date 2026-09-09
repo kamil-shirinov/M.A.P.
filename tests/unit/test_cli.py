@@ -213,11 +213,25 @@ def test_run_without_news_says_so(tmp_path: Path) -> None:
     assert "no news found" in result.output
 
 
-def test_a_placeholder_user_agent_is_a_config_error(tmp_path: Path) -> None:
+def test_a_placeholder_user_agent_stops_the_command_that_fetches(tmp_path: Path) -> None:
+    """`map symbols sync` is the one that talks to SEC, and it still refuses before
+    a single request — the policy moved to the adapter, it did not weaken."""
     config = _config(tmp_path, user_agent="REPLACE_ME <your.name> <your.email@example.com>")
-    result = runner.invoke(app, ["search", "apple", "--config", str(config)])
+    result = runner.invoke(app, ["symbols", "sync", "--config", str(config)])
     assert result.exit_code == EXIT_CONFIG
     assert "MAP_DATA__SEC__USER_AGENT" in result.output
+
+
+def test_a_placeholder_user_agent_does_not_stop_a_command_that_reads_locally(
+    tmp_path: Path,
+) -> None:
+    """`map search` reads a local sqlite index and contacts nobody. Refusing it on a
+    SEC credential is what made a fresh clone fail 45 tests and `map export` fail on
+    a command that makes no network calls."""
+    config = _config(tmp_path, user_agent="REPLACE_ME <your.name> <your.email@example.com>")
+    result = runner.invoke(app, ["search", "apple", "--config", str(config)])
+    assert result.exit_code != EXIT_CONFIG
+    assert "MAP_DATA__SEC__USER_AGENT" not in result.output
 
 
 # ---------------------------------------------------------------------------

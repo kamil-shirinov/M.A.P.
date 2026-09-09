@@ -501,13 +501,16 @@ def test_a_missing_symbol_index_can_be_exported_around_when_declared(
 def test_a_config_failure_is_a_sentence_not_a_traceback(tmp_path: Path) -> None:
     from mapf.cli.app import EXIT_CONFIG
 
-    config = _config(tmp_path, user_agent="REPLACE_ME <your.name> <your.email@example.com>")
+    # A named config file that does not exist. The SEC placeholder no longer
+    # serves here: this command contacts nobody, and refusing it on a
+    # credential it never uses is the coupling this test now guards against.
+    config = tmp_path / "absent.toml"
     result = runner.invoke(
         app, ["export", "--out", str(tmp_path / "export"), "--config", str(config)]
     )
 
     assert result.exit_code == EXIT_CONFIG
-    assert "MAP_DATA__SEC__USER_AGENT" in result.output
+    assert "no configuration file found" in result.output
 
 
 # ---------------------------------------------------------------------------

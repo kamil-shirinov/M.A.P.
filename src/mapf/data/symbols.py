@@ -26,6 +26,7 @@ import structlog
 
 from mapf.core.errors import SymbolIndexMissingError
 from mapf.core.models import Symbol, SymbolMatch
+from mapf.data.sec import require_usable_user_agent
 
 _logger = structlog.get_logger(__name__)
 
@@ -114,7 +115,8 @@ def fetch_sec_tickers(
     defaulted in code — it comes from configuration, which validates it at startup.
     """
     throttle.wait()
-    response = client.get(url, headers={"User-Agent": user_agent, "Accept-Encoding": "gzip"})
+    agent = require_usable_user_agent(user_agent)
+    response = client.get(url, headers={"User-Agent": agent, "Accept-Encoding": "gzip"})
     response.raise_for_status()
     return response.content
 

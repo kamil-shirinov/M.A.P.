@@ -17,9 +17,9 @@ from mapf.core.errors import (
     ConfigurationError,
     DeterminismPolicyError,
     ModelNotAvailableError,
-    PlaceholderConfigError,
 )
 from mapf.core.ports import ModelInfo
+from mapf.data.sec import PLACEHOLDER_MARKER
 from mapf.settings import ModelRegistry, load
 
 REPO_ROOT = Path(__file__).parents[2]
@@ -158,51 +158,39 @@ def test_local_file_overlays_the_default_table_by_table(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# SEC User-Agent policy
+# SEC User-Agent policy — enforced in `mapf.data.sec`, NOT here
 # ---------------------------------------------------------------------------
-def test_placeholder_user_agent_is_rejected(tmp_path: Path) -> None:
+def test_loading_a_config_with_a_placeholder_user_agent_succeeds(tmp_path: Path) -> None:
+    """It is a network policy, not a configuration error.
+
+    Refusing it here made every command inherit a guard for a credential most of
+    them never use — `map export` reads local files and failed on it — and made the
+    offline suite depend on a gitignored `config/local.toml`, so it passed on one
+    machine and failed on every fresh clone. The check now lives with the three
+    adapters that send the header (`tests/unit/test_sec_user_agent.py`).
+    """
     content = VALID_TOML.replace(
         'user_agent = "Jane Doe jane@example.com M.A.P. research tool"',
         'user_agent = "REPLACE_ME <your.name> <your.email@example.com> M.A.P."',
     )
-    with pytest.raises(PlaceholderConfigError) as caught:
-        load([_write(tmp_path, content)])
-    assert caught.value.key == "data.sec.user_agent"
 
+    settings = load([_write(tmp_path, content)])
 
-def test_placeholder_error_says_what_to_do(tmp_path: Path) -> None:
-    """A config error without a remedy just tells the operator they are wrong."""
-    content = VALID_TOML.replace(
-        'user_agent = "Jane Doe jane@example.com M.A.P. research tool"',
-        'user_agent = "REPLACE_ME"',
-    )
-    with pytest.raises(PlaceholderConfigError) as caught:
-        load([_write(tmp_path, content)])
-    message = str(caught.value)
-    assert "data.sec.user_agent" in message
-    assert "MAP_DATA__SEC__USER_AGENT" in message
-    assert "403" in message
-
-
-def test_user_agent_without_a_contact_address_is_rejected(tmp_path: Path) -> None:
-    """A name with no email is what actually earns the block."""
-    content = VALID_TOML.replace(
-        'user_agent = "Jane Doe jane@example.com M.A.P. research tool"',
-        'user_agent = "M.A.P. research tool 1.0"',
-    )
-    with pytest.raises(ConfigurationError, match="no contact address"):
-        load([_write(tmp_path, content)])
+    assert PLACEHOLDER_MARKER in settings.data.sec.user_agent
 
 
 def test_the_committed_default_config_still_carries_its_placeholder() -> None:
-    """The shipped `config/default.toml` must fail closed.
+    """The shipped `config/default.toml` must not carry a real address.
 
-    If this ever stops raising, someone has committed a real contact address to
-    version control — which is both a privacy leak and a config that works on one
-    machine only.
+    A committed contact address is both a privacy leak and a config that works on
+    one machine only. This asserted a *raise* while the policy lived in settings;
+    now that loading succeeds, it asserts the value directly — which is what it was
+    always really checking.
     """
-    with pytest.raises(PlaceholderConfigError):
-        load([REPO_ROOT / "config" / "default.toml"])
+    settings = load([REPO_ROOT / "config" / "default.toml"])
+
+    assert PLACEHOLDER_MARKER in settings.data.sec.user_agent
+    assert "@example.com" in settings.data.sec.user_agent
 
 
 def test_environment_can_rescue_the_shipped_placeholder(

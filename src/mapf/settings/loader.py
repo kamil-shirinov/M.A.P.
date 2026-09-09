@@ -32,7 +32,6 @@ from mapf.core.errors import (
     ChainBudgetError,
     ConfigurationError,
     DeterminismPolicyError,
-    PlaceholderConfigError,
     UnreachableContextBudgetError,
     UnreachableTokenBudgetError,
 )
@@ -45,17 +44,8 @@ DEFAULT_CONFIG_FILES: tuple[Path, ...] = (
     Path("config/local.toml"),  # optional, gitignored, machine-specific
 )
 
-PLACEHOLDER_MARKER = "REPLACE_ME"
-
 # Agents whose output must be reproducible (CLAUDE.md §6).
 DETERMINISTIC_AGENTS: tuple[str, ...] = ("intake", "structuralist")
-
-_SEC_USER_AGENT_HINT = (
-    "SEC EDGAR returns 403 and blocks the IP for about ten minutes without a "
-    "descriptive User-Agent carrying a name and a contact email address. Set "
-    "MAP_DATA__SEC__USER_AGENT, or edit data.sec.user_agent in config/default.toml, "
-    "to something of the form 'Jane Doe jane@example.com M.A.P. research tool'."
-)
 
 
 class _Section(BaseModel):
@@ -187,25 +177,10 @@ class SecSettings(_Section):
     symbols_db: Path
     refresh_days: int = Field(ge=1)
 
-    @model_validator(mode="after")
-    def _reject_unusable_user_agent(self) -> Self:
-        """Fail at startup rather than as a 403 and a ten-minute block mid-download.
-
-        Raises a typed `ConfigurationError` subclass rather than a `ValidationError`
-        on purpose: this is a policy failure with one specific remedy, and the
-        remedy should be the whole message rather than one line inside a blob.
-        """
-        agent = self.user_agent.strip()
-        if PLACEHOLDER_MARKER in agent:
-            raise PlaceholderConfigError(
-                "data.sec.user_agent", self.user_agent, _SEC_USER_AGENT_HINT
-            )
-        if "@" not in agent:
-            raise ConfigurationError(
-                f"config key 'data.sec.user_agent' has no contact address: {self.user_agent!r}. "
-                + _SEC_USER_AGENT_HINT
-            )
-        return self
+    # NOT validated here. The placeholder check is a SEC network policy and lives
+    # with the three adapters that send the header (`mapf.data.sec`): validating it
+    # at settings load made every command inherit a guard for a credential most of
+    # them never use, and made the offline test suite depend on operator config.
 
 
 class DataSettings(_Section):

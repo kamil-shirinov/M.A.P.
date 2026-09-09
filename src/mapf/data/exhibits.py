@@ -29,6 +29,7 @@ import structlog
 from mapf.core.errors import ExhibitError, ExhibitUnreachableError, MissingExhibitError
 from mapf.core.hashing import document_id
 from mapf.core.models import Document, EarningsFiling, UntrustedText
+from mapf.data.sec import require_usable_user_agent
 from mapf.data.symbols import Throttle
 
 _logger = structlog.get_logger(__name__)
@@ -94,7 +95,7 @@ class EdgarExhibits:
     """Fetches EX-99.1 for a filing and returns it as an untrusted `Document`."""
 
     def __init__(self, *, user_agent: str, client: httpx.Client, throttle: Throttle) -> None:
-        self._user_agent = user_agent
+        self._user_agent = require_usable_user_agent(user_agent)
         self._client = client
         self._throttle = throttle
 

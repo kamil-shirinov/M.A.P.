@@ -28,6 +28,7 @@ from pydantic import ValidationError
 from mapf.core.errors import MapError
 from mapf.core.models import EarningsFiling
 from mapf.core.ports import SymbolIndex
+from mapf.data.sec import require_usable_user_agent
 from mapf.data.symbols import Throttle
 
 _logger = structlog.get_logger(__name__)
@@ -67,7 +68,7 @@ class EdgarFilings:
         throttle: Throttle,
     ) -> None:
         self._symbols = symbols
-        self._user_agent = user_agent
+        self._user_agent = require_usable_user_agent(user_agent)
         self._client = client
         self._throttle = throttle
 

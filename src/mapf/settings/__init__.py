@@ -12,7 +12,6 @@ is arguing.
 from mapf.settings.loader import (
     DEFAULT_CONFIG_FILES,
     DETERMINISTIC_AGENTS,
-    PLACEHOLDER_MARKER,
     CacheSettings,
     DataSettings,
     InferenceSettings,
@@ -31,7 +30,6 @@ __all__ = [
     "AGENT_NAMES",
     "DEFAULT_CONFIG_FILES",
     "DETERMINISTIC_AGENTS",
-    "PLACEHOLDER_MARKER",
     "AgentName",
     "CacheSettings",
     "DataSettings",
