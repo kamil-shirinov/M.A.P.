@@ -71,6 +71,43 @@ def _ready(tmp_path: Path) -> None:
     reads the configured cache directory, so a test that wants a series lays down
     real parquet and one that does not gets a named absence."""
     _symbols(tmp_path)
+    _filers(tmp_path)
+
+
+def _filers(tmp_path: Path) -> Path:
+    """A two-row pre-screen: one filer that publishes Item 2.02 and one that does
+    not. The second is the whole point — 45.9% of real filers answer `false`."""
+    path = tmp_path / "item_202.jsonl"
+    path.write_text(
+        "\n".join(
+            json.dumps(row)
+            for row in (
+                {
+                    "cik": 320193,
+                    "tickers": ["AAPL"],
+                    "fetched_on": "2026-09-09",
+                    "block": "recent",
+                    "status": "ok",
+                    "item_202_in_recent": True,
+                    "count": 4,
+                    "most_recent": "2026-07-30",
+                },
+                {
+                    "cik": 2230,
+                    "tickers": ["ADX"],
+                    "fetched_on": "2026-09-09",
+                    "block": "recent",
+                    "status": "ok",
+                    "item_202_in_recent": False,
+                    "count": 0,
+                    "most_recent": None,
+                },
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
 
 
 def _export(tmp_path: Path, *args: str, out: Path | None = None) -> object:
@@ -86,6 +123,8 @@ def _export(tmp_path: Path, *args: str, out: Path | None = None) -> object:
             str(tmp_path / "runs"),
             "--scores-dir",
             str(tmp_path / "scores"),
+            "--filers-path",
+            str(tmp_path / "item_202.jsonl"),
             "--snapshot",
             VINTAGE.isoformat(),
             *args,
@@ -363,8 +402,11 @@ def test_the_manifest_carries_each_sources_own_stamp_not_one_invented_date(
     assert manifest["freeze"]["version"] == "2.0.0"
     assert manifest["freeze"]["digest"]
     assert manifest["prices"]["snapshot"] == VINTAGE.isoformat()
-    assert manifest["ledger"]["resolved"] == 1
-    assert manifest["export_version"] == "1.0.0"
+    assert manifest["ledger"]["items_settled"] == 1
+    assert manifest["export_version"] == "1.1.0"
+    # The pre-screen's own stamps, as the set they are: every row carries its
+    # `fetched_on` and a resumed walk spans days.
+    assert manifest["filers"] == {"rows": 2, "vintages": ["2026-09-09"]}
     assert manifest["exported_at"] == date.today().isoformat()
 
 
@@ -393,7 +435,7 @@ def test_the_longest_stored_window_becomes_the_company_series(
     nothing for nearly every company."""
     from tests.unit.test_data_prices import _store
 
-    _symbols(tmp_path)
+    _ready(tmp_path)
     run_id = _write_run(tmp_path / "runs")
     prices = tmp_path / "prices"
     _store(prices, "AAPL", VINTAGE.isoformat(), date(2026, 1, 5), 8)
@@ -411,7 +453,7 @@ def test_a_vintage_holding_nothing_for_a_company_writes_no_series(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Real snapshot, empty store. Nothing is drawn where nothing is held."""
-    _symbols(tmp_path)
+    _ready(tmp_path)
     run_id = _write_run(tmp_path / "runs")
 
     result = _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
@@ -427,7 +469,7 @@ def test_a_stray_filename_in_the_vintage_does_not_stop_the_series(
 ) -> None:
     from tests.unit.test_data_prices import _store
 
-    _symbols(tmp_path)
+    _ready(tmp_path)
     run_id = _write_run(tmp_path / "runs")
     prices = tmp_path / "prices"
     _store(prices, "AAPL", VINTAGE.isoformat(), date(2026, 1, 5), 12)
@@ -483,6 +525,8 @@ def _check(tmp_path: Path, *args: str) -> object:
             str(_frozen(tmp_path)),
             "--ledger-path",
             str(tmp_path / "ledger.jsonl"),
+            "--filers-path",
+            str(tmp_path / "item_202.jsonl"),
             "--snapshot",
             VINTAGE.isoformat(),
             *args,
@@ -528,7 +572,7 @@ def test_check_names_the_input_that_moved(tmp_path: Path) -> None:
 
     result = _check(tmp_path, "--ledger-path", str(ledger))
 
-    assert "moved      ledger.resolved: 1 -> 2" in result.output
+    assert "moved      ledger.items_settled: 1 -> 2" in result.output
     assert "1 of 7 inputs have moved" in result.output
 
 
@@ -597,3 +641,61 @@ def test_check_survives_an_input_that_has_since_disappeared(tmp_path: Path) -> N
 
     assert result.exit_code == 0, result.output
     assert "moved      symbols.synced_on: 2026-08-11 -> None" in result.output
+
+
+# ---------------------------------------------------------------------------
+# The pre-screen
+# ---------------------------------------------------------------------------
+def test_the_pre_screen_travels_as_written(tmp_path: Path) -> None:
+    """Search must answer a question the corpus cannot: of the tickers someone can
+    type, which belong to a filer that publishes earnings 8-Ks at all. Without it
+    every ticker outside the corpus looks equally viable."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    result = _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    assert result.exit_code == 0, result.output
+    filers = _read(tmp_path, "filers.json")
+    assert [f["item_202_in_recent"] for f in filers] == [True, False]
+    # Rows as written, including the ones that answer no — 45.9% of real filers do.
+    assert filers[1]["tickers"] == ["ADX"]
+    assert filers[0]["fetched_on"] == "2026-09-09"
+
+
+def test_a_missing_pre_screen_stops_the_export(tmp_path: Path) -> None:
+    _symbols(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    result = _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    assert result.exit_code == EXIT_DATA
+    assert "Item 2.02 pre-screen is missing" in result.output
+    assert "edgar_prescreen.py" in result.output
+
+
+def test_a_declared_missing_pre_screen_names_what_search_loses(tmp_path: Path) -> None:
+    _symbols(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    result = _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)), "--allow-partial")
+
+    assert result.exit_code == 0, result.output
+    by_what = {gap["what"]: gap["reason"] for gap in _read(tmp_path, "manifest.json")["absent"]}
+    assert "publishes Item 2.02" in by_what["filers"]
+    assert not (tmp_path / "export" / "filers.json").exists()
+
+
+def test_the_ledger_figure_cannot_be_read_as_a_run_count(tmp_path: Path) -> None:
+    """It is every item the ledger will not attempt again — 701 complete plus 8
+    terminal failures in the real corpus, which is exactly why 8 held filings carry
+    an empty run list. A key called `resolved` invited the wrong reading."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    ledger = _read(tmp_path, "manifest.json")["ledger"]
+    assert set(ledger) == {"items_settled"}
+    assert "resolved" not in ledger
+    assert "runs" not in json.dumps(ledger)

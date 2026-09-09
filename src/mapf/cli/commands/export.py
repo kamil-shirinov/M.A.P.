@@ -48,7 +48,11 @@ from mapf.settings import load
 # The export's own format version. A front end that reads these files is entitled
 # to refuse a shape it does not know, and a version it can compare is the only way
 # it can. Distinct from every vintage in the manifest, which describe the DATA.
-EXPORT_VERSION = "1.0.0"
+EXPORT_VERSION = "1.1.0"
+
+# The Item 2.02 pre-screen. Written by scripts/edgar_prescreen.py, untracked like
+# every other computed input.
+FILERS = Path("var/filers/item_202.jsonl")
 
 # Why the holdout has no scoring record, stated in the manifest rather than left
 # for a reader to discover as a missing file (ADR 0031).
@@ -99,6 +103,13 @@ def export(
     ledger_path: Path = typer.Option(LEDGER, help="The corpus ledger."),
     runs_dir: Path = typer.Option(Path("runs"), help="Where run artifacts live."),
     scores_dir: Path = typer.Option(SCORES_DIR, help="Where scoring passes are recorded."),
+    filers_path: Path = typer.Option(
+        FILERS,
+        help=(
+            "The Item 2.02 pre-screen. Without it a search can say whether a ticker "
+            "exists but not whether its filer publishes earnings 8-Ks."
+        ),
+    ),
     snapshot: str = typer.Option(SCORING_VINTAGE, "--snapshot", help="Price vintage to read."),
     check: bool = typer.Option(
         False,
@@ -277,6 +288,33 @@ def export(
                 f"{vintage} snapshot: {', '.join(sorted(unpriced))}",
             )
 
+        # -- the Item 2.02 pre-screen --
+        #
+        # Search has to answer a question the corpus cannot: of the 10,398 tickers
+        # someone can type, which belong to a filer that publishes earnings 8-Ks at
+        # all. Without this the funnel from searchable to forecastable to frozen
+        # cannot be drawn, and every ticker outside the corpus looks equally viable.
+        filers: list[dict[str, object]] = []
+        if _require(
+            filers_path,
+            "the Item 2.02 pre-screen",
+            "Run `uv run python scripts/edgar_prescreen.py`, or pass --allow-partial.",
+            partial=allow_partial,
+        ):
+            filers = [
+                json.loads(line)
+                for line in filers_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            sizes["filers.json"] = _write(out / "filers.json", filers)
+        else:
+            missing(
+                "filers",
+                filers_path,
+                "search can say whether a ticker exists but not whether its filer "
+                "publishes Item 2.02 8-Ks",
+            )
+
         # -- scoring records --
         records = []
         if scores_dir.is_dir():
@@ -314,9 +352,19 @@ def export(
                 "digest": freeze_digest(record, truncated=False),
             },
             "code": {"commit": version.commit, "forecast_digest": version.forecast_digest},
-            "ledger": {"resolved": len(resolved)},
+            # NOT a run count, and named so it cannot be read as one. `resolved()`
+            # is every item the ledger will not attempt again: 701 that completed
+            # plus 8 that failed terminally, which is exactly why 8 held filings
+            # carry an empty run list.
+            "ledger": {"items_settled": len(resolved)},
             "symbols": {"synced_on": synced_on.isoformat() if synced_on else None},
             "prices": {"snapshot": vintage.isoformat(), "companies": len(priced)},
+            # Every row stamps its own `fetched_on`, and a resumed walk spans days,
+            # so the vintages travel as the set they are rather than as one date.
+            "filers": {
+                "rows": len(filers),
+                "vintages": sorted({str(r.get("fetched_on")) for r in filers}),
+            },
             "scores": {"records": records, "absent": [HOLDOUT_ABSENCE]},
             "absent": absent,
             "files": dict(sorted(sizes.items())),
@@ -371,7 +419,9 @@ def _live_identity(
         "freeze.digest": freeze_digest(record, truncated=False) if record else None,
         "code.commit": version.commit,
         "code.forecast_digest": version.forecast_digest,
-        "ledger.resolved": len(Ledger(ledger_path).resolved()) if ledger_path.is_file() else None,
+        "ledger.items_settled": (
+            len(Ledger(ledger_path).resolved()) if ledger_path.is_file() else None
+        ),
         "symbols.synced_on": _synced_on(settings),
         "prices.snapshot": vintage.isoformat(),
     }
@@ -391,7 +441,7 @@ def _exported_identity(manifest: dict[str, Any]) -> dict[str, object]:
         "freeze.digest": manifest.get("freeze", {}).get("digest"),
         "code.commit": manifest.get("code", {}).get("commit"),
         "code.forecast_digest": manifest.get("code", {}).get("forecast_digest"),
-        "ledger.resolved": manifest.get("ledger", {}).get("resolved"),
+        "ledger.items_settled": manifest.get("ledger", {}).get("items_settled"),
         "symbols.synced_on": manifest.get("symbols", {}).get("synced_on"),
         "prices.snapshot": manifest.get("prices", {}).get("snapshot"),
     }

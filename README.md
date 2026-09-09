@@ -26,6 +26,32 @@ budget and emitting no answer. All are named in `M.A.P.-vault/`.
 > **Log score is the negative log predictive density: lower is better.** Stated because
 > "improved from −0.949 to −1.237" reads as worse to almost every reader.
 
+### How 10,398 tickers became 120 companies
+
+Every narrowing below is a recorded artifact, not a description written afterwards.
+
+| | count | what removed the rest |
+|---|---|---|
+| Tickers in the SEC index | **10,398** | — |
+| Distinct filers behind them | **7,998** | 2,400 are share classes and dual listings of the same CIK |
+| Filers with an Item 2.02 8-K in their recent block | **4,325** (54.1%) | 3,673 publish no earnings 8-K: funds, trusts, dormant registrants |
+| Tickers belonging to one of those filers | **5,309** (51.1%) | — |
+| Tickers examined by the seeded selection walk | **1,181** | the walk stops once the target is met; 6,478 were never reached |
+| **Companies accepted into the frozen corpus** | **120** | 716 illiquid, 324 no price history, 19 no exhibit, 2 duplicate CIK |
+| Filings held for them | **709** | — |
+| Filings with a completed run | **701** | 8 failed terminally, and are exported with an empty run list rather than dropped |
+
+The 54.1% is measured, not estimated: `scripts/edgar_prescreen.py` walked all 7,998
+filers on 2026-09-09, one request each, and wrote `var/filers/item_202.jsonl`. An
+earlier name-keyword guess at the same question was wrong about **15%** of what it
+flagged — "Trust" and "Shares" are as common in REITs and banks as in funds.
+
+Two numbers in that table are easy to misread. **1,181 is not a rejection rate**: the
+selection walk stops when it has enough companies, so the 6,478 unreached tickers are
+untested rather than failed. And **709 versus 701** is why the export carries every held
+filing with an explicit run list, empty where nothing ran — a page showing 701 would
+misstate the corpus it is drawing.
+
 ### Phase 2 — the measurement
 
 Development half, **175 items in 18 date clusters**, cluster-robust intervals throughout.
@@ -133,6 +159,91 @@ only finding established out of sample.
 the tail ratio's interval missed excluding 1.0 by 0.005. Registered in advance as a
 possible split outcome, and reported as a miss rather than rounded. The Student-t
 successor it would have triggered stays unadopted.
+
+### Phase 4 — what a reader can verify without re-running anything
+
+Phase 4 built read paths, not results. Every number below is in an artifact you can
+open; none of them is new evidence about forecasting.
+
+**`map export --out <dir>`** writes the whole readable state as flat JSON — 5.19 MB, of
+which 1.57 MB is eager. No server, no dependency. **`map export --check`** re-derives
+the identity of all seven inputs and names what has moved since the export was written,
+because a copy goes silently behind and a date alone does not make that visible.
+
+**`map runs`** is the run journal: 779 readable runs of 826 directories, each with its
+anchor, the three scenarios it produced, and what the price did. Nothing in it computes
+across a forecast and its outcome — no error, no return, no hit — and the type offers no
+member that could (ADR 0035). 47 directories it cannot read are counted and reported
+rather than dropped.
+
+**`corpus_relation`** tells three cases apart that were previously one:
+
+| | runs | what it means |
+|---|---|---|
+| `ledger_item` | **701** | the ledger maps this run to a frozen corpus item |
+| `repeat_of_exhibit` | **74** | the document is a frozen exhibit; the run is not the ledger's run for it — a re-run, a post-band repeat, an ablation replay |
+| `outside_corpus` | **4** | the document is not one the corpus froze |
+| `unchecked` | **0** | (779, when no frozen record or ledger is supplied) |
+
+The 74 are 10% of the log and were previously indistinguishable from panel items.
+Note also that `ledger_item` is **not** a claim that an item was scored: a ledger entry
+promises artifacts exist, and no per-item score is persisted for any holdout item.
+
+**Outcomes are retrieved, never stored**, from the pinned 2026-09-05 snapshot — with the
+snapshot named, the provider read from the parquet's own metadata, and the retrieval
+date. A run's own vintage ends at its anchor and structurally cannot hold its outcome.
+Each run gets one of four answers, never an omission: **777 `closed`, 2 `window_open`,
+0 `absent_from_snapshot`, 0 `not_requested`**.
+
+**Development scoring passes persist** to `var/corpus/scores/`, write-once per (band,
+split, vintage, code digest) — identical content left alone, differing content refused
+rather than overwritten. Two records exist today and both are exported: one from a
+committed tree and one from a dirty tree that no longer exists. That is the design, not
+clutter — a regeneration under changed conditions lands beside its predecessor.
+
+**The holdout has no such record and cannot**, for the reason given above. The export
+states that as a fact in its manifest rather than leaving a missing file to be noticed.
+
+*Not built: the map-ui screens. The front end reads fixtures and is not wired to this
+export.*
+
+### Phase 5 — the ablation, and what remains designed
+
+**Four arms were planned; two produced comparable numbers.**
+
+**A − C = 13.6% on CRPS**, interval well clear of zero, on 355 paired items. It is
+**descriptive, not causal**, and the design separates none of the three confounds:
+
+1. the **analyst** is removed;
+2. the **model** doing the forecasting changes from a 12B to a 4B;
+3. the **prompt** changes, necessarily — the frozen structuralist's first rule is to
+   copy the estimate numbers from the narrative, and with no analyst there are none,
+   so 11 of 25 lines had to change.
+
+Arm D existed to separate (1) from (2) and could not be made to run. So *"the analyst
+helps"* is one of three available readings and the experiment cannot say which.
+
+**Arm D was shown infeasible, not declined.** Every failure was the same shape: the 12B
+generating its entire budget as reasoning and emitting no answer. The first rejection
+was methodological — 12,000 tokens was a cap, not a wall, with 3,610 tokens of headroom
+unused. A ten-item probe at **15,000 tokens**, the largest the 16,384 window allows,
+registered in advance with both readings fixed: **ten of ten failed**, seven exhausting
+the budget and three unable to fit the prompt at all. Given every token the window
+physically allows, the model does not finish — so raising the budget is not an option
+that was declined, it is an option that does not exist.
+
+**An unpredicted result:** removing the analyst moved **median P(up) from 0.513 to
+0.755**. The system becomes markedly more bullish and more opinionated without the
+reasoning stage. Nothing in the pre-registration anticipated this, and it is reported as
+unpredicted rather than folded into the CRPS story.
+
+**Everything else in the Phase 5 design document is designed and unbuilt.** Of its six
+parts, exactly one — A1, the ablation — has been executed. Not built: trailing realised
+volatility as an input (A2), prior guidance from the previous 8-K (A3), the horizon
+ladder beyond five sessions (B), the long-term head (C), scenario mode (D), and the
+surface work including per-forecast caveats and a generated architecture diagram (E).
+The document describes intentions; this paragraph exists so a reader does not mistake it
+for a record of work done.
 
 ---
 
