@@ -702,3 +702,43 @@ def test_the_ledger_figure_cannot_be_read_as_a_run_count(tmp_path: Path) -> None
     assert set(ledger) == {"items_settled"}
     assert "resolved" not in ledger
     assert "runs" not in json.dumps(ledger)
+
+
+def test_a_long_absence_keeps_its_list_out_of_the_sentence(tmp_path: Path) -> None:
+    """On a fresh clone every company is unpriced, and naming all 120 inline put a
+    wall of tickers in the middle of the output — printed again by `--check`. The
+    list is worth keeping and worth not reading."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    result = _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    gap = next(g for g in _read(tmp_path, "manifest.json")["absent"] if g["what"] == "prices")
+    assert gap["items"] == ["AAPL"]
+    assert "AAPL" not in gap["reason"]
+    assert gap["reason"].endswith("snapshot")
+    assert "no window in the" in result.output
+
+
+def test_more_names_than_fit_are_counted_rather_than_listed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mapf.cli.commands import export as export_module
+
+    printed: list[str] = []
+    monkeypatch.setattr(export_module.typer, "secho", lambda text, **_: printed.append(str(text)))
+    export_module._print_absence(
+        {"what": "prices", "reason": "9 companies have no window", "items": list("ABCDEFGHI")}
+    )
+
+    assert printed[1].strip() == "A, B, C, D, E, F, and 3 more"
+
+
+def test_an_absence_with_no_list_prints_one_line(monkeypatch: pytest.MonkeyPatch) -> None:
+    from mapf.cli.commands import export as export_module
+
+    printed: list[str] = []
+    monkeypatch.setattr(export_module.typer, "secho", lambda text, **_: printed.append(str(text)))
+    export_module._print_absence({"what": "scores", "reason": "no scoring pass has been recorded"})
+
+    assert len(printed) == 1

@@ -27,6 +27,7 @@ learn *why* from the manifest rather than infer it from a gap. The same discipli
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -80,6 +81,23 @@ def _write(path: Path, body: object) -> int:
     text = json.dumps(body, separators=(",", ":"), default=str)
     path.write_text(text, encoding="utf-8")
     return len(text)
+
+
+# How many names of a long list to show before the count carries the rest.
+_NAMES_SHOWN = 6
+
+
+def _print_absence(gap: Mapping[str, object]) -> None:
+    """One absence, readable. Shared by the export and `--check` so they agree."""
+    typer.secho(f"absent     {gap['what']}: {gap['reason']}", fg=typer.colors.YELLOW)
+    items = gap.get("items")
+    if isinstance(items, list) and items:
+        shown = ", ".join(str(item) for item in items[:_NAMES_SHOWN])
+        rest = len(items) - _NAMES_SHOWN
+        typer.secho(
+            f"           {shown}" + (f", and {rest} more" if rest > 0 else ""),
+            fg=typer.colors.BRIGHT_BLACK,
+        )
 
 
 def _require(path: Path, what: str, remedy: str, *, partial: bool) -> bool:
@@ -139,8 +157,18 @@ def export(
         absent: list[dict[str, object]] = []
         sizes: dict[str, int] = {}
 
-        def missing(what: str, path: Path, reason: str) -> None:
-            absent.append({"what": what, "path": str(path), "reason": reason})
+        def missing(what: str, path: Path, reason: str, items: list[str] | None = None) -> None:
+            """Record an absence, with any long list kept OUT of the sentence.
+
+            `prices` names every company it could not find a window for, which on a
+            fresh clone is all 120 — a wall of tickers in the middle of the output,
+            printed again by `--check`. The list is worth keeping and worth not
+            reading, so it goes in its own field and the printer shows a few.
+            """
+            gap: dict[str, object] = {"what": what, "path": str(path), "reason": reason}
+            if items is not None:
+                gap["items"] = sorted(items)
+            absent.append(gap)
 
         # -- corpus: the pre-registration, and the only input with no alternative --
         _require(frozen, "the frozen corpus", "Freeze and commit it first.", partial=False)
@@ -285,7 +313,8 @@ def export(
                 "prices",
                 snapshot_dir,
                 f"{len(unpriced)} of {len(companies)} companies have no window in the "
-                f"{vintage} snapshot: {', '.join(sorted(unpriced))}",
+                f"{vintage} snapshot",
+                unpriced,
             )
 
         # -- the Item 2.02 pre-screen --
@@ -376,7 +405,7 @@ def export(
         for name, size in sorted(sizes.items()):
             typer.echo(f"           {name:<34} {size / 1e3:>8.1f} KB")
         for gap in absent:
-            typer.secho(f"absent     {gap['what']}: {gap['reason']}", fg=typer.colors.YELLOW)
+            _print_absence(gap)
     except MapError as err:
         raise handle(err) from err
 
@@ -488,9 +517,9 @@ def _check(out: Path, settings: Any, *, frozen: Path, ledger_path: Path, vintage
     # Absences travel with the export, so a reader checking freshness also learns
     # what was never in it. Silence here would make an absence look like a gap.
     for gap in manifest.get("absent", []):
-        typer.secho(f"absent     {gap['what']}: {gap['reason']}", fg=typer.colors.YELLOW)
+        _print_absence(gap)
     for gap in manifest.get("scores", {}).get("absent", []):
-        typer.secho(f"absent     scores/{gap['split']}: {gap['reason']}", fg=typer.colors.YELLOW)
+        _print_absence({"what": f"scores/{gap['split']}", "reason": gap["reason"]})
 
     typer.secho(
         f"check      {len(moved)} of {len(now)} inputs have moved"
