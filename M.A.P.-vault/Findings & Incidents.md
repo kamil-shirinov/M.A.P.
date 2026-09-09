@@ -1,6 +1,8 @@
 # Findings & Incidents
 
-Real bugs and discoveries, in the order they appeared.
+Real bugs and discoveries, in the order they appeared. **This is the hardest part of the record to
+reconstruct afterwards** — working code survives on its own, while what a system got wrong and how it
+was found out survives only if it is written down at the time.
 
 Append every new one. Never delete.
 

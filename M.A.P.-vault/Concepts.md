@@ -144,8 +144,8 @@ shouldn't. *Needed because* a plain layered rule would have permitted `agents �
 boundary the design exists to protect. *Decided in:* [[0004-import-boundary-enforcement]].
 
 **ADR (Architecture Decision Record)** — a short document: Context, Options, Decision, Consequences.
-Written when a decision is made, never edited afterwards except by amendment. In three years these are
-how you reconstruct your own reasoning.
+Written when a decision is made, never edited afterwards except by amendment. Years later these are
+how the reasoning is reconstructed.
 
 **Constrained decoding / grammar** — forcing a model's output to match a schema by making invalid tokens
 literally unreachable during generation. *Why Agent 3 can be a 4B* — the enforcement lives in the sampler,

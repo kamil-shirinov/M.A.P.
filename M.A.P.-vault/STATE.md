@@ -467,19 +467,14 @@ same surface that fabricated 66.3%.
 
 ## Known issues
 
-1. **A parent-directory `CLAUDE.md` is intentional, not a problem.**
-   `~/Desktop/CLAUDE.md` loads into every session in this repo because `~/Desktop` is a
-   parent of it. That is deliberate: it is Kamil's global context for GitHub builds, and
-   it is meant to load here. Do not "fix" it, and do not propose
-   moving this repo to escape it.
-2. **Moving the repo drops dotfiles.** `.gitignore` was lost in the
+1. **Moving the repo drops dotfiles.** `.gitignore` was lost in the
    `Desktop → Projects → Desktop` round trip on 2026-08-09 and had to be rewritten.
    Now mitigated by version control, but check after any future move.
-3. ~~The vendor-string ban is unenforced.~~ **Closed 2026-08-09** —
+2. ~~The vendor-string ban is unenforced.~~ **Closed 2026-08-09** —
    `test_no_vendor_names_appear_in_application_code` scans every `.py` under `src/`.
-4. ~~Not under version control.~~ **Closed 2026-08-09** — `git init` + initial commit.
+3. ~~Not under version control.~~ **Closed 2026-08-09** — `git init` + initial commit.
    Local only, not on GitHub.
-5. ~~**Prompt selection is hardcoded in `agents/`.**~~ **Closed 2026-08-12.** `template`
+4. ~~**Prompt selection is hardcoded in `agents/`.**~~ **Closed 2026-08-12.** `template`
    and `version` are constructor parameters with class-level defaults, the version is
    read from a `[prompts]` config table, and `bootstrap` passes it through. A per-model
    prompt variant is now a config edit, which is what `CLAUDE.md` §4 always claimed.

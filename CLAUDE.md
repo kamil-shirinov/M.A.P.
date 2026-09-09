@@ -12,7 +12,9 @@ The project is judged on **methodological rigour, not feature count.** Every cla
 
 ---
 
-## 2. Working agreement — this is a learning project
+## 2. Working agreement — the record has to stand on its own
+
+Every design decision must be defensible from the record alone, years later, by someone who did not make it. That is a stronger requirement than remembering why: it means the reasoning has to be written down at the time, with the alternatives that were rejected, or it does not exist. Therefore:
 
 1. **Explain before you write.** Before creating any non-trivial module, state in ≤150 words: the problem it solves, one or two alternatives considered, and why you rejected them. Then write the code.
 2. **One module at a time.** Finish it, test it, and stop for approval before moving on. Do not generate the whole repo in a single pass.

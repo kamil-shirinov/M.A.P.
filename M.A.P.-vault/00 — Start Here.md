@@ -28,7 +28,7 @@ finish that sentence.
 | **00 — Start Here** | This note. Orientation. |
 | [[Concepts]] | Every technical term used in the project, in plain English, anchored to where it appears here. |
 | [[Development Timeline]] | What happened, in order, and why. The narrative the ADRs assume you already know. |
-| [[Findings & Incidents]] | Real bugs and discoveries. |
+| [[Findings & Incidents]] | Real bugs and discoveries. The hardest part of the record to reconstruct afterwards. |
 | [[Guard Audit]] | Every check in `src/`, what its name implies against what it verifies, and where those differ. |
 | `decisions/` | The ADRs. Formal records: Context / Options / Decision / Consequences. |
 | [[STATE]] | Where the project is right now. Updated every session. |
