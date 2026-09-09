@@ -41,6 +41,93 @@ def _today() -> date:
     return datetime.now(UTC).date()
 
 
+def read_window(path: Path) -> PriceWindow | None:
+    """One stored window, with the provenance the parquet metadata carries.
+
+    Module-level because two readers need it: the cache, and the read-only
+    snapshot index below. `provider` comes from the file's own metadata rather
+    than from a caller's assumption — a close attributed to the wrong source is
+    the kind of error that stays invisible.
+    """
+    if not path.is_file():
+        return None
+    try:
+        import pyarrow.parquet as pq
+
+        table = pq.read_table(path)
+        metadata = table.schema.metadata or {}
+        frame = table.to_pandas()
+    except (OSError, ValueError) as err:
+        # A truncated file is a miss, not a crash. Losing a run to a partial
+        # write would be worse than one refetch.
+        _logger.warning("price_cache_unreadable", path=str(path), error=str(err))
+        return None
+
+    return PriceWindow(
+        # Ticker, basis and vintage are all encoded in the path, which is
+        # what makes two vintages impossible to confuse (ADR 0012).
+        ticker=path.parents[2].name,
+        provider=metadata.get(_PROVIDER_KEY, b"unknown").decode("utf-8"),
+        adjustment=metadata.get(_BASIS_KEY, ADJUSTMENT_BASIS.encode()).decode("utf-8"),
+        bars=tuple(
+            Bar(
+                date=record["date"],
+                open=float(record["open"]),
+                high=float(record["high"]),
+                low=float(record["low"]),
+                close=float(record["close"]),
+                volume=int(record["volume"]),
+            )
+            for record in frame.to_dict("records")
+        ),
+    )
+
+
+class PriceSnapshot:
+    """Read-only lookup over ONE stored vintage. Never fetches, never writes.
+
+    `ParquetPriceCache` keys on the exact window a caller asked for, which is right
+    for reproducing a run and useless for asking a question the run never asked.
+    The outcome of a five-session horizon is a bar the run's own snapshot cannot
+    contain — it did not exist when that snapshot was taken — so answering it means
+    finding a *different* window, stored later, that happens to span the date.
+
+    Hence the search: list what the vintage holds for a ticker, keep the windows
+    that contain the range, and take the one reaching furthest forward. Furthest
+    rather than first, because a horizon needs bars after the anchor and the widest
+    window is the one most likely to have them.
+
+    Returning `None` for "this vintage holds no window covering that range" is the
+    point of the class. The caller reports it per item; it is not a fetch trigger,
+    and there is no path here that would make it one.
+    """
+
+    def __init__(self, cache_dir: Path, vintage: date) -> None:
+        self._cache_dir = cache_dir
+        self._vintage = vintage
+
+    @property
+    def vintage(self) -> date:
+        return self._vintage
+
+    def covering(self, ticker: str, start: date, end: date) -> PriceWindow | None:
+        directory = self._cache_dir / ticker.upper() / ADJUSTMENT_BASIS / self._vintage.isoformat()
+        if not directory.is_dir():
+            return None
+        best: tuple[date, Path] | None = None
+        for path in directory.glob("*.parquet"):
+            try:
+                first, last = (date.fromisoformat(part) for part in path.stem.split("__"))
+            except ValueError:
+                # A filename that is not a window is not a window. Skipped rather
+                # than raised: one stray file must not blind the whole vintage.
+                _logger.warning("snapshot_unparseable_name", path=str(path))
+                continue
+            if first <= start and last >= end and (best is None or last > best[0]):
+                best = (last, path)
+        return None if best is None else read_window(best[1])
+
+
 class ParquetPriceCache:
     """A `MarketDataProvider` decorator that persists windows to parquet."""
 
@@ -90,38 +177,7 @@ class ParquetPriceCache:
 
     # -- io ----------------------------------------------------------------
     def _read(self, path: Path) -> PriceWindow | None:
-        if not path.is_file():
-            return None
-        try:
-            import pyarrow.parquet as pq
-
-            table = pq.read_table(path)
-            metadata = table.schema.metadata or {}
-            frame = table.to_pandas()
-        except (OSError, ValueError) as err:
-            # A truncated file is a miss, not a crash. Losing a run to a partial
-            # write would be worse than one refetch.
-            _logger.warning("price_cache_unreadable", path=str(path), error=str(err))
-            return None
-
-        return PriceWindow(
-            # Ticker, basis and vintage are all encoded in the path, which is
-            # what makes two vintages impossible to confuse (ADR 0012).
-            ticker=path.parents[2].name,
-            provider=metadata.get(_PROVIDER_KEY, b"unknown").decode("utf-8"),
-            adjustment=metadata.get(_BASIS_KEY, ADJUSTMENT_BASIS.encode()).decode("utf-8"),
-            bars=tuple(
-                Bar(
-                    date=record["date"],
-                    open=float(record["open"]),
-                    high=float(record["high"]),
-                    low=float(record["low"]),
-                    close=float(record["close"]),
-                    volume=int(record["volume"]),
-                )
-                for record in frame.to_dict("records")
-            ),
-        )
+        return read_window(path)
 
     def _write(self, path: Path, window: PriceWindow) -> None:
         import pyarrow as pa

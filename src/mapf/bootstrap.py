@@ -23,7 +23,7 @@ from mapf.agents.analyst import AnalystAgent
 from mapf.agents.intake import IntakeAgent
 from mapf.agents.structuralist import StructuralistAgent
 from mapf.core.ports import DividendSource, LLMProvider, MarketDataProvider, ModelInfo
-from mapf.data.cache import ParquetPriceCache
+from mapf.data.cache import ParquetPriceCache, PriceSnapshot
 from mapf.data.earnings import EdgarEarningsCalendar
 from mapf.data.exhibits import EdgarExhibits
 from mapf.data.filings import EdgarFilings
@@ -76,6 +76,17 @@ def build_market_data(settings: Settings, *, vintage: date | None = None) -> Mar
     if vintage is None:
         return ParquetPriceCache(chain, settings.cache.price_dir)
     return ParquetPriceCache(chain, settings.cache.price_dir, today=lambda: vintage, frozen=True)
+
+
+def build_price_snapshot(settings: Settings, vintage: date) -> PriceSnapshot:
+    """Read-only access to one stored vintage.
+
+    Not `build_market_data(settings, vintage=...)`: that returns a cache keyed on
+    the exact window a run asked for, which cannot answer a question the run never
+    asked. A five-session outcome is a bar the run's own snapshot could not contain
+    — it did not exist yet — so it has to be looked up in a window stored later.
+    """
+    return PriceSnapshot(settings.cache.price_dir, vintage)
 
 
 def build_dividends(settings: Settings) -> DividendSource:

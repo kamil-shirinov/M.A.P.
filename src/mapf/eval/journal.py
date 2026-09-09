@@ -43,8 +43,8 @@ import structlog
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from mapf.core.models import Forecast, PriceWindow
-from mapf.core.ports import MarketDataProvider
-from mapf.eval.window import WindowNotClosedError, realised_bar
+from mapf.core.ports import PriceSnapshotIndex
+from mapf.eval.window import ScoringError, WindowNotClosedError, realised_bar
 
 _logger = structlog.get_logger(__name__)
 
@@ -96,20 +96,40 @@ class ScenarioLine:
     annualised_vol: float
 
 
+# What is known about a run's horizon, stated per run rather than implied by a
+# missing value. `None` for the outcome answers "there is no close here" without
+# saying why, and the three reasons have nothing in common: the window is still
+# open, the snapshot does not reach it, or nobody asked.
+OutcomeStatus = Literal["closed", "window_open", "absent_from_snapshot", "not_requested"]
+
+
 @dataclass(frozen=True)
 class Outcome:
-    """What the price did, with the provenance of the series that says so.
+    """A close RETRIEVED from a named snapshot. Never a stored result.
 
-    `provider` and `adjustment` travel with the close because a close without them
-    is not comparable to anything (ADR 0003), and this one is fetched live rather
-    than from the pinned scoring vintage — so it can move between two readings of
-    the journal, and a reader has to be able to see which series it came from.
+    Every field here exists so the number can be attributed rather than asserted:
+
+    `snapshot` is the vintage it was read from — the pinned, read-only series
+    scoring uses, not the vintage the run itself was produced under. The run's own
+    snapshot ends at its anchor and structurally cannot hold the outcome: the bar
+    did not exist when that snapshot was taken. `RealisedDriftError`'s docstring
+    states the same asymmetry from the scoring side.
+
+    `retrieved_on` is when this read happened. With `snapshot` it makes the value
+    reproducible — the same vintage yields the same close on any later day — and
+    makes it visibly a retrieval rather than something the artifact stored.
+
+    `provider` and `adjustment` come from the parquet file's own metadata, not from
+    a caller's assumption. A close without them is not comparable to anything
+    (ADR 0003), and one attributed to the wrong source fails silently.
     """
 
     trading_date: date
     close: float
     provider: str
     adjustment: str
+    snapshot: date
+    retrieved_on: date
 
 
 @dataclass(frozen=True)
@@ -151,10 +171,11 @@ class JournalEntry:
     # `False`, which is a claim.
     document_is_frozen_exhibit: bool | None
     outcome: Outcome | None
-
-    @property
-    def window_elapsed(self) -> bool:
-        return self.outcome is not None
+    # Why there is or is not a close, per run. It replaces a `window_elapsed`
+    # boolean, which could not tell "the horizon has not elapsed" from "the
+    # snapshot does not reach this ticker" — and answering the second as though it
+    # were the first is a claim about the calendar made from a missing file.
+    outcome_status: OutcomeStatus
 
 
 @dataclass(frozen=True)
@@ -264,28 +285,46 @@ def _scenarios(forecast: Forecast) -> tuple[ScenarioLine, ...]:
 
 
 def _outcome(
-    market: MarketDataProvider, forecast: Forecast, anchor: date, today: date
-) -> Outcome | None:
-    """The close the horizon landed on, or `None` while the window is still open."""
+    snapshot: PriceSnapshotIndex, forecast: Forecast, anchor: date, today: date
+) -> tuple[Outcome | None, OutcomeStatus]:
+    """The close the horizon landed on, retrieved from the snapshot, and why not.
+
+    Three distinguishable answers, and the reason they are distinguished: a run
+    whose ticker the snapshot never materialised looks exactly like a run whose
+    horizon has not elapsed if both report "no close". The first is a gap in the
+    stored series; the second is a fact about the calendar. Reporting the gap as
+    the fact would be inventing an answer out of a missing file.
+    """
+    window: PriceWindow | None = snapshot.covering(forecast.ticker, anchor, anchor)
+    if window is None:
+        return None, "absent_from_snapshot"
     try:
-        window: PriceWindow = market.get_ohlcv(forecast.ticker, anchor, today)
         bar = realised_bar(window, anchor, forecast.horizon_days)
     except WindowNotClosedError:
-        return None
-    except Exception:  # noqa: BLE001 - a listing must survive one bad ticker
-        _logger.warning("journal_outcome_unavailable", ticker=forecast.ticker, anchor=str(anchor))
-        return None
-    return Outcome(
-        trading_date=bar.date,
-        close=bar.close,
-        provider=window.provider,
-        adjustment=window.adjustment,
+        return None, "window_open"
+    except ScoringError:
+        # The window spans the anchor by filename but holds no bar on or before it
+        # — a gap in the stored series. Same answer as no window at all, because
+        # the snapshot cannot reach this anchor either way. Typed rather than a
+        # bare `except`, so a genuine bug here still surfaces as one.
+        _logger.warning("journal_snapshot_gap", ticker=forecast.ticker, anchor=str(anchor))
+        return None, "absent_from_snapshot"
+    return (
+        Outcome(
+            trading_date=bar.date,
+            close=bar.close,
+            provider=window.provider,
+            adjustment=window.adjustment,
+            snapshot=snapshot.vintage,
+            retrieved_on=today,
+        ),
+        "closed",
     )
 
 
 def _entries(
     runs_dir: Path,
-    market: MarketDataProvider | None,
+    snapshot: PriceSnapshotIndex | None,
     today: date,
     limit: int | None,
     skipped: Counter[str],
@@ -298,6 +337,11 @@ def _entries(
     read.sort(key=lambda pair: pair[1].prices.last_trading_date, reverse=True)
     for forecast, manifest in read[:limit] if limit is not None else read:
         anchor = manifest.prices.last_trading_date
+        outcome, status = (
+            (None, "not_requested")
+            if snapshot is None
+            else _outcome(snapshot, forecast, anchor, today)
+        )
         yield JournalEntry(
             run_id=str(forecast.run_id),
             ticker=forecast.ticker,
@@ -316,23 +360,25 @@ def _entries(
                 if frozen_exhibits is None
                 else any(doc in frozen_exhibits for doc in forecast.source_doc_ids)
             ),
-            outcome=None if market is None else _outcome(market, forecast, anchor, today),
+            outcome=outcome,
+            outcome_status=status,
         )
 
 
 def read_journal(
     runs_dir: Path,
     *,
-    market: MarketDataProvider | None = None,
+    snapshot: PriceSnapshotIndex | None = None,
     today: date,
     limit: int | None = None,
     frozen_exhibits: frozenset[str] | None = None,
 ) -> Journal:
     """Every readable run under `runs_dir`, grouped by document source.
 
-    `market=None` reads the forecasts alone and leaves every outcome open — the
-    offline path, and the one tests use. `limit` applies before grouping and after
-    sorting, so it means "the N most recent runs", not "N of each kind".
+    `snapshot=None` reads the forecasts alone and reports every outcome as
+    `not_requested` — never as an open window, which would be a claim about the
+    calendar made from a question nobody asked. `limit` applies before grouping and
+    after sorting, so it means "the N most recent runs", not "N of each kind".
 
     `frozen_exhibits` is the set of `document_id`s the frozen corpus holds, passed
     IN rather than loaded here: `mapf.corpus` sits above `mapf.eval`, and a journal
@@ -344,7 +390,7 @@ def read_journal(
         return Journal({})
     grouped: dict[Source, list[JournalEntry]] = {source: [] for source in SOURCES}
     counted: Counter[str] = Counter()
-    for entry in _entries(runs_dir, market, today, limit, counted, frozen_exhibits):
+    for entry in _entries(runs_dir, snapshot, today, limit, counted, frozen_exhibits):
         grouped[entry.document_source].append(entry)
     return Journal(
         {source: tuple(entries) for source, entries in grouped.items()},

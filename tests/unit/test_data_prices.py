@@ -7,7 +7,7 @@ lives in `tests/contract/` and is deselected by default.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import httpx
@@ -23,8 +23,8 @@ from mapf.core.errors import (
     MarketDataUnavailableError,
     PriceSnapshotIncompleteError,
 )
-from mapf.core.models import ADJUSTMENT_BASIS, PriceWindow
-from mapf.data.cache import ParquetPriceCache
+from mapf.core.models import ADJUSTMENT_BASIS, Bar, PriceWindow
+from mapf.data.cache import ParquetPriceCache, PriceSnapshot
 from mapf.data.providers.chain import ProviderChain
 from mapf.data.providers.stooq import StooqProvider, to_stooq_symbol
 from mapf.data.providers.yfinance_provider import YFinanceProvider
@@ -437,3 +437,102 @@ def test_an_unpinned_cache_still_fetches_and_writes(tmp_path: Path) -> None:
     cache.get_ohlcv("AAPL", START, END)
     cache.get_ohlcv("AAPL", START, END)
     assert inner.calls == 1  # second call served from disk
+
+
+# ---------------------------------------------------------------------------
+# PriceSnapshot — read-only lookup over one stored vintage
+# ---------------------------------------------------------------------------
+def _store(root: Path, ticker: str, vintage: str, first: date, sessions: int) -> None:
+    """Write a window the way ParquetPriceCache would, through the cache itself."""
+    last = first + timedelta(days=sessions - 1)
+
+    class _Fixed:
+        name = "yfinance"
+
+        def get_ohlcv(self, t: str, s: date, e: date) -> PriceWindow:
+            return PriceWindow(
+                ticker=t,
+                provider="yfinance",
+                adjustment="split_adjusted",
+                bars=tuple(
+                    Bar(
+                        date=first + timedelta(days=i),
+                        open=100.0 + i,
+                        high=102.0 + i,
+                        low=99.0 + i,
+                        close=101.0 + i,
+                        volume=10,
+                    )
+                    for i in range(sessions)
+                ),
+            )
+
+    cache = ParquetPriceCache(_Fixed(), root, today=lambda: date.fromisoformat(vintage))
+    cache.get_ohlcv(ticker, first, last)
+
+
+def test_the_snapshot_finds_a_window_spanning_the_range(tmp_path: Path) -> None:
+    _store(tmp_path, "AAPL", "2026-09-05", date(2026, 8, 3), 20)
+
+    window = PriceSnapshot(tmp_path, date(2026, 9, 5)).covering(
+        "AAPL", date(2026, 8, 10), date(2026, 8, 10)
+    )
+
+    assert window is not None
+    assert window.ticker == "AAPL"
+    # From the parquet's own metadata, never from a caller's assumption.
+    assert window.provider == "yfinance"
+    assert window.adjustment == "split_adjusted"
+
+
+def test_the_widest_covering_window_wins(tmp_path: Path) -> None:
+    """A horizon needs bars AFTER the anchor, so reaching furthest forward is the
+    property that matters — not whichever file the directory listed first."""
+
+    _store(tmp_path, "AAPL", "2026-09-05", date(2026, 8, 3), 8)
+    _store(tmp_path, "AAPL", "2026-09-05", date(2026, 8, 3), 25)
+
+    window = PriceSnapshot(tmp_path, date(2026, 9, 5)).covering(
+        "AAPL", date(2026, 8, 4), date(2026, 8, 4)
+    )
+
+    assert window is not None
+    assert len(window.bars) == 25
+
+
+def test_a_range_the_vintage_does_not_span_is_none_not_a_fetch(tmp_path: Path) -> None:
+    """`None` is an answer. There is no path in this class that reaches a provider,
+    which is what makes a value taken through it reproducible."""
+
+    _store(tmp_path, "AAPL", "2026-09-05", date(2026, 8, 3), 20)
+    snapshot = PriceSnapshot(tmp_path, date(2026, 9, 5))
+
+    assert snapshot.covering("AAPL", date(2027, 1, 1), date(2027, 1, 1)) is None
+    assert snapshot.covering("ZZZZ", date(2026, 8, 10), date(2026, 8, 10)) is None
+
+
+def test_another_vintage_is_not_consulted(tmp_path: Path) -> None:
+    """Two vintages of one ticker are the confound ADR 0012 exists for. Reaching
+    into the wrong one would silently mix adjustment bases."""
+
+    _store(tmp_path, "AAPL", "2026-08-15", date(2026, 8, 3), 20)
+
+    assert (
+        PriceSnapshot(tmp_path, date(2026, 9, 5)).covering(
+            "AAPL", date(2026, 8, 10), date(2026, 8, 10)
+        )
+        is None
+    )
+
+
+def test_a_stray_filename_does_not_blind_the_vintage(tmp_path: Path) -> None:
+
+    _store(tmp_path, "AAPL", "2026-09-05", date(2026, 8, 3), 20)
+    (tmp_path / "AAPL" / "split_adjusted" / "2026-09-05" / "notes.parquet").write_bytes(b"x")
+
+    assert (
+        PriceSnapshot(tmp_path, date(2026, 9, 5)).covering(
+            "AAPL", date(2026, 8, 10), date(2026, 8, 10)
+        )
+        is not None
+    )

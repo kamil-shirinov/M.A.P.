@@ -477,7 +477,7 @@ and — where the horizon has elapsed — the close it landed on.
 
 ```bash
 uv run map runs --limit 10                 # ten most recent, outcomes fetched
-uv run map runs --offline                  # no network; every window reads as open
+uv run map runs --snapshot ""              # list forecasts, retrieve no outcomes
 uv run map runs --source edgar --json      # one population, machine-readable
 ```
 
@@ -486,7 +486,7 @@ uv run map runs --source edgar --json      # one population, machine-readable
 | `--runs-dir` | `runs` | Where run artifacts live. |
 | `--source` | all | One population only: `corpus`, `edgar`, `news`, `unknown`. |
 | `--limit` | `20` | Most recent N by anchor date. `0` for all of them. |
-| `--offline` | off | Skip the outcome fetch entirely. |
+| `--snapshot` | `2026-09-05` | Stored vintage outcomes are read from. Empty string retrieves none. |
 | `--json` | off | Emit JSON instead of a listing. |
 | `--config` | `config/default.toml` | Config file to load instead of the default. |
 
@@ -502,6 +502,27 @@ against a pinned vintage, with the holdout spendable once (ADR 0031).
 the JSON, with per-section counts and no total. A `--from-edgar` run is outside
 `frozen.json` and stays outside every scored set (ADR 0034). Runs written before that
 field existed report as `unknown`, which is not a claim either way.
+
+**Outcomes are retrieved, never stored.** Where a run's horizon has elapsed, the
+close is read from the pinned scoring vintage and shown with the snapshot it came
+from, the provider taken from that file's own metadata, and the date it was read:
+
+```
+outcome    close 311.30 on 2026-08-20 (yfinance)
+           retrieved 2026-09-09 from the 2026-09-05 snapshot
+```
+
+Not the vintage the run itself was produced under — a run's own snapshot ends at its
+anchor and structurally cannot hold the outcome, because that bar did not exist when
+the snapshot was taken. Reading a pinned vintage is also what makes the number
+reproducible; a live fetch would give a different close on a different day.
+
+Every run gets one of four answers, per run and never by omission: `closed`,
+`window_open` (the horizon has not elapsed), `absent_from_snapshot` (the vintage
+holds no window covering that anchor), or `not_requested`. The last three are
+separate on purpose — a gap in the stored series and a fact about the calendar are
+different things, and reporting the first as the second invents an answer out of a
+missing file. Over the 779 readable runs today: 777 closed, 2 still open.
 
 The listing also reports directories it could not read — 47 of the 826 present today
 are pre-manifest captures or a schema 1.0.0 forecast — rather than dropping them

@@ -178,6 +178,30 @@ class MarketDataProvider(Protocol):
         ...
 
 
+class PriceSnapshotIndex(Protocol):
+    """A read-only lookup over one stored price vintage.
+
+    Separate from `MarketDataProvider` because it answers a different question and
+    must be unable to answer that one. A provider fetches; this only reads what a
+    named snapshot already holds, and says so when it holds nothing. That is what
+    makes a number taken through it reproducible: the vintage names the series, and
+    no path here can silently substitute today's.
+    """
+
+    @property
+    def vintage(self) -> date:
+        """Which snapshot this reads. Reported with every value taken from it."""
+        ...
+
+    def covering(self, ticker: str, start: date, end: date) -> PriceWindow | None:
+        """A stored window spanning `start`..`end`, or `None` if none does.
+
+        `None` is an answer, not a failure and never a reason to fetch: the caller
+        reports "this vintage does not hold that range" for that item and moves on.
+        """
+        ...
+
+
 class DividendSource(Protocol):
     """Ex-dividend dates inside a forecast window (ADR 0013).
 

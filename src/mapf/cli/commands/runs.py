@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import typer
 
-from mapf.bootstrap import build_market_data
+from mapf.bootstrap import build_price_snapshot
 from mapf.cli.app import app, as_shown, fail, handle
+from mapf.cli.commands.evaluate import SCORING_VINTAGE
 from mapf.core.errors import MapError
 from mapf.corpus.record import FrozenRecordError, load_frozen
 from mapf.eval.journal import SOURCES, JournalEntry, Source, read_journal
@@ -52,6 +53,16 @@ def _frozen_exhibits(path: Path) -> frozenset[str] | None:
 
 # What each section means, printed with it. A reader should not have to know the
 # manifest schema to know whether a number in front of them is scoreable.
+YELLOW = typer.colors.YELLOW
+
+# Why there is no close. Three different sentences, because they are three
+# different facts and only one of them is about the calendar.
+OUTCOME_LEGEND: dict[str, str] = {
+    "window_open": "horizon has not elapsed yet",
+    "absent_from_snapshot": "the snapshot holds no window covering this anchor",
+    "not_requested": "not retrieved (no snapshot named)",
+}
+
 LEGEND: dict[str, str] = {
     "corpus": "in frozen.json — the pre-registered panel, scored by `map evaluate`",
     "edgar": "--from-edgar — outside the corpus, unscored, never pooled with it",
@@ -63,11 +74,12 @@ LEGEND: dict[str, str] = {
 def _as_dict(entry: JournalEntry) -> dict[str, object]:
     body = asdict(entry)
     body["anchor_date"] = entry.anchor_date.isoformat()
-    body["window_elapsed"] = entry.window_elapsed
     if entry.outcome is not None:
         body["outcome"] = {
             **asdict(entry.outcome),
             "trading_date": entry.outcome.trading_date.isoformat(),
+            "snapshot": entry.outcome.snapshot.isoformat(),
+            "retrieved_on": entry.outcome.retrieved_on.isoformat(),
         }
     return body
 
@@ -103,7 +115,7 @@ def _print(source: str, entries: tuple[JournalEntry, ...]) -> None:
             )
         )
         if entry.outcome is None:
-            typer.secho("    outcome    window still open", fg=typer.colors.YELLOW)
+            typer.secho(f"    outcome    {OUTCOME_LEGEND[entry.outcome_status]}", fg=YELLOW)
         else:
             # Stated as a close on a date, never as a comparison to the forecast
             # above it. The comparison is a score, and this is not the place.
@@ -113,6 +125,14 @@ def _print(source: str, entries: tuple[JournalEntry, ...]) -> None:
             typer.echo(
                 f"    outcome    close {entry.outcome.close:.2f} on "
                 f"{entry.outcome.trading_date} ({entry.outcome.provider})"
+            )
+            # Where it was read from and when, said every time. The close is a
+            # retrieval, and a reader must never take it for something the run
+            # stored — the run's own snapshot ends at its anchor and cannot hold it.
+            typer.secho(
+                f"               retrieved {entry.outcome.retrieved_on} from the "
+                f"{entry.outcome.snapshot} snapshot",
+                fg=typer.colors.BRIGHT_BLACK,
             )
 
 
@@ -125,8 +145,14 @@ def runs(
     limit: int = typer.Option(
         20, "--limit", help="Most recent N runs by anchor date. 0 for all of them."
     ),
-    offline: bool = typer.Option(
-        False, "--offline", help="Skip the outcome fetch; every window reads as open."
+    snapshot: str = typer.Option(
+        SCORING_VINTAGE,
+        "--snapshot",
+        help=(
+            "The stored price vintage outcomes are read from. Pinned and READ-ONLY: "
+            "a range it does not hold is reported per run, never fetched. Pass an "
+            "empty string to list forecasts without retrieving any outcome."
+        ),
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON instead of a listing."),
     frozen: Path = typer.Option(
@@ -146,12 +172,19 @@ def runs(
         if limit < 0:
             raise fail(f"--limit must be 0 or more, got {limit}", 2)
 
+        try:
+            vintage = date.fromisoformat(snapshot) if snapshot else None
+        except ValueError as err:
+            raise fail(f"--snapshot must be a date, got {snapshot!r}", 2) from err
+
         journal = read_journal(
             runs_dir,
-            # Live prices, so a window that closed since the run is visible. This is
-            # why it is not a score: the scoring vintage is pinned and read-only
-            # (ADR 0012), and a number from this series would not be reproducible.
-            market=None if offline else build_market_data(settings),
+            # The pinned scoring vintage, not the vintage each run was produced
+            # under. A run's own snapshot ends at its anchor and cannot hold the
+            # outcome — the bar did not exist when it was taken (ADR 0012). Reading
+            # a pinned snapshot is also what makes the value reproducible: a live
+            # fetch would give a different close on a different day.
+            snapshot=None if vintage is None else build_price_snapshot(settings, vintage),
             today=datetime.now(UTC).date(),
             limit=limit or None,
             frozen_exhibits=_frozen_exhibits(frozen),

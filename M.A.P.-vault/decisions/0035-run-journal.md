@@ -46,9 +46,20 @@ out of `scorer` into `mapf.eval.window`, since importing the scorer for calendar
 arithmetic dragged in CRPS, the baselines and the aggregator. That split is the
 contract doing its job on its first day.
 
-The outcome is fetched **live**, not from the scoring vintage, and that is stated in
-the code: a number from an unpinned series is not reproducible, which is a second
-reason it is not a score.
+The outcome is **retrieved from the pinned scoring vintage**, and every value says
+so: it carries the snapshot it came from, the provider read out of that parquet
+file's own metadata, and the date of the read. It is never taken from the vintage the
+run itself was produced under — that snapshot ends at the run's anchor and cannot
+contain the outcome, because the bar did not exist when it was written. All 775 runs
+recording `fetched_on: 2026-08-14` are in any case reading a vintage no longer on
+disk. Reading a pinned snapshot is also what keeps the number reproducible, where a
+live fetch would return a different close on a different day.
+
+A missing close is answered per run, never by omission: `window_open`,
+`absent_from_snapshot`, or `not_requested`. Three sentences rather than one absent
+value, because a gap in the stored series and a fact about the calendar are different
+things, and reporting the first as the second manufactures an answer out of a missing
+file. This replaced a `window_elapsed` boolean that could not tell them apart.
 
 ### Corpus and live runs cannot be pooled, because there is no pooled accessor
 

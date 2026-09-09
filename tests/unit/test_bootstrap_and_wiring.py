@@ -393,3 +393,20 @@ def test_a_pinned_vintage_builds_a_frozen_cache(tmp_path: Path) -> None:
     market = build_market_data(_settings(tmp_path), vintage=date(2026, 9, 4))
     with pytest.raises(PriceSnapshotIncompleteError):
         market.get_ohlcv("AAPL", date(2026, 8, 3), date(2026, 8, 7))
+
+
+def test_the_price_snapshot_reads_the_configured_cache_at_the_named_vintage(
+    tmp_path: Path,
+) -> None:
+    """Deliberately not `build_market_data(settings, vintage=...)`. That returns a
+    cache keyed on the exact window a run asked for, which cannot answer a question
+    the run never asked — and a five-session outcome is exactly that: a bar the
+    run's own snapshot could not contain, because it did not exist yet."""
+    from mapf.bootstrap import build_price_snapshot
+
+    settings = _settings(tmp_path)
+    snapshot = build_price_snapshot(settings, date(2026, 9, 5))
+
+    assert snapshot.vintage == date(2026, 9, 5)
+    # Nothing stored under that vintage yet, and it does not go looking elsewhere.
+    assert snapshot.covering("AAPL", date(2026, 8, 3), date(2026, 8, 3)) is None

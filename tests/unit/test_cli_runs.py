@@ -17,15 +17,15 @@ from typer.testing import CliRunner
 
 from mapf.cli.app import app
 from tests.unit.test_cli import _config
-from tests.unit.test_journal import ANCHOR, _Market, _write_run
+from tests.unit.test_journal import ANCHOR, VINTAGE, _Snapshot, _write_run
 
 runner = CliRunner()
 
 
-def _wire(monkeypatch: pytest.MonkeyPatch, market: object | None = None) -> None:
+def _wire(monkeypatch: pytest.MonkeyPatch, snapshot: object | None = None) -> None:
     from mapf.cli.commands import runs as runs_module
 
-    monkeypatch.setattr(runs_module, "build_market_data", lambda s: market or _Market())
+    monkeypatch.setattr(runs_module, "build_price_snapshot", lambda s, v: snapshot or _Snapshot())
 
 
 def _invoke(tmp_path: Path, runs: Path, *args: str) -> object:
@@ -81,13 +81,13 @@ def test_an_elapsed_window_prints_a_close_and_a_date_never_a_comparison(
 
 
 def test_an_open_window_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    _wire(monkeypatch, _Market(sessions=3))
+    _wire(monkeypatch, _Snapshot(sessions=3))
     runs = tmp_path / "runs"
     _write_run(runs, horizon=60)
 
     result = _invoke(tmp_path, runs)
 
-    assert "window still open" in result.output
+    assert "horizon has not elapsed yet" in result.output
 
 
 def test_the_three_scenarios_are_printed_with_their_weights(
@@ -120,7 +120,7 @@ def test_the_json_is_keyed_by_population_so_the_artifact_cannot_be_pooled_either
     assert body["corpus"][0]["ticker"] == "AAA"
     assert body["edgar"][0]["document_source"] == "edgar"
     assert body["corpus"][0]["anchor_date"] == ANCHOR.isoformat()
-    assert body["corpus"][0]["window_elapsed"] is True
+    assert body["corpus"][0]["outcome_status"] == "closed"
     assert body["corpus"][0]["outcome"]["trading_date"] == "2026-08-08"
 
 
@@ -159,18 +159,20 @@ def test_a_negative_limit_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert "0 or more" in result.output
 
 
-def test_offline_skips_the_fetch_entirely(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """No network in a unit test, and no network for a user who just wants the
-    list. The stub records every call it receives."""
-    market = _Market()
-    _wire(monkeypatch, market)
+def test_an_empty_snapshot_retrieves_nothing_and_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A pure listing. Reported as "not retrieved", never as an open window: the
+    second would be a claim about the calendar nobody asked it to make."""
+    snapshot = _Snapshot()
+    _wire(monkeypatch, snapshot)
     runs = tmp_path / "runs"
     _write_run(runs)
 
-    result = _invoke(tmp_path, runs, "--offline")
+    result = _invoke(tmp_path, runs, "--snapshot", "")
 
-    assert market.asked == []
-    assert "window still open" in result.output
+    assert snapshot.asked == []
+    assert "not retrieved (no snapshot named)" in result.output
 
 
 def test_an_empty_runs_directory_says_so_rather_than_printing_nothing(
@@ -252,7 +254,9 @@ def test_a_float32_close_is_rounded_for_reading_but_not_in_the_json(
     from tests.unit.test_journal import ANCHOR as A
 
     class _Float32:
-        def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+        vintage = VINTAGE
+
+        def covering(self, ticker: str, start: date, end: date) -> PriceWindow:
             return PriceWindow(
                 ticker=ticker,
                 provider="yfinance",
@@ -360,3 +364,51 @@ def test_a_projection_says_nothing_about_arms(
     _write_run(runs)
 
     assert "an ablation run" not in _invoke(tmp_path, runs).output
+
+
+def test_a_close_is_shown_as_retrieved_with_its_snapshot_and_the_day_it_was_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The run's own vintage ends at its anchor and cannot hold the outcome. Saying
+    where this one came from is what keeps it a retrieval rather than a result the
+    artifact stored."""
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    _write_run(runs, horizon=5)
+
+    result = _invoke(tmp_path, runs)
+
+    assert "retrieved" in result.output
+    assert f"from the {VINTAGE} snapshot" in result.output
+    body = json.loads(_invoke(tmp_path, runs, "--json").output)
+    outcome = body["corpus"][0]["outcome"]
+    assert outcome["snapshot"] == VINTAGE.isoformat()
+    assert outcome["provider"] == "yfinance"
+    assert outcome["adjustment"] == "split_adjusted"
+    assert outcome["retrieved_on"] == date.today().isoformat()
+
+
+def test_a_run_outside_the_snapshot_keeps_its_row_and_names_the_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Per run, never by omission: a listing that dropped these would report a
+    smaller history rather than an incomplete snapshot."""
+    _wire(monkeypatch, _Snapshot(holds=("AAPL",)))
+    runs = tmp_path / "runs"
+    _write_run(runs, ticker="ZZZZ")
+
+    result = _invoke(tmp_path, runs)
+
+    assert "ZZZZ" in result.output
+    assert "the snapshot holds no window covering this anchor" in result.output
+
+
+def test_a_malformed_snapshot_date_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+
+    result = _invoke(tmp_path, tmp_path / "runs", "--snapshot", "last-tuesday")
+
+    assert result.exit_code == 2
+    assert "must be a date" in result.output

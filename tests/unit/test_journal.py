@@ -117,15 +117,25 @@ def _write_run(
     return str(run_id)
 
 
-class _Market:
-    """A series long enough for some anchors and not others."""
+VINTAGE = date(2026, 9, 5)
 
-    def __init__(self, sessions: int = 30) -> None:
+
+class _Snapshot:
+    """A stored vintage holding a series for some tickers and not others."""
+
+    def __init__(self, sessions: int = 30, holds: tuple[str, ...] | None = None) -> None:
         self._sessions = sessions
+        self._holds = holds
         self.asked: list[str] = []
 
-    def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+    @property
+    def vintage(self) -> date:
+        return VINTAGE
+
+    def covering(self, ticker: str, start: date, end: date) -> PriceWindow | None:
         self.asked.append(ticker)
+        if self._holds is not None and ticker not in self._holds:
+            return None
         return PriceWindow(
             ticker=ticker,
             provider="yfinance",
@@ -167,9 +177,11 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
         "arm",
         "document_is_frozen_exhibit",
         "outcome",
+        "outcome_status",
     }
-    # The only thing it computes, and it reads one field. Nothing takes both sides.
-    assert derived == {"window_elapsed"}
+    # It computes NOTHING. `outcome_status` is recorded per run by the reader, not
+    # derived here, so there is no member at all that reads both sides.
+    assert derived == set()
 
 
 def test_the_journal_has_no_pooled_accessor_to_concatenate_populations() -> None:
@@ -240,17 +252,21 @@ def test_the_anchor_is_the_session_the_spot_was_read_from_not_as_of(tmp_path: Pa
 
 
 def test_an_elapsed_window_records_the_close_it_landed_on(tmp_path: Path) -> None:
+    """Attributed, not asserted: the vintage it came from and the day it was read
+    travel with the value, so it can never be mistaken for something stored."""
     runs = tmp_path / "runs"
     _write_run(runs, horizon=5)
 
-    entry = read_journal(runs, market=_Market(), today=date(2026, 9, 8)).corpus[0]
+    entry = read_journal(runs, snapshot=_Snapshot(), today=date(2026, 9, 8)).corpus[0]
 
-    assert entry.window_elapsed is True
+    assert entry.outcome_status == "closed"
     assert entry.outcome == Outcome(
         trading_date=ANCHOR + timedelta(days=5),
         close=206.0,
         provider="yfinance",
         adjustment="split_adjusted",
+        snapshot=VINTAGE,
+        retrieved_on=date(2026, 9, 8),
     )
 
 
@@ -260,35 +276,75 @@ def test_an_open_window_is_reported_as_open_not_dropped(tmp_path: Path) -> None:
     runs = tmp_path / "runs"
     _write_run(runs, horizon=60)
 
-    entry = read_journal(runs, market=_Market(sessions=10), today=date(2026, 9, 8)).corpus[0]
+    entry = read_journal(runs, snapshot=_Snapshot(sessions=10), today=date(2026, 9, 8)).corpus[0]
 
-    assert entry.window_elapsed is False
+    assert entry.outcome_status == "window_open"
     assert entry.outcome is None
 
 
-def test_without_a_market_every_window_reads_as_open(tmp_path: Path) -> None:
-    """The offline path. No network in a unit test, ever."""
+def test_without_a_snapshot_nothing_is_claimed_about_the_horizon(tmp_path: Path) -> None:
+    """Not "open". Nobody asked, and reporting that as an unelapsed window would be
+    a statement about the calendar derived from a question never put."""
     runs = tmp_path / "runs"
     _write_run(runs)
 
-    entry = read_journal(runs, market=None, today=date(2026, 9, 8)).corpus[0]
+    entry = read_journal(runs, snapshot=None, today=date(2026, 9, 8)).corpus[0]
 
+    assert entry.outcome_status == "not_requested"
     assert entry.outcome is None
 
 
-def test_a_provider_failure_leaves_one_entry_open_rather_than_failing_the_listing(
+def test_a_ticker_the_snapshot_does_not_hold_says_so_rather_than_vanishing(
     tmp_path: Path,
 ) -> None:
-    class _Broken:
-        def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
-            raise RuntimeError("upstream is down")
+    """The row stays, with the reason. A missing series and an unelapsed horizon
+    are different facts, and only one of them is about the calendar."""
+    runs = tmp_path / "runs"
+    _write_run(runs, ticker="ZZZZ")
+
+    entry = read_journal(runs, snapshot=_Snapshot(holds=("AAPL",)), today=date(2026, 9, 8)).corpus[
+        0
+    ]
+
+    assert entry.outcome_status == "absent_from_snapshot"
+    assert entry.outcome is None
+    assert entry.ticker == "ZZZZ"
+
+
+def test_a_gap_in_the_stored_series_is_reported_as_absent_not_as_open(
+    tmp_path: Path,
+) -> None:
+    """A window whose filename spans the anchor but whose bars start after it. The
+    snapshot cannot reach this anchor, which is the same answer as holding no
+    window — and emphatically not "the horizon has not elapsed"."""
+
+    class _Gapped:
+        vintage = VINTAGE
+
+        def covering(self, ticker: str, start: date, end: date) -> PriceWindow:
+            return PriceWindow(
+                ticker=ticker,
+                provider="yfinance",
+                adjustment="split_adjusted",
+                bars=tuple(
+                    Bar(
+                        date=ANCHOR + timedelta(days=30 + i),
+                        open=200.0,
+                        high=203.0,
+                        low=199.0,
+                        close=201.0,
+                        volume=1,
+                    )
+                    for i in range(10)
+                ),
+            )
 
     runs = tmp_path / "runs"
     _write_run(runs)
 
-    entry = read_journal(runs, market=_Broken(), today=date(2026, 9, 8)).corpus[0]
+    entry = read_journal(runs, snapshot=_Gapped(), today=date(2026, 9, 8)).corpus[0]
 
-    assert entry.outcome is None
+    assert entry.outcome_status == "absent_from_snapshot"
 
 
 # ---------------------------------------------------------------------------
