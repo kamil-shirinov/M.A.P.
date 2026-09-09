@@ -295,7 +295,7 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 ```json
 { "export_version": "1.1.0", "exported_at": "2026-09-09",
   "freeze":  { "version": "2.6.0", "digest": "7cf4ae3d…" },
-  "code":    { "commit": "8bc86c5…", "forecast_digest": null },
+  "code":    { "commit": "e5a38f2…", "forecast_digest": "fb673274…" },
   "ledger":  { "items_settled": 709 },
   "symbols": { "synced_on": "2026-08-11" },
   "prices":  { "snapshot": "2026-09-05", "companies": 120 },
@@ -309,7 +309,7 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 | `export_version` | Shape of these files. Refuse a version you do not know. |
 | `exported_at` | When the export ran. **A fact about the export, not about the data.** |
 | `freeze.version` / `freeze.digest` | Which frozen corpus, and a hash of the fields that govern a forecast. |
-| `code.commit` / `code.forecast_digest` | Which code. `forecast_digest: null` = built from an uncommitted tree. |
+| `code.commit` / `code.forecast_digest` | Which code. The digest hashes only the files that can produce a forecast (`config/`, `src/mapf/`, minus scoring, rendering and evaluation), so it does **not** move when scoring or CLI-reporting code changes. `null` = the tree was dirty when the export ran, in **any** file — including documentation, which cannot affect a forecast. Treat null as "unidentifiable", not as "changed". |
 | `ledger.items_settled` | See below. |
 | `symbols.synced_on` | Vintage of the symbol index — **a month older than the prices**, which is why there is no single export vintage. |
 | `prices.snapshot` | The pinned price vintage every series and outcome was read from. |
@@ -348,10 +348,19 @@ scores/clean.dev.2026-09-05.1997f7352e47.json   forecast_digest: "1997f735…"  
 scores/clean.dev.2026-09-05.dirty.json          forecast_digest: null
 ```
 
-Both are real passes over the same 175 items. **Tell them apart by `forecast_digest`**: a
-null digest means the pass ran from an uncommitted tree, so nothing identifies the code
-that produced it. **Prefer the record whose `forecast_digest` matches
-`manifest.code.forecast_digest`**; failing that, prefer any non-null digest over `dirty`.
+Both are real passes over the same 175 items, and they differ only in whether the code
+that ran them can be identified.
+
+**The rule is: prefer a record with a non-null `forecast_digest`.** A null digest means
+the pass ran from an uncommitted tree, so nothing names the code that produced it — the
+filename says `dirty` for the same reason.
+
+**Do not make matching `manifest.code.forecast_digest` the test.** That digest describes
+the checkout the *export* ran from, and a scoring pass is almost always older than the
+export that ships it — today the records read `1997f735…` and `null` against a manifest
+digest of `fb673274…`, so neither matches and a UI keying on equality would reject both.
+Equality means only "the export and this pass ran at the same code state", which is a
+nice-to-have signal and not a selector.
 
 Do not show both as two results, and do not average them. This is one measurement
 recorded twice under different code states — a scoring record is write-once per identity,
@@ -375,6 +384,13 @@ the result is published, and the per-item detail is gone. Render this as *"score
 per-item detail not retained"* with the reason available, and never as an empty state, a
 spinner, or a dash. Treating it as missing data suggests a gap where there is a deliberate
 protection.
+
+---
+
+**Export from a clean tree.** `code.forecast_digest` is suppressed whenever `git status`
+is non-empty in *any* file, documentation included, so an export taken mid-edit ships an
+identity that says nothing — and the record-selection rule in §8 has nothing to work
+against. Commit first. (Findings #54.)
 
 ---
 

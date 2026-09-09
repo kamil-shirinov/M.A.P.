@@ -2136,3 +2136,65 @@ Three details worth keeping:
 
 **A guard that has never fired is a hypothesis about a failure.** This one is now a
 measurement of one.
+
+---
+
+## 54 · A documentation edit suppressed a code identity it cannot affect
+
+Writing `docs/export-contract.md` left the tree dirty. An export taken while that
+file was open recorded `code.forecast_digest: null`, and the contract's own rule for
+choosing between two scoring records — *prefer the one matching
+`manifest.code.forecast_digest`* — could not resolve against the export shipped with
+it. The document described a preference a consumer could never see work.
+
+**The digest and the dirty flag do not cover the same thing.** `forecast_digest` is
+computed over `FORECAST_ROOTS = ("config", "src/mapf")` minus everything provably
+downstream of a forecast, so a prose file is outside it twice over. But
+`code_version` decides dirtiness from bare `git status --porcelain` across the whole
+tree, and suppresses the digest on any dirt at all:
+
+```python
+status = _git(["status", "--porcelain"], where)
+dirty = bool(status)
+digest = None if dirty else forecast_digest(commit, where)
+```
+
+So a README edit and an uncommitted change to `agents/` produce the same record.
+
+**This is the 208 again, in a new place.** 208 of the clean band's forecasts carry no
+digest because the tree was dirty while they ran, and ADR 0030 had to adjudicate them
+as their own stratum. That was code. This is prose — and it lands in exactly the same
+field, with exactly the same consequence: an artifact that cannot be pooled with its
+neighbours, for a reason that in this case is not a reason at all.
+
+### What it is not
+
+It is not a false claim. A null digest says "unidentifiable", and on a dirty tree
+that is true of the *checkout*, whatever was dirty. Nothing was overstated; something
+was withheld that did not need to be.
+
+### The narrow fix, and why it is not applied here
+
+Scope the dirty test to the roots the digest covers: dirt inside `config/` or
+`src/mapf/` suppresses it, dirt in `docs/` or the vault does not. That is narrowly
+correct — the digest hashes committed content at `commit`, so it is honest precisely
+when those roots match the commit, and a clean `src/mapf` with a dirty README is such
+a case.
+
+**Not applied, because it changes what future runs record and that is a
+pre-registration-adjacent decision, not a tidy-up.** The current rule is
+conservative in the direction the project has chosen everywhere else: over-including
+costs a visible false refusal, under-including costs an invisible false claim.
+Loosening it would mean a run recording a digest while *something* uncommitted was
+present, and the argument that the something cannot matter is exactly the argument
+ADR 0030 had to make by hand, on evidence, for 208 items.
+
+Recorded so the next person choosing has both halves: the cost is real and recurring,
+and the fix has a failure mode the current rule does not.
+
+### The practical rule, until then
+
+**Commit before exporting.** The export stamps the checkout it ran from, and an
+export taken mid-edit ships an identity that says nothing. The same already applies
+to running the corpus, and now to writing about it.
+
