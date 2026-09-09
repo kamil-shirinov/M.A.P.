@@ -298,7 +298,7 @@ def test_the_listing_checks_documents_against_the_frozen_corpus(
 
     result = _invoke(tmp_path, runs, "--frozen", str(frozen))
 
-    assert "exhibit    document is a frozen exhibit" in result.output
+    assert "a frozen exhibit, but not the ledger's run for it" in result.output
 
 
 def test_a_missing_frozen_record_reads_as_unchecked_not_as_no(
@@ -312,7 +312,7 @@ def test_a_missing_frozen_record_reads_as_unchecked_not_as_no(
     result = _invoke(tmp_path, runs, "--frozen", str(tmp_path / "absent.json"))
 
     assert result.exit_code == 0, result.output
-    assert "not checked against a frozen corpus" in result.output
+    assert "not compared (no frozen corpus or ledger supplied)" in result.output
 
 
 def test_a_frozen_record_without_exhibits_refuses_rather_than_checking_nothing(
@@ -412,3 +412,146 @@ def test_a_malformed_snapshot_date_is_refused(
 
     assert result.exit_code == 2
     assert "must be a date" in result.output
+
+
+def _frozen_for(tmp_path: Path, runs: Path, run_id: str) -> Path:
+    doc = json.loads((runs / run_id / "forecast.json").read_text())["source_doc_ids"][0]
+    path = tmp_path / "frozen.json"
+    path.write_text(
+        json.dumps({"exhibits": {"by_accession": {"0000000001-26-000001": {"document_id": doc}}}}),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _ledger_for(tmp_path: Path, run_id: str, *, band: str = "clean") -> Path:
+    path = tmp_path / "ledger.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "ticker": "AAPL",
+                "band": band,
+                "filing_date": "2026-07-31",
+                "status": "complete",
+                "run_id": run_id,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_a_panel_item_is_named_and_carries_its_band_and_filing_date(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+
+    result = _invoke(
+        tmp_path,
+        runs,
+        "--frozen",
+        str(_frozen_for(tmp_path, runs, run_id)),
+        "--ledger-path",
+        str(_ledger_for(tmp_path, run_id)),
+    )
+
+    assert "corpus     in the pre-registered panel — clean band, filed 2026-07-31" in result.output
+    # The relation line never says "scored": a ledger entry promises artifacts
+    # exist, and no per-item score is persisted anywhere for this to read. (The
+    # section legend above it does describe the panel as what `map evaluate`
+    # scores, which is a statement about the population, not about this run.)
+    relation_line = next(ln for ln in result.output.splitlines() if "corpus     " in ln)
+    assert "scored" not in relation_line
+
+
+def test_a_repeat_is_distinguished_from_the_ledgers_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+    empty = tmp_path / "empty.jsonl"
+    empty.write_text("", encoding="utf-8")
+
+    result = _invoke(
+        tmp_path,
+        runs,
+        "--frozen",
+        str(_frozen_for(tmp_path, runs, run_id)),
+        "--ledger-path",
+        str(empty),
+    )
+
+    assert "a frozen exhibit, but not the ledger's run for it" in result.output
+
+
+def test_a_missing_ledger_leaves_the_relation_to_the_document_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`map runs` must work with no ledger, and an absent one is not evidence that
+    a run is not a panel item."""
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+
+    result = _invoke(
+        tmp_path,
+        runs,
+        "--frozen",
+        str(_frozen_for(tmp_path, runs, run_id)),
+        "--ledger-path",
+        str(tmp_path / "absent.jsonl"),
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "a frozen exhibit, but not the ledger's run for it" in result.output
+
+
+def test_the_json_carries_the_relation_and_the_ledger_item(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+
+    body = json.loads(
+        _invoke(
+            tmp_path,
+            runs,
+            "--frozen",
+            str(_frozen_for(tmp_path, runs, run_id)),
+            "--ledger-path",
+            str(_ledger_for(tmp_path, run_id, band="ambiguous")),
+            "--json",
+        ).output
+    )
+
+    entry = body["corpus"][0]
+    assert entry["corpus_relation"] == "ledger_item"
+    assert entry["ledger_item"] == {
+        "ticker": "AAPL",
+        "band": "ambiguous",
+        "filing_date": "2026-07-31",
+    }
+
+
+def test_neither_map_supplied_reads_as_not_compared(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    result = _invoke(
+        tmp_path,
+        runs,
+        "--frozen",
+        str(tmp_path / "absent.json"),
+        "--ledger-path",
+        str(tmp_path / "absent.jsonl"),
+    )
+
+    assert "not compared (no frozen corpus or ledger supplied)" in result.output

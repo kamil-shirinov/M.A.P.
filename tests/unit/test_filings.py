@@ -337,3 +337,79 @@ def test_a_malformed_accession_drops_only_that_row() -> None:
     adapter = _adapter(lambda request: httpx.Response(200, json=payload))
     filings = adapter.earnings_filings("AAPL", START, END)
     assert [f.filed for f in filings] == [date(2025, 3, 1)]
+
+
+# ---------------------------------------------------------------------------
+# The by-CIK pre-screen read
+# ---------------------------------------------------------------------------
+def test_the_recent_block_is_read_by_cik_in_one_request() -> None:
+    """Submissions are addressed by CIK. The index holds 10,398 tickers over 7,998
+    filers, so a walk keyed on tickers fetches 2,400 identical documents."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(
+            200,
+            json={
+                "filings": {
+                    "recent": _block(
+                        [
+                            ("8-K", "2026-07-30", "2.02,9.01"),
+                            ("8-K", "2026-04-30", "5.02"),
+                            ("10-Q", "2026-04-30", ""),
+                        ]
+                    ),
+                    "files": [{"name": "CIK0000320193-submissions-001.json"}],
+                }
+            },
+        )
+
+    found = _adapter(handler).recent_earnings_filings(320193)
+
+    assert [f.filed for f in found] == [date(2026, 7, 30)]
+    assert seen == ["https://data.sec.gov/submissions/CIK0000320193.json"]
+
+
+def test_the_archives_are_never_walked_for_the_pre_screen() -> None:
+    """One request per filer, fixed. Walking `files` is unbounded per filer and
+    answers a question the pre-screen does not ask."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(
+            200,
+            json={
+                "filings": {
+                    "recent": _block([("10-K", "2026-02-01", "")]),
+                    "files": [
+                        {"name": "a.json", "filingFrom": "1994-01-01", "filingTo": "2010-01-01"}
+                    ],
+                }
+            },
+        )
+
+    assert _adapter(handler).recent_earnings_filings(320193) == ()
+    assert len(seen) == 1
+
+
+def test_a_filer_with_no_recent_block_is_empty_not_an_error() -> None:
+    """A shell, a new registrant, or a filer whose submissions carry no `recent`.
+    Empty is the honest pre-screen answer; raising would halt a 7,998-filer walk
+    on a document that is merely uninteresting."""
+    handler = lambda request: httpx.Response(200, json={"filings": {}})  # noqa: E731
+
+    assert _adapter(handler).recent_earnings_filings(1) == ()
+
+
+def test_a_submissions_document_with_no_filings_key_is_empty() -> None:
+    handler = lambda request: httpx.Response(200, json={"cik": "320193"})  # noqa: E731
+
+    assert _adapter(handler).recent_earnings_filings(320193) == ()
+
+
+def test_a_filings_value_that_is_not_an_object_is_empty() -> None:
+    handler = lambda request: httpx.Response(200, json={"filings": []})  # noqa: E731
+
+    assert _adapter(handler).recent_earnings_filings(320193) == ()

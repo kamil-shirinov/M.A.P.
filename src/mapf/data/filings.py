@@ -117,6 +117,29 @@ class EdgarFilings:
         )
         return tuple(inside)
 
+    def recent_earnings_filings(self, cik: int) -> tuple[EarningsFiling, ...]:
+        """Item 2.02 8-Ks in the filer's `recent` block, addressed by CIK.
+
+        Deliberately ONE request and deliberately not "every filing this CIK ever
+        made". The submissions document carries a `recent` block — the newest ~1,000
+        filings, roughly a year for an active filer — plus paginated archives for
+        everything older. Walking the archives is unbounded per filer, and the
+        question a pre-screen answers does not need them: a company that reports
+        quarterly has four Item 2.02 8-Ks in any twelve months.
+
+        So a filer that stopped reporting three years ago comes back empty here.
+        That is a usable pre-screen answer and a false statement about history,
+        which is why the caller must record it as "not in the recent block" and
+        never as "never filed". Named for the block it reads, for the same reason.
+
+        By CIK rather than by ticker because submissions are addressed by CIK: the
+        symbol index holds 10,398 tickers over 7,998 filers, so walking tickers
+        would fetch 2,400 identical documents.
+        """
+        block = self._fetch(SUBMISSIONS_URL.format(cik=cik)).get("filings", {})
+        recent = block.get("recent", {}) if isinstance(block, dict) else {}
+        return _earnings_rows(recent, cik)
+
     def _fetch(self, url: str) -> dict[str, Any]:
         self._throttle.wait()
         try:

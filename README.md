@@ -542,6 +542,25 @@ uv run lint-imports          # architecture boundaries — see ADR 0004
 The test suite must pass with the inference server switched off. If it ever needs a live
 model, CI is broken.
 
+### Coverage is gated at 100%, and `scripts/` is outside the gate
+
+`addopts` measures `--cov=mapf`, so the gate covers the package and **not** `scripts/`,
+which is tracked, linted, type-checked, and untested. That was a fair trade while the
+directory held one-off diagnostics. It is worth stating plainly now, because two of the
+three scripts there produce output this project has published from:
+
+| Script | What it produced |
+|---|---|
+| `scripts/ablation.py` | The four-arm ablation — arms A/C/control, 786 runs, reported in the findings and the timeline |
+| `scripts/edgar_prescreen.py` | `var/filers/item_202.jsonl` — which SEC filers publish Item 2.02 8-Ks |
+| `scripts/backfill_forecast_digest.py` | A one-off repair of stored manifests |
+
+So a result quoted from this project may have come through code the 100% figure does not
+describe. The reusable halves live under test in `mapf` — the Item 2.02 item filter in
+`mapf.data.filings`, the pipeline in `mapf.pipeline` — and what stays in `scripts/` is
+the walking, the sampling and the printing. That is the boundary, not a claim that the
+scripts are covered.
+
 ---
 
 ## A documented property: the probability-weight tolerance

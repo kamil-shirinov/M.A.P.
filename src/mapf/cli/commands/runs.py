@@ -18,11 +18,36 @@ from mapf.bootstrap import build_price_snapshot
 from mapf.cli.app import app, as_shown, fail, handle
 from mapf.cli.commands.evaluate import SCORING_VINTAGE
 from mapf.core.errors import MapError
+from mapf.corpus.ledger import Ledger
 from mapf.corpus.record import FrozenRecordError, load_frozen
-from mapf.eval.journal import SOURCES, JournalEntry, Source, read_journal
+from mapf.eval.journal import SOURCES, JournalEntry, LedgerItem, Source, read_journal
 from mapf.settings import load
 
 FROZEN = Path("corpus/frozen.json")
+LEDGER = Path("var/corpus/ledger.jsonl")
+
+
+def _ledger_items(path: Path) -> dict[str, LedgerItem] | None:
+    """Which corpus item each run_id belongs to, as the ledger recorded it.
+
+    Composed here for the same reason the exhibit map is: `mapf.corpus` sits above
+    `mapf.eval`. A missing ledger is `None`, not an empty mapping — an empty one
+    would answer "no run is a corpus item", where the truth is that nothing was
+    looked up.
+
+    Only resolved entries carry a run_id worth trusting; `resolved()` is the same
+    view a resume and a scoring pass use, so the three cannot disagree about which
+    runs the ledger claims.
+    """
+    if not path.is_file():
+        return None
+    return {
+        str(entry.run_id): LedgerItem(
+            ticker=entry.ticker, band=entry.band, filing_date=entry.filing_date
+        )
+        for entry in Ledger(path).resolved().values()
+        if entry.run_id is not None
+    }
 
 
 def _frozen_exhibits(path: Path) -> frozenset[str] | None:
@@ -51,8 +76,16 @@ def _frozen_exhibits(path: Path) -> frozenset[str] | None:
     )
 
 
-# What each section means, printed with it. A reader should not have to know the
-# manifest schema to know whether a number in front of them is scoreable.
+# Never "scored". The ledger says artifacts exist; whether an item was scored
+# depends on its split and on `map evaluate` having run, and no per-item score is
+# persisted anywhere for this to read.
+RELATION_LEGEND: dict[str, str] = {
+    "ledger_item": "in the pre-registered panel",
+    "repeat_of_exhibit": "a frozen exhibit, but not the ledger's run for it",
+    "outside_corpus": "document is not in the frozen corpus",
+    "unchecked": "not compared (no frozen corpus or ledger supplied)",
+}
+
 YELLOW = typer.colors.YELLOW
 
 # Why there is no close. Three different sentences, because they are three
@@ -63,6 +96,8 @@ OUTCOME_LEGEND: dict[str, str] = {
     "not_requested": "not retrieved (no snapshot named)",
 }
 
+# What each section means, printed with it. A reader should not have to know the
+# manifest schema to know whether a number in front of them is scoreable.
 LEGEND: dict[str, str] = {
     "corpus": "in frozen.json — the pre-registered panel, scored by `map evaluate`",
     "edgar": "--from-edgar — outside the corpus, unscored, never pooled with it",
@@ -74,6 +109,11 @@ LEGEND: dict[str, str] = {
 def _as_dict(entry: JournalEntry) -> dict[str, object]:
     body = asdict(entry)
     body["anchor_date"] = entry.anchor_date.isoformat()
+    if entry.ledger_item is not None:
+        body["ledger_item"] = {
+            **asdict(entry.ledger_item),
+            "filing_date": entry.ledger_item.filing_date.isoformat(),
+        }
     if entry.outcome is not None:
         body["outcome"] = {
             **asdict(entry.outcome),
@@ -88,18 +128,16 @@ def _print(source: str, entries: tuple[JournalEntry, ...]) -> None:
     typer.secho(f"\n{source}  ({len(entries)})", fg=typer.colors.CYAN, bold=True)
     typer.secho(f"  {LEGEND[source]}", fg=typer.colors.BRIGHT_BLACK)
     for entry in entries:
-        # Spelled out rather than a tick: the reader has to see that "unchecked"
-        # is a third state, and a blank column would read as "no".
-        membership = {
-            True: "document is a frozen exhibit",
-            False: "document is not in the frozen corpus",
-            None: "not checked against a frozen corpus",
-        }[entry.document_is_frozen_exhibit]
+        # Spelled out rather than a tick, and never the word "scored": a ledger
+        # entry promises artifacts exist, not that anything was scored.
+        relation = RELATION_LEGEND[entry.corpus_relation]
+        if entry.ledger_item is not None:
+            relation += f" — {entry.ledger_item.band} band, filed {entry.ledger_item.filing_date}"
         typer.echo(
             f"  {entry.anchor_date}  {entry.ticker:<6} "
             f"spot {entry.anchor_spot:>10.2f}  h={entry.horizon_days:<3} {entry.run_id[:8]}"
         )
-        typer.secho(f"    exhibit    {membership}", fg=typer.colors.BRIGHT_BLACK)
+        typer.secho(f"    corpus     {relation}", fg=typer.colors.BRIGHT_BLACK)
         if entry.arm is not None:
             # Loud, not grey: an arm is not a projection, and arm A's forecasts are
             # byte-identical to the corpus runs they replay.
@@ -155,6 +193,13 @@ def runs(
         ),
     ),
     as_json: bool = typer.Option(False, "--json", help="Emit JSON instead of a listing."),
+    ledger_path: Path = typer.Option(
+        LEDGER,
+        help=(
+            "The corpus ledger, which maps a run to the item it executed. Absent, "
+            "a run can only be related to the corpus by its document."
+        ),
+    ),
     frozen: Path = typer.Option(
         FROZEN,
         help=(
@@ -188,6 +233,7 @@ def runs(
             today=datetime.now(UTC).date(),
             limit=limit or None,
             frozen_exhibits=_frozen_exhibits(frozen),
+            ledger_items=_ledger_items(ledger_path),
         )
         shown: tuple[Source, ...] = (source,) if source is not None else journal.populated()
         if as_json:

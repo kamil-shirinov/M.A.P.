@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -50,6 +50,40 @@ _logger = structlog.get_logger(__name__)
 
 Source = Literal["corpus", "edgar", "news", "unknown"]
 SOURCES: tuple[Source, ...] = ("corpus", "edgar", "news", "unknown")
+
+# How a run stands to the pre-registered panel. ONE enum rather than two booleans:
+# `document_is_frozen_exhibit` and `is_a_ledger_item` would give four combinations,
+# and one of them — not a frozen exhibit but a ledger item — cannot happen. It means
+# the ledger and the corpus have diverged, which is a loud failure elsewhere
+# (`UnknownItemError`), not a state a consumer should be invited to render.
+#
+#   "ledger_item"        the ledger maps this run_id to a frozen corpus item. The
+#                        strongest claim here, and NOT a claim that it was scored:
+#                        a ledger entry promises artifacts exist. Whether an item
+#                        was scored depends on its split and on `map evaluate`
+#                        having run, and no per-item score is persisted anywhere.
+#   "repeat_of_exhibit"  the document is a frozen exhibit, but no ledger entry
+#                        points at this run — a re-run, a post-band repeat, an
+#                        ablation replay. 74 of the 775 matching runs are this.
+#   "outside_corpus"     the document is not one the corpus froze.
+#   "unchecked"          neither map was supplied, so nothing was compared.
+CorpusRelation = Literal["ledger_item", "repeat_of_exhibit", "outside_corpus", "unchecked"]
+
+
+@dataclass(frozen=True)
+class LedgerItem:
+    """Which corpus item a run_id belongs to, as the ledger recorded it.
+
+    Band and filing date are CARRIED, never re-derived. A corpus forecast is dated
+    the day AFTER the filing it reads, so reconstructing the filing date from the
+    anchor is off by a day and matching on it silently matches nothing — the same
+    trap `Loaded` documents on the scoring side. The consumer is given the values
+    the ledger actually holds.
+    """
+
+    ticker: str
+    band: str
+    filing_date: date
 
 
 class _StoredPrices(BaseModel):
@@ -170,6 +204,13 @@ class JournalEntry:
     # `None` means no map was supplied, so nothing was checked. Distinct from
     # `False`, which is a claim.
     document_is_frozen_exhibit: bool | None
+    # Where this run stands to the pre-registered panel, in one value. Derived at
+    # read time from two frozen records plus the ledger, all passed in.
+    corpus_relation: CorpusRelation
+    # The corpus item the ledger maps this run to, or None. Present only when
+    # `corpus_relation` is "ledger_item"; it carries band and filing date so a
+    # consumer never re-derives them from the anchor.
+    ledger_item: LedgerItem | None
     outcome: Outcome | None
     # Why there is or is not a close, per run. It replaces a `window_elapsed`
     # boolean, which could not tell "the horizon has not elapsed" from "the
@@ -322,6 +363,22 @@ def _outcome(
     )
 
 
+def _relation(is_exhibit: bool | None, item: LedgerItem | None) -> CorpusRelation:
+    """One value from two independent lookups, with the impossible pair excluded.
+
+    A ledger entry wins outright: it names the item directly, which is a stronger
+    statement than a document hash matching. If a run were somehow a ledger item
+    whose document is NOT a frozen exhibit, the corpus and the ledger have diverged
+    — reported as `ledger_item` here rather than invented into a fourth state,
+    because scoring already refuses that case loudly and this is a listing.
+    """
+    if item is not None:
+        return "ledger_item"
+    if is_exhibit is None:
+        return "unchecked"
+    return "repeat_of_exhibit" if is_exhibit else "outside_corpus"
+
+
 def _entries(
     runs_dir: Path,
     snapshot: PriceSnapshotIndex | None,
@@ -329,6 +386,7 @@ def _entries(
     limit: int | None,
     skipped: Counter[str],
     frozen_exhibits: frozenset[str] | None,
+    ledger_items: Mapping[str, LedgerItem] | None,
 ) -> Iterator[JournalEntry]:
     directories = sorted((c for c in runs_dir.iterdir() if c.is_dir()), key=lambda c: c.name)
     read = [pair for d in directories if (pair := _read_run(d, skipped)) is not None]
@@ -337,13 +395,21 @@ def _entries(
     read.sort(key=lambda pair: pair[1].prices.last_trading_date, reverse=True)
     for forecast, manifest in read[:limit] if limit is not None else read:
         anchor = manifest.prices.last_trading_date
+        run_id = str(forecast.run_id)
+        is_exhibit = (
+            None
+            if frozen_exhibits is None
+            else any(doc in frozen_exhibits for doc in forecast.source_doc_ids)
+        )
+        item = None if ledger_items is None else ledger_items.get(run_id)
+        relation = _relation(is_exhibit, item)
         outcome, status = (
             (None, "not_requested")
             if snapshot is None
             else _outcome(snapshot, forecast, anchor, today)
         )
         yield JournalEntry(
-            run_id=str(forecast.run_id),
+            run_id=run_id,
             ticker=forecast.ticker,
             # The session the spot was read from, not `as_of`: `as_of` is a wall
             # clock (and for corpus items, the day after the filing), while the
@@ -355,11 +421,9 @@ def _entries(
             document_source=manifest.document_source or "unknown",
             freeze_version=manifest.freeze_version,
             arm=manifest.arm,
-            document_is_frozen_exhibit=(
-                None
-                if frozen_exhibits is None
-                else any(doc in frozen_exhibits for doc in forecast.source_doc_ids)
-            ),
+            document_is_frozen_exhibit=is_exhibit,
+            corpus_relation=relation,
+            ledger_item=item,
             outcome=outcome,
             outcome_status=status,
         )
@@ -372,6 +436,7 @@ def read_journal(
     today: date,
     limit: int | None = None,
     frozen_exhibits: frozenset[str] | None = None,
+    ledger_items: Mapping[str, LedgerItem] | None = None,
 ) -> Journal:
     """Every readable run under `runs_dir`, grouped by document source.
 
@@ -380,17 +445,18 @@ def read_journal(
     calendar made from a question nobody asked. `limit` applies before grouping and
     after sorting, so it means "the N most recent runs", not "N of each kind".
 
-    `frozen_exhibits` is the set of `document_id`s the frozen corpus holds, passed
-    IN rather than loaded here: `mapf.corpus` sits above `mapf.eval`, and a journal
-    that reached for a corpus would both break the layer contract and stop working
-    in a checkout that has no corpus. Omit it and the membership field reads `None`
-    — nothing checked — rather than `False`.
+    `frozen_exhibits` and `ledger_items` are both passed IN rather than loaded here:
+    `mapf.corpus` sits above `mapf.eval`, and a journal that reached for a corpus or
+    a ledger would break the layer contract and stop working in a checkout that has
+    neither. Omit them and the membership field reads `None` and `corpus_relation`
+    reads `"unchecked"` — nothing compared — rather than `False` and
+    `"outside_corpus"`, which are claims.
     """
     if not runs_dir.is_dir():
         return Journal({})
     grouped: dict[Source, list[JournalEntry]] = {source: [] for source in SOURCES}
     counted: Counter[str] = Counter()
-    for entry in _entries(runs_dir, snapshot, today, limit, counted, frozen_exhibits):
+    for entry in _entries(runs_dir, snapshot, today, limit, counted, frozen_exhibits, ledger_items):
         grouped[entry.document_source].append(entry)
     return Journal(
         {source: tuple(entries) for source, entries in grouped.items()},

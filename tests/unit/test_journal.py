@@ -17,7 +17,14 @@ import pytest
 
 from mapf.core.models import Bar, Forecast, PriceWindow, Scenario, ScenarioSet
 from mapf.core.ports import SamplingParams
-from mapf.eval.journal import SOURCES, Journal, JournalEntry, Outcome, read_journal
+from mapf.eval.journal import (
+    SOURCES,
+    Journal,
+    JournalEntry,
+    LedgerItem,
+    Outcome,
+    read_journal,
+)
 from mapf.pipeline.manifest import (
     AgentRecord,
     DividendWindow,
@@ -176,6 +183,8 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
         "freeze_version",
         "arm",
         "document_is_frozen_exhibit",
+        "corpus_relation",
+        "ledger_item",
         "outcome",
         "outcome_status",
     }
@@ -590,3 +599,118 @@ def test_an_arm_does_not_move_a_run_between_populations(tmp_path: Path) -> None:
 
     assert len(journal.corpus) == 1
     assert journal.corpus[0].arm == "A"
+
+
+# ---------------------------------------------------------------------------
+# corpus_relation — the three cases a front end has to tell apart
+# ---------------------------------------------------------------------------
+def test_a_ledger_entry_makes_a_run_a_panel_item(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+    item = LedgerItem(ticker="AAPL", band="clean", filing_date=date(2026, 8, 2))
+
+    entry = read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        frozen_exhibits=frozenset({_doc_id_of(runs, run_id)}),
+        ledger_items={run_id: item},
+    ).corpus[0]
+
+    assert entry.corpus_relation == "ledger_item"
+    assert entry.ledger_item == item
+
+
+def test_a_frozen_exhibit_with_no_ledger_entry_is_a_repeat(tmp_path: Path) -> None:
+    """The 74 runs that would otherwise be indistinguishable from panel items:
+    re-runs, post-band repeats, ablation replays of the same document."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+
+    entry = read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        frozen_exhibits=frozenset({_doc_id_of(runs, run_id)}),
+        ledger_items={},
+    ).corpus[0]
+
+    assert entry.corpus_relation == "repeat_of_exhibit"
+    assert entry.ledger_item is None
+    assert entry.document_is_frozen_exhibit is True
+
+
+def test_a_document_the_corpus_never_froze_is_outside_it(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    entry = read_journal(
+        runs, today=date(2026, 9, 8), frozen_exhibits=frozenset(), ledger_items={}
+    ).corpus[0]
+
+    assert entry.corpus_relation == "outside_corpus"
+
+
+def test_supplying_neither_map_is_unchecked_not_outside(tmp_path: Path) -> None:
+    """ "Outside the corpus" is a claim. Nothing was compared."""
+    runs = tmp_path / "runs"
+    _write_run(runs)
+
+    assert read_journal(runs, today=date(2026, 9, 8)).corpus[0].corpus_relation == "unchecked"
+
+
+def test_the_band_and_filing_date_are_carried_not_re_derived(tmp_path: Path) -> None:
+    """A corpus forecast is dated the day AFTER the filing it reads. Reconstructing
+    the filing date from the anchor is off by a day, and matching on it silently
+    matches nothing — the trap `Loaded` documents on the scoring side."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs, anchor=date(2026, 8, 3))
+
+    entry = read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        ledger_items={
+            run_id: LedgerItem(ticker="AAPL", band="ambiguous", filing_date=date(2026, 7, 31))
+        },
+    ).corpus[0]
+
+    assert entry.ledger_item is not None
+    assert entry.ledger_item.band == "ambiguous"
+    assert entry.ledger_item.filing_date == date(2026, 7, 31)
+    # Emphatically not the anchor, and not the anchor minus one.
+    assert entry.ledger_item.filing_date != entry.anchor_date
+
+
+def test_a_ledger_entry_wins_over_a_document_that_does_not_match(tmp_path: Path) -> None:
+    """The pair that cannot happen: a ledger item whose document is not a frozen
+    exhibit means the ledger and the corpus have diverged. Reported as the ledger
+    says rather than invented into a fourth state — scoring already refuses that
+    case loudly, and this is a listing."""
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+
+    entry = read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        frozen_exhibits=frozenset(),
+        ledger_items={
+            run_id: LedgerItem(ticker="AAPL", band="clean", filing_date=date(2026, 8, 2))
+        },
+    ).corpus[0]
+
+    assert entry.corpus_relation == "ledger_item"
+    assert entry.document_is_frozen_exhibit is False
+
+
+def test_corpus_relation_never_moves_a_run_between_populations(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs, source="edgar", freeze_version=None)
+
+    journal = read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        ledger_items={
+            run_id: LedgerItem(ticker="AAPL", band="clean", filing_date=date(2026, 8, 2))
+        },
+    )
+
+    assert journal.corpus == ()
+    assert journal.edgar[0].corpus_relation == "ledger_item"
