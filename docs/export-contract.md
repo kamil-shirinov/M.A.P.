@@ -259,8 +259,22 @@ hold its outcome — the bar did not exist when the run was written. Show it as
 ```
 
 `null` on 770 of 779 runs. Present on **9**, where the close at the anchor in the pinned
-snapshot is not the price the forecast was produced from — 7 SCCO at ×0.988142 (the
-corpus holds a 1.012 split) and 2 AAPL at ×1.007509.
+snapshot is not the price the forecast was produced from — 7 SCCO (the corpus holds a
+1.012 split, so ≈0.988142) and 2 AAPL (≈1.007509).
+
+**`ratio` is not a groupable key.** It is computed per run from that run's own recorded
+spot, and both sides are float32 off the wire, so the nine rows carry **seven distinct
+float values** for **two** corporate actions:
+
+```
+SCCO  0.9881423249262894   0.9881423325818092   0.9881423105034546
+      0.9881422964658348   0.9881422790266337   0.9881422904830778
+AAPL  1.007508703480546  (both rows)
+```
+
+Grouping on equality gives seven groups where there are two events. **Group on `ticker`,
+or round** — six decimal places collapses these nine rows to the two values above.
+Display the same way: `×0.988142`, not the full float.
 
 **Scoring refuses these items.** A return whose endpoints come from two adjustment bases
 is wrong while every individual number stays plausible, so `SpotDriftError` fires and the
@@ -419,8 +433,17 @@ so a re-run under changed code lands beside its predecessor rather than replacin
 { "split": "holdout", "exported": false,
   "reason": "The holdout was scored once. Its per-item scores were printed once and were
              never persisted, and they cannot be recovered…",
-  "survives_in": "corpus/holdout_spend.jsonl (tracked; …)" }
+  "survives_in": "corpus/holdout_spend.jsonl (tracked; its git history is the record of
+                  the single spend)",
+  "what_survives": [
+    "the calibration coefficients and their fitted form",
+    "the band, item count, date, commit, freeze version and price vintage" ] }
 ```
+
+**`what_survives` is the field to render from**, not `reason`. `reason` explains why the
+per-item detail is gone and reads as an apology; `what_survives` says what a reader can
+still go and look at, and is already a list a UI can lay out. Use `reason` as the
+explanation behind it — a tooltip, a disclosure — and `survives_in` as the pointer.
 
 The holdout was scored **once**, on 173 items, and `map evaluate --split holdout` is
 refused before anything is computed once that spend is recorded. There is no re-run that

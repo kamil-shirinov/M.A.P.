@@ -2277,3 +2277,26 @@ The residual 32 charts whose last bar precedes the vintage's latest window *boun
 an artifact of comparing a bar date to a requested end date six days in the future. Every
 bar the vintage holds is exported.
 
+### A derived ratio is not an identifier — noted 2026-09-10
+
+The `anchor_drift.ratio` above is computed per run from that run's own recorded spot,
+and both sides are float32 as the provider served them. So nine drifted rows carry
+**seven distinct values** for **two** corporate actions:
+
+```
+SCCO  0.9881423249262894  0.9881423325818092  0.9881423105034546
+      0.9881422964658348  0.9881422790266337  0.9881422904830778
+AAPL  1.007508703480546  (both rows)
+```
+
+Found by a consumer reading the exported files, not by the code that wrote them, and
+that is the general point: **a quantity computed to describe an event is not a key for
+the event.** Two runs of the same split produce ratios that differ in the ninth decimal
+because their anchors differ, and a consumer grouping on equality gets one group per run.
+The contract now says to group on `ticker` or round to six places.
+
+Nothing is wrong with the value — it is the honest ratio for that run. The error would
+have been in a reader treating it as an identity. Same family as the `head_tail_v1`
+entry in #39, from the other direction: there one name covered two states, here one state
+produced seven names.
+
