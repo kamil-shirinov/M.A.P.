@@ -1,0 +1,275 @@
+/* ---------- Density overrides -------------------------------------------
+   base.css sets a document-style rhythm. These tighten it to terminal
+   density. They live here because this change was scoped to two files; they
+   belong in base.css if that constraint lifts. */
+body { line-height: 1.4; letter-spacing: 0; }
+.shell { max-width: 1280px; padding: var(--sp-5) var(--sp-5) var(--sp-7); }
+.masthead { padding-bottom: var(--sp-3); margin-bottom: var(--sp-4); }
+.masthead h1 { font-size: var(--step-1); letter-spacing: .14em; }
+.panel { border-radius: var(--radius); }
+.panel > header { padding: var(--sp-3) var(--sp-4); }
+.panel > header h2 { font-size: var(--step--1); letter-spacing: .12em; }
+.panel > .body { padding: var(--sp-4); }
+.stack, .layout { gap: var(--sp-4); }
+
+/* ---------- Figures and provenance ------------------------------------ */
+/* Numbers are the heaviest thing on screen: brightest ink, mono, medium
+   weight, tight tracking. Labels around them are small, muted and spaced. */
+.fig {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink-num);
+}
+.fig[data-prov="fabricated"] {
+  color: var(--fab);
+  border-bottom: 1px dotted currentColor;
+}
+.fig[data-prov="fabricated"]::after {
+  content: "†";
+  font-size: .72em; vertical-align: super; line-height: 0;
+  margin-left: .12em; border: 0;
+}
+.fig[data-prov="derived"] { color: var(--ink-num); }
+.fig.up   { color: var(--up); }
+.fig.down { color: var(--down); }
+.fig.lg   { font-size: var(--step-3); font-weight: 600; letter-spacing: -0.02em; }
+
+/* Page-level state: any fabricated figure anywhere lights these up. */
+.provenance-banner { display: none; }
+body[data-page-prov="fabricated"] .provenance-banner { display: flex; }
+.chart-watermark { display: none; }
+body[data-page-prov="fabricated"] .chart-watermark { display: block; }
+
+.provenance-banner {
+  align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-4);
+  background: var(--fab-soft);
+  border: 1px solid var(--fab);
+  border-left-width: 2px;
+  border-radius: var(--radius);
+  color: var(--fab);
+  font-size: var(--step--1);
+}
+.provenance-banner strong { font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.provenance-banner .legend { margin-left: auto; }
+
+/* ---------- Search ----------------------------------------------------- */
+.search { position: relative; }
+.search input {
+  width: 100%; padding: var(--sp-3) var(--sp-4);
+  background: var(--sunken);
+  border: 1px solid var(--rule-2); border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: var(--step-1); letter-spacing: .02em;
+  color: var(--ink-num);
+}
+.search input::placeholder { font-family: var(--font-sans); color: var(--ink-3); letter-spacing: 0; }
+.search input:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.search-results {
+  position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 2px);
+  max-height: 340px; overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--rule-2); border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  list-style: none; margin: 0; padding: 0;
+}
+.search-results:empty { display: none; }
+.search-results li {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-4); cursor: pointer;
+  border-left: 2px solid transparent;
+}
+.search-results li[aria-selected="true"] {
+  background: var(--accent-soft); border-left-color: var(--accent);
+}
+.search-results .sym {
+  font-family: var(--font-mono); font-weight: 600; color: var(--ink-num);
+  min-width: 4.5em; letter-spacing: .02em;
+}
+.search-results .nm {
+  color: var(--ink-2); font-size: var(--step--1);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.search-results .ex {
+  margin-left: auto; color: var(--ink-3); font-size: var(--step--1);
+  font-family: var(--font-mono);
+}
+.search-results .synthetic { color: var(--fab); }
+
+/* ---------- Chart ------------------------------------------------------ */
+.chart-wrap { position: relative; }
+.chart { display: block; width: 100%; height: auto; }
+.chart .grid line   { stroke: var(--rule); stroke-width: 1; }
+.chart .axis text   { fill: var(--ink-3); font: 500 var(--step--1) var(--font-mono); }
+.chart .price-line  { fill: none; stroke: var(--ink-num); stroke-width: 1.25; }
+.chart .cone-80     { fill: var(--accent); opacity: .18; }
+.chart .cone-50     { fill: var(--accent); opacity: .3; }
+.chart .cone-median { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.chart .join        { stroke: var(--rule-2); stroke-dasharray: 2 3; }
+.chart .spot-dot    { fill: var(--ink-num); }
+.chart .forecast-region { fill: var(--accent); letter-spacing: .06em; }
+
+/* The calibration state changes the cone's whole presentation. One attribute
+   drives every difference, so half of it cannot be styled by accident. */
+[data-calibration="uncalibrated"] .chart .cone-80,
+[data-calibration="uncalibrated"] .chart .cone-50 {
+  fill: none;
+  stroke: var(--uncal);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: .9;
+}
+[data-calibration="uncalibrated"] .chart .cone-median {
+  stroke: var(--uncal); stroke-dasharray: 4 3;
+}
+[data-calibration="uncalibrated"] .chart .forecast-region { fill: var(--uncal); }
+
+.chart-watermark { position: absolute; inset: 0; pointer-events: none; }
+:root[data-theme="light"] .chart-watermark span,
+.chart-watermark span:where(:root:not([data-theme="dark"]) *) { }
+.chart-watermark span {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font: 600 var(--step-2)/1 var(--font-sans);
+  letter-spacing: .38em; text-transform: uppercase;
+  color: color-mix(in srgb, var(--fab) 34%, transparent);
+  transform: rotate(-18deg);
+}
+
+/* ---------- Horizon + calibration --------------------------------------- */
+.horizon { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-2); }
+.horizon .opt {
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--sunken);
+  border: 1px solid var(--rule-2); border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2);
+  cursor: pointer; text-align: center;
+}
+.horizon .opt:hover { border-color: var(--rule-2); color: var(--ink-num); }
+.horizon .opt[aria-pressed="true"] {
+  background: var(--accent); border-color: var(--accent);
+  color: #fff; font-weight: 600;
+}
+.horizon .opt .mark { font-size: .85em; opacity: .85; margin-left: .35em; }
+
+.calibration-note {
+  margin-top: var(--sp-3); padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius); font-size: var(--step--1);
+  border: 1px solid var(--rule); border-left-width: 2px;
+  background: var(--sunken); color: var(--ink-2);
+}
+[data-calibration="uncalibrated"] .calibration-note {
+  border-color: var(--uncal); background: var(--uncal-soft); color: var(--uncal);
+}
+[data-calibration="uncalibrated"] .horizon .opt[aria-pressed="true"] {
+  background: var(--uncal); border-color: var(--uncal); color: #100c04;
+}
+
+/* ---------- Scenarios --------------------------------------------------- */
+.scenarios { display: grid; gap: var(--sp-3); grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 780px) { .scenarios { grid-template-columns: 1fr; } }
+.scenario {
+  padding: var(--sp-4);
+  border: 1px solid var(--rule); border-radius: var(--radius);
+  background: var(--sunken);
+}
+.scenario h3 {
+  font-size: var(--step--1); font-weight: 500; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3); margin-bottom: var(--sp-3);
+}
+.scenario .target { display: block; margin-bottom: var(--sp-2); }
+.scenario dl {
+  display: grid; grid-template-columns: auto auto;
+  gap: var(--sp-2) var(--sp-3); margin: var(--sp-3) 0 0;
+}
+.scenario dt {
+  color: var(--ink-3); font-size: var(--step--1);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.scenario dd { margin: 0; text-align: right; }
+.scenario .why {
+  margin-top: var(--sp-3); padding-top: var(--sp-3);
+  border-top: 1px solid var(--rule);
+  color: var(--ink-2); font-size: var(--step--1); line-height: 1.5;
+}
+.weightbar { height: 2px; background: var(--rule-2); overflow: hidden; margin-top: var(--sp-3); }
+.weightbar i { display: block; height: 100%; background: var(--accent); }
+[data-calibration="uncalibrated"] .weightbar i { background: var(--uncal); }
+
+/* ---------- Tables ------------------------------------------------------ */
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: var(--sp-2) var(--sp-3); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; padding-left: 0; }
+th:last-child, td:last-child { padding-right: 0; }
+thead th {
+  font-size: var(--step--1); font-weight: 500; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink-3);
+  border-bottom: 1px solid var(--rule-2); padding-bottom: var(--sp-3);
+}
+tbody td { font-size: var(--step-0); }
+tbody tr + tr td { border-top: 1px solid var(--rule); }
+tbody tr:hover td { background: var(--sunken); }
+.empty { padding: var(--sp-5); text-align: center; color: var(--ink-3); }
+
+/* ---------- Reliability (corpus-wide, never per ticker) ----------------- */
+.reliability { display: grid; gap: var(--sp-2); }
+.reliability .scope {
+  font-size: var(--step--1); color: var(--ink-2); line-height: 1.5;
+  padding: var(--sp-3); background: var(--sunken);
+  border-left: 2px solid var(--rule-2); border-radius: var(--radius);
+}
+.reliability .row {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-2) 0;
+}
+.reliability .row + .row { border-top: 1px solid var(--rule); }
+.reliability .row .k {
+  color: var(--ink-3); font-size: var(--step--1);
+  letter-spacing: .06em; text-transform: uppercase;
+}
+.reliability .row .v { margin-left: auto; }
+
+/* ---------- Audit strip -------------------------------------------------- */
+.audit { display: grid; gap: var(--sp-1); }
+.audit .model {
+  display: grid; grid-template-columns: 1fr auto; gap: var(--sp-1) var(--sp-3);
+  padding: var(--sp-3) 0;
+}
+.audit .model + .model { border-top: 1px solid var(--rule); }
+.audit .role {
+  grid-column: 1 / -1;
+  font-size: var(--step--1); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.audit .name {
+  font-family: var(--font-mono); font-size: var(--step--1);
+  color: var(--ink-2); overflow-wrap: anywhere;
+}
+.audit .ms { white-space: nowrap; text-align: right; }
+.audit .trace { margin-top: var(--sp-2); font-size: var(--step--1); color: var(--ink-3); }
+.audit .trace a { color: var(--accent); }
+
+/* ---------- Audit failure overlay (dev) ---------------------------------- */
+.prov-violation { outline: 1px solid var(--down) !important; outline-offset: 1px; }
+.audit-alarm {
+  position: fixed; inset-block-end: var(--sp-4); inset-inline: var(--sp-4);
+  z-index: 100; padding: var(--sp-3) var(--sp-4);
+  background: var(--down); color: #fff; border-radius: var(--radius);
+  font-size: var(--step--1); font-weight: 500;
+}
+
+/* ---------- Search panel density ---------------------------------------- */
+.search-panel .body { padding: var(--sp-3); }
+
+/* The watermark needs different weight per theme: 34% reads correctly on
+   near-black and shouts on paper. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .chart-watermark span {
+    color: color-mix(in srgb, var(--fab) 20%, transparent);
+  }
+}
+:root[data-theme="light"] .chart-watermark span {
+  color: color-mix(in srgb, var(--fab) 20%, transparent);
+}
