@@ -36,9 +36,10 @@
 .cmp-badge--holdout { border-color: var(--accent); color: var(--accent); }
 
 .cmp-facts {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: var(--sp-3) var(--sp-5); margin: var(--sp-5) 0 var(--sp-4);
+  display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-7);
+  margin: var(--sp-5) 0 var(--sp-4);
 }
+.cmp-fact { min-width: 7rem; }
 .cmp-facts dt {
   font-size: var(--step--1); text-transform: uppercase; letter-spacing: .1em;
   color: var(--ink-3); margin-bottom: var(--sp-1);

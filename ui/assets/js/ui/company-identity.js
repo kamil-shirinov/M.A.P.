@@ -104,10 +104,16 @@ function filerNote(screen) {
   return p;
 }
 
+/** Each pair is its own grid item. As bare dt/dd children they flowed as
+    independent cells, so a label landed at the end of one row and its value at
+    the start of the next. */
 function addFact(dl, label, valueNode) {
+  const pair = document.createElement("div");
+  pair.className = "cmp-fact";
   const dt = document.createElement("dt");
   dt.textContent = label;
   const dd = document.createElement("dd");
   dd.append(valueNode);
-  dl.append(dt, dd);
+  pair.append(dt, dd);
+  dl.append(pair);
 }
