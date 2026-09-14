@@ -11,6 +11,43 @@ ES module imports are blocked over `file://`, so it needs to be served:
 
 Then open <http://127.0.0.1:8756/>. This is what `map ui` will do in production.
 
+## Tests
+
+    node --test
+
+No runner, no `package.json`, no build step — Node's own test runner over
+`tests/*.test.mjs`. Adding a framework here would contradict the line above.
+
+## Generating the export
+
+The front end reads a static export produced by the M.A.P. CLI. It is **not in this
+repository** — `assets/export/` is gitignored, because it is 5.2 MB of generated JSON
+whose contents change every time the corpus is re-scored.
+
+    cd ~/Desktop/M.A.P.
+    uv run map export --out ~/Desktop/map-ui/assets/export
+
+Then serve this folder as below. `map export` refuses rather than writing a
+half-export, naming the first input it could not read:
+
+    error: the corpus ledger is missing at var/corpus/ledger.jsonl
+      Run `map corpus run`, or pass --allow-partial to export without it.
+
+A clone of M.A.P. has none of the generated inputs — no ledger, no symbol index, no
+prices, no scores — so `--allow-partial` is what a newcomer gets: about 0.09 MB, the
+frozen corpus and nothing else, with five absences named in the manifest. That is a
+legitimate state and the interface has to render it.
+
+To check an export has not gone stale behind the repository it came from:
+
+    uv run map export --out ~/Desktop/map-ui/assets/export --check
+
+It re-derives the identity of all seven inputs and names what moved. It writes nothing.
+
+**`docs/export-contract.md` in the M.A.P. repository is the field-by-field contract** —
+every file, its size, what each field claims, and the readings that are easy to get
+wrong. Read it before wiring anything to these files.
+
 ## Structure
 
     index.html
