@@ -444,6 +444,12 @@ export async function getScoringRecord(file) {
 
 const text = (t) => ({ kind: "text", text: t });
 const fig = (f) => ({ kind: "figure", figure: f });
+/* A THIRD KIND, and it earns its place. A date is not a figure — it has no
+   provenance to stamp — but it carries digits, and the audit has no heuristics,
+   so it cannot sit in a plain text part either. Interpolating one into a
+   template string is how `Closed at <fig> on 2026-08-20, retrieved 2026-09-09`
+   put three unmarked dates on screen behind a correctly marked price. */
+const chrome = (t, why) => ({ kind: "chrome", text: t, why });
 
 /** What a run is to the pre-registered panel. Never the word "scored": a ledger
     entry promises artifacts exist, and no per-item score is persisted for any
@@ -452,9 +458,12 @@ export function describeCorpusRelation(run) {
   switch (run.corpus_relation) {
     case "ledger_item": {
       const item = run.ledger_item;
-      return isAbsent(item)
-        ? [text("In the pre-registered panel.")]
-        : [text(`In the pre-registered panel — ${item.band} band, filed ${item.filing_date}.`)];
+      if (isAbsent(item)) return [text("In the pre-registered panel.")];
+      return [
+        text(`In the pre-registered panel — ${item.band} band, filed `),
+        chrome(item.filing_date, "the filing date, read from the ledger"),
+        text("."),
+      ];
     }
     case "repeat_of_exhibit":
       return [text("A frozen exhibit, but not the panel's run for it.")];
@@ -471,7 +480,13 @@ export function describeOutcome(run) {
   return [
     text("Closed at "),
     fig(o.close),
-    text(` on ${o.trading_date}, retrieved ${o.retrieved_on} from the ${o.snapshot} snapshot.`),
+    text(" on "),
+    chrome(o.trading_date, "the session the horizon closed on"),
+    text(", retrieved "),
+    chrome(o.retrieved_on, "the day the close was read"),
+    text(" from the "),
+    chrome(o.snapshot, "the pinned price vintage it was read from"),
+    text(" snapshot."),
   ];
 }
 

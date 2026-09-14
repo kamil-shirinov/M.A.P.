@@ -1,0 +1,171 @@
+/* Company page. Tokens come from tokens.css unchanged — the spec's token block
+   and that file already agree, so nothing is redefined here.
+
+   Colour discipline, and it is a claim not a palette:
+     --accent  panel membership
+     --down    drift and refusals
+     --uncal   the missing panel run, and the uncalibrated state elsewhere
+     --fab     fabricated provenance, from components.css
+   A band is a factual partition and carries no colour at all. */
+
+.company { max-width: 78rem; margin: 0 auto; padding: var(--sp-6) var(--sp-5); }
+
+.cmp-section { margin-bottom: var(--sp-7); }
+
+.cmp-h {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .12em;
+  color: var(--ink-2); font-weight: 600; margin: 0 0 var(--sp-4);
+}
+.cmp-h3 { font-size: var(--step-1); margin: 0 0 var(--sp-3); font-weight: 600; }
+
+/* ---- identity ---------------------------------------------------- */
+.cmp-identity { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.cmp-ticker {
+  font-family: var(--font-mono); font-size: var(--step-4); font-weight: 600;
+  color: var(--ink-num); letter-spacing: -.01em;
+}
+.cmp-name { color: var(--ink-2); font-size: var(--step-1); }
+
+.cmp-badge {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em;
+  padding: .1rem .4rem; border-radius: var(--radius); border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+}
+.cmp-badge--holdout { border-color: var(--accent); color: var(--accent); }
+
+.cmp-facts {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--sp-3) var(--sp-5); margin: var(--sp-5) 0 var(--sp-4);
+}
+.cmp-facts dt {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ink-3); margin-bottom: var(--sp-1);
+}
+.cmp-facts dd { margin: 0; font-family: var(--font-mono); color: var(--ink-num); }
+
+.cmp-standing { max-width: 58ch; line-height: 1.55; margin: 0 0 var(--sp-3); }
+.cmp-note, .cmp-subnote { max-width: 62ch; color: var(--ink-2); font-size: var(--step--1); line-height: 1.5; }
+.cmp-subnote { color: var(--ink-3); margin: var(--sp-2) 0 0; }
+.cmp-absent { color: var(--ink-3); font-style: italic; }
+
+/* ---- series ------------------------------------------------------ */
+.cmp-series-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.cmp-series-meta { font-size: var(--step--1); color: var(--ink-2); font-family: var(--font-mono); }
+.cmp-plot-wrap { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: var(--sp-3); }
+.cmp-plot { width: 100%; height: auto; display: block; }
+
+/* No y-axis: the export gives closes and an invented tick would be a figure with
+   no provenance. Only the first and last session dates appear, as chrome. */
+.cmp-plot-dates {
+  display: flex; justify-content: space-between;
+  font-size: var(--step--1); color: var(--ink-3); font-family: var(--font-mono);
+  padding-top: var(--sp-2);
+}
+
+.cmp-line { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+.cmp-anchor { stroke: var(--accent); stroke-width: 1; opacity: .5; }
+.cmp-anchor--drift { stroke: var(--down); opacity: .8; }
+.cmp-anchor--open { stroke: var(--uncal); stroke-dasharray: 2 3; opacity: .8; }
+.cmp-dot { fill: var(--accent); stroke: none; }
+.cmp-anchor--drift.cmp-dot { fill: var(--down); }
+.cmp-anchor--open.cmp-dot { fill: var(--uncal); }
+.cmp-dot--outcome { fill: none; stroke: var(--ink); stroke-width: 1.25; }
+
+.cmp-legend { list-style: none; display: flex; gap: var(--sp-5); flex-wrap: wrap; padding: 0; margin: var(--sp-3) 0 0; font-size: var(--step--1); color: var(--ink-2); }
+.cmp-legend li { display: flex; align-items: center; gap: var(--sp-2); }
+.cmp-swatch { width: .75rem; height: 0; border-top: 2px solid var(--ink-2); display: inline-block; }
+.cmp-swatch.cmp-anchor { border-color: var(--accent); }
+.cmp-swatch.cmp-anchor--drift { border-color: var(--down); }
+.cmp-swatch.cmp-anchor--open { border-color: var(--uncal); border-top-style: dashed; }
+.cmp-swatch.cmp-dot--outcome { border: 1px solid var(--ink); height: .5rem; width: .5rem; border-radius: 50%; }
+
+/* ---- filings ----------------------------------------------------- */
+.cmp-table { width: 100%; border-collapse: collapse; font-size: var(--step-0); }
+.cmp-table th {
+  text-align: left; font-size: var(--step--1); text-transform: uppercase;
+  letter-spacing: .1em; color: var(--ink-3); font-weight: 500;
+  padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-2);
+}
+.cmp-table td { padding: var(--sp-3); border-bottom: 1px solid var(--rule); vertical-align: top; font-family: var(--font-mono); }
+.cmp-band { color: var(--ink-2); }
+.cmp-row--unrun td { background: var(--sunken); }
+.cmp-unrun { color: var(--uncal); }
+
+/* ---- run cards --------------------------------------------------- */
+.cmp-cards { display: grid; gap: var(--sp-4); }
+.cmp-card {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 2px solid var(--rule-2);
+  border-radius: var(--radius); padding: var(--sp-4) var(--sp-5); box-shadow: var(--shadow);
+}
+.cmp-card[data-relation="ledger_item"] { border-left-color: var(--accent); }
+.cmp-card[data-relation="repeat_of_exhibit"] { border-left-color: var(--rule-2); }
+.cmp-card[data-relation="outside_corpus"] { border-left-color: var(--ink-3); }
+
+.cmp-card-head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; font-family: var(--font-mono); }
+.cmp-anchor-spot { color: var(--ink-num); font-size: var(--step-1); }
+.cmp-relation {
+  margin-left: auto; font-size: var(--step--1); text-transform: uppercase;
+  letter-spacing: .08em; color: var(--ink-2);
+}
+.cmp-card[data-relation="ledger_item"] .cmp-relation { color: var(--accent); }
+.cmp-why { color: var(--ink-2); font-size: var(--step-0); margin: var(--sp-2) 0; max-width: 62ch; }
+
+.cmp-panel-link { font-size: var(--step-0); color: var(--ink-2); margin: var(--sp-3) 0; }
+.cmp-panel-link a, .cmp-inferred { border-bottom: 1px dashed var(--ink-3); }
+.cmp-inferred {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-3); border-bottom: 1px dashed currentColor;
+}
+/* The missing panel run is the one amber case on this page. */
+.cmp-panel-missing {
+  border-left: 2px solid var(--uncal); background: var(--uncal-soft);
+  padding: var(--sp-3) var(--sp-4); margin: var(--sp-3) 0;
+  font-size: var(--step-0); color: var(--ink); max-width: 68ch;
+}
+
+.cmp-disclose {
+  background: none; border: 1px solid var(--rule-2); color: var(--ink-2);
+  border-radius: var(--radius); padding: var(--sp-1) var(--sp-3);
+  font: inherit; font-size: var(--step--1); cursor: pointer; margin: var(--sp-3) 0 0;
+}
+.cmp-disclose:hover { border-color: var(--ink-3); color: var(--ink); }
+
+.cmp-scenarios { width: 100%; border-collapse: collapse; margin-top: var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); }
+.cmp-scenarios td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule); }
+.cmp-scenarios td:first-child { color: var(--ink-2); font-family: var(--font-sans); }
+
+.cmp-outcome { margin: var(--sp-3) 0 0; font-size: var(--step-0); max-width: 68ch; }
+.cmp-outcome[data-status="window_open"] { color: var(--uncal); }
+.cmp-outcome[data-status="absent_from_snapshot"],
+.cmp-outcome[data-status="not_requested"] { color: var(--ink-3); }
+
+.cmp-drift {
+  border-left: 2px solid var(--down); background: color-mix(in srgb, var(--down) 8%, transparent);
+  padding: var(--sp-3) var(--sp-4); margin: var(--sp-3) 0 0;
+  font-size: var(--step-0); max-width: 68ch;
+}
+
+/* ---- scoring ----------------------------------------------------- */
+.cmp-score {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-4);
+}
+.cmp-survives { margin: var(--sp-2) 0; padding-left: var(--sp-5); color: var(--ink-2); font-size: var(--step-0); }
+.cmp-disclosure summary { cursor: pointer; color: var(--ink-2); font-size: var(--step--1); }
+.cmp-refusals ul { list-style: none; padding: 0; display: grid; gap: var(--sp-3); }
+.cmp-refusals li {
+  border-left: 2px solid var(--down); padding-left: var(--sp-4);
+  font-size: var(--step-0); color: var(--ink-2); max-width: 70ch;
+}
+.cmp-refusals strong { color: var(--ink); }
+
+/* ---- footer and empty state -------------------------------------- */
+.cmp-footer { max-width: 78rem; margin: 0 auto; padding: var(--sp-5); border-top: 1px solid var(--rule); }
+.cmp-stamps { display: flex; gap: var(--sp-5); flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); }
+.cmp-empty { max-width: 58ch; margin: var(--sp-7) auto; }
+.cmp-empty pre {
+  background: var(--sunken); border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: var(--sp-3); font-size: var(--step-0); overflow-x: auto;
+}
+.masthead-vintage { display: flex; gap: var(--sp-4); font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }

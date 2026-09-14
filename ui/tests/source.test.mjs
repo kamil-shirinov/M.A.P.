@@ -182,9 +182,16 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     const run = (await s.listRuns("ZTS")).bySource.unknown.find((r) => !s.isAbsent(r.outcome));
     const parts = s.describeOutcome(run);
     assert.ok(parts.some((p) => p.kind === "figure"));
+    // ANY digit, not just a decimal. This asserted /\d+\.\d{2,}/ and passed while
+    // `describeOutcome` welded three dates into one text part -- the page audit
+    // caught what this test was too narrow to see.
     for (const p of parts.filter((x) => x.kind === "text")) {
-      assert.doesNotMatch(p.text, /\d+\.\d{2,}/, `a figure was welded in: ${p.text}`);
+      assert.doesNotMatch(p.text, /\d/, `a number was welded into prose: ${p.text}`);
     }
+    // Dates come back as their own marked parts, each with a reason.
+    const chromeParts = parts.filter((x) => x.kind === "chrome");
+    assert.ok(chromeParts.length >= 1);
+    assert.ok(chromeParts.every((x) => x.why));
   });
 
   it("keeps six places on a drift ratio and does not use it as a key", async () => {
