@@ -41,7 +41,13 @@ export function renderFigure(fig, { className = "" } = {}) {
   const el = document.createElement("span");
   el.className = ("fig " + className).trim();
   el.dataset.prov = fig.provenance;
-  el.textContent = (fmt[fig.format] || fmt.int)(fig.value);
+  // Throws rather than falling back. `figure()` already refuses an unknown
+  // provenance; a silent `|| fmt.int` gave the other half of the same contract no
+  // such guarantee — a mistyped or renamed format name rendered the raw number as
+  // an integer, so a log return read as "0" and a drift ratio as "1".
+  const format = fmt[fig.format];
+  if (!format) throw new Error(`unknown format: ${fig.format}`);
+  el.textContent = format(fig.value);
   if (fig.provenance === FABRICATED) el.title = "Fabricated sample value — not a result";
   return el;
 }
