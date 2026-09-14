@@ -223,3 +223,34 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.deepEqual(Object.keys(runs.bySource).sort(), ["corpus", "edgar", "news", "unknown"]);
   });
 });
+
+describe("colour discipline", { skip: !HAVE }, () => {
+  const css = readFileSync(new URL("../assets/styles/company.css", import.meta.url), "utf8");
+
+  it("reserves amber for something that did not complete", () => {
+    // The missing panel run is a terminal failure: attempted, settled, no
+    // forecast. So is a filing held but never run. Both earn amber.
+    const amberRules = css
+      .split("}")
+      .filter((block) => /var\(--uncal/.test(block))
+      .map((block) => block.split("{")[0].trim());
+    for (const selector of amberRules) {
+      assert.match(
+        selector,
+        /cmp-panel-missing|cmp-unrun/,
+        `amber on ${selector} -- it is reserved for work that did not complete`,
+      );
+    }
+  });
+
+  it("does not colour an open window as an attention state", () => {
+    // A fact about the calendar: nothing is wrong, nothing refused, and it
+    // resolves by itself. Distinguished by the dash, not by colour.
+    const openRules = css.split("}").filter((b) => /cmp-anchor--open|window_open/.test(b.split("{")[0] ?? ""));
+    assert.ok(openRules.length >= 3);
+    for (const rule of openRules) {
+      assert.doesNotMatch(rule, /var\(--uncal|var\(--down/, `open-window rule uses an alarm colour: ${rule}`);
+    }
+    assert.match(css, /cmp-anchor--open \{[^}]*stroke-dasharray/);
+  });
+});

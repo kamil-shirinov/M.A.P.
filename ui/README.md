@@ -83,6 +83,35 @@ Page-level: if any figure on the page is fabricated, the banner *and* the chart
 watermark both show. Per-figure marking handles the figure; the page needs its
 own state, because the realistic crop is one region, not the whole page.
 
+#### Why the audit has no heuristics — the case that proves it
+
+`data/source.js` states the rule in its own header: *sentence builders return
+parts, never prose with a figure welded in.* It then shipped this:
+
+```js
+text(` on ${o.trading_date}, retrieved ${o.retrieved_on} from the ${o.snapshot} snapshot.`)
+```
+
+A correctly marked price, followed by three unmarked dates in one interpolated
+string. The module that states the rule broke it.
+
+The unit test for that rule passed. It asserted `/\d+\.\d{2,}/` — decimals — so
+it caught a welded price and never saw a date. A test written to catch the
+failure you imagined is blind to the one you did not.
+
+What caught it was the page-level audit, walking the rendered tree and flagging
+every text node with a digit that sits outside `[data-prov]` or `[data-chrome]`.
+It has no idea what a date is, which is exactly why it saw one.
+
+**The order matters.** A heuristic audit — "skip things shaped like a date" —
+would have skipped these three and stayed silent. The narrow test and the
+heuristic audit would have failed together, for the same reason: both encode a
+guess about which numbers are interesting. The audit's ignorance is its value.
+
+Sentence builders now return a third part kind, `{kind: "chrome", text, why}`, so
+a date arrives as a marked node instead of as string interpolation. The unit test
+now asserts *no digit at all* in a text part.
+
 **3. Calibration is one attribute.** `lib/calibration.js` owns
 `CALIBRATED_HORIZONS = [5]` and nothing else decides. Every visual difference
 hangs off `[data-calibration]` on the forecast root, so half of it cannot be
