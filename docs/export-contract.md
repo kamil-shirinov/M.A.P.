@@ -470,9 +470,29 @@ against. Commit first. (Findings #54.)
 return.** The simulation converts with `math.log1p(price_return)`; the scorer computes
 `log(close / open)`.
 
-One `asPercent()` helper applied to both is wrong. At these magnitudes the gap is 0.1–0.3
-percentage points — small, systematic, and invisible in review because both numbers look
-like plausible returns.
+One `asPercent()` helper applied to both is wrong, and **wrong in the shape that survives
+a spot-check**: the two agree on small moves and separate on large ones, so checking a few
+typical values passes and the error shows up on exactly the runs a reader will look at
+hardest.
+
+Displayed to one decimal place, how often the two conventions differ:
+
+| Log return | Displays differently |
+|---|---|
+| 0–1% | 1.8% of values |
+| 1–2% | 11.4% |
+| 2–3% | 31.1% |
+| 3–4% | 63.3% |
+| 4–5% | 96.0% |
+| above 4.4% | **every value** |
+
+A log return of 0.021 reads `2.1%` under either helper. At 0.080 it is `8.0%` against
+`8.3%`; at −0.082, `−8.2%` against `−7.9%`. The largest log return on which they still
+agree is 0.04353.
+
+So the failure is not a uniform small bias. It is **invisible where most scenario returns
+sit and certain above 4.4%** — one-directional, and a plausible-looking return at every
+magnitude.
 
 | Quantity | Convention | To a price | To compare |
 |---|---|---|---|
