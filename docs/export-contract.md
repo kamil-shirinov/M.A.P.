@@ -119,6 +119,31 @@ not re-sort to display most-recent-first; you already have it.
 day *after* the filing it reads. Only **66 of 701** have `filing_date == anchor_date`.
 Reconstructing it from the anchor is wrong on 635 runs, silently. Use the field.
 
+**There is no reliable key joining a run to its scored item, and the obvious one is the
+same trap.** A scored item carries `as_of` — the forecast's *own* date, the day after the
+filing. A run carries `anchor_date` — the trading *session* it opened from. These
+coincide only when the forecast date happens to be a trading day, so:
+
+```
+join on (ticker, as_of) == (ticker, anchor_date)
+  → 161 of 175 scored items match a run
+  → 14 do not: 13 Saturdays, plus Good Friday 2026-04-03
+```
+
+Right 92% of the time, which is worse than never working: a sample of a few rows agrees
+and the gaps are invisible without a count.
+
+The reverse direction has a second hazard. Of **701** `ledger_item` runs, only **161**
+find a scored item by that key — not because the rest went unscored, but because the
+exported record covers **clean/dev only, 175 items**. The ambiguous band and the entire
+holdout are legitimately outside it. A UI that renders "no score found" as *"this run was
+not scored"* will say it about 540 runs, most of which were.
+
+**So do not stitch scores onto runs.** Show a scoring record whole — it is a band-and-split
+result and reads as one — and show a run's forecast and outcome from the run. If the two
+must be related, relate them at the level the data supports: band, split and vintage, all
+of which both sides carry.
+
 **Nothing in this file compares a forecast to its outcome, and a UI should not either.**
 There is no error, no return, no hit rate — by design (ADR 0035). `runs/` is a population
 defined after the fact by curiosity, retries and interrupted evenings; an accuracy figure
@@ -201,6 +226,13 @@ difference") and rewording them will overstate the result.
 `items[]` holds per-item `map_crps`, `map_log_score`, `map_brier`, `map_pit`,
 `map_sigma`, `map_probability_up`, `realised_return`, and `baseline_*` maps keyed by
 baseline name. `unscored` counts items that could not be scored, by reason.
+
+There are **no interval fields** — no `p10`, `p50` or `p90`. A band can be reconstructed
+from `map_sigma`, but that is modelling, not reading, and the export does not do it for
+you.
+
+An item's `as_of` is the forecast's own date and **does not join to a run's
+`anchor_date`** — see the run journal section above before reaching for that key.
 
 ---
 
