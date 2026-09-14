@@ -56,7 +56,16 @@ function card(run, company, open, onToggle) {
   const rel = document.createElement("span");
   rel.className = "cmp-relation";
   rel.textContent = RELATION[run.corpus_relation].label;
-  head.append(rel);
+
+  /* ON EVERY CARD, not only where anchors collide. 62 (ticker, anchor, horizon)
+     groups corpus-wide hold more than one run, so same-anchor pairs are common —
+     but a field that appeared only on duplicates would be a signal a reader
+     learns to scan for. Uniform placement makes it identity, which is what it
+     is, and it is the key the disclosure state uses. */
+  const right = document.createElement("div");
+  right.className = "cmp-card-id";
+  right.append(chromeText(run.run_id.slice(0, 8), "an abbreviated run id"), rel);
+  head.append(right);
   art.append(head);
 
   const why = document.createElement("p");

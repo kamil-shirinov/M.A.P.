@@ -254,3 +254,29 @@ describe("colour discipline", { skip: !HAVE }, () => {
     assert.match(css, /cmp-anchor--open \{[^}]*stroke-dasharray/);
   });
 });
+
+describe("run identity on every card", { skip: !HAVE }, () => {
+  it("shows an abbreviated run_id on all of them, not just collisions", async () => {
+    const { roots, runs } = await renderCompany("AAPL");
+    const rows = Object.values(runs.bySource).flat();
+    const text = roots.runs.textContent;
+    for (const run of rows) {
+      assert.ok(text.includes(run.run_id.slice(0, 8)), `no id shown for ${run.run_id}`);
+    }
+  });
+
+  it("distinguishes same-anchor runs, which are common rather than rare", async () => {
+    // 62 (ticker, anchor, horizon) groups corpus-wide hold more than one run.
+    // AAPL has three such pairs; without an id the cards are indistinguishable.
+    const { runs } = await renderCompany("AAPL");
+    const rows = Object.values(runs.bySource).flat();
+    const seen = new Map();
+    for (const r of rows) {
+      const key = `${r.anchor_date}|${r.horizon_days}`;
+      seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    const collisions = [...seen.values()].filter((n) => n > 1).length;
+    assert.equal(collisions, 3);
+    assert.equal(new Set(rows.map((r) => r.run_id)).size, rows.length);
+  });
+});

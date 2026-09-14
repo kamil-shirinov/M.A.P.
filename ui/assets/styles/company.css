@@ -113,8 +113,10 @@
 
 .cmp-card-head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; font-family: var(--font-mono); }
 .cmp-anchor-spot { color: var(--ink-num); font-size: var(--step-1); }
+.cmp-card-id { margin-left: auto; display: flex; align-items: baseline; gap: var(--sp-4); }
+.cmp-card-id [data-chrome] { color: var(--ink-3); font-size: var(--step--1); }
 .cmp-relation {
-  margin-left: auto; font-size: var(--step--1); text-transform: uppercase;
+  font-size: var(--step--1); text-transform: uppercase;
   letter-spacing: .08em; color: var(--ink-2);
 }
 .cmp-card[data-relation="ledger_item"] .cmp-relation { color: var(--accent); }
