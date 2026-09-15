@@ -98,9 +98,9 @@ async function renderCompany(ticker) {
   installDom();
   stubFetch();
   const source = await load("data/source.js");
-  const [company, runs, series, scoring, screen, state] = await Promise.all([
+  const [company, runs, series, scoring, state] = await Promise.all([
     source.getCompany(ticker), source.listRuns(ticker), source.getPriceSeries(ticker),
-    source.listScoringRecords(), source.getFilerScreen(ticker), source.getExportState(),
+    source.listScoringRecords(), source.getExportState(),
   ]);
   const roots = {};
   const mk = () => new Node("section");
@@ -111,7 +111,7 @@ async function renderCompany(ticker) {
   const { renderScoring } = await load("ui/company-scoring.js");
   const { renderFooter } = await load("ui/company-footer.js");
 
-  renderIdentity((roots.identity = mk()), { company, runs, series, screen });
+  renderIdentity((roots.identity = mk()), { company, runs });
   renderSeries((roots.series = mk()), { series, runs });
   renderFilings((roots.filings = mk()), { company, runs });
   renderRuns((roots.runs = mk()), { runs, company, open: new Set(), onToggle: () => {} });
@@ -278,5 +278,45 @@ describe("run identity on every card", { skip: !HAVE }, () => {
     const collisions = [...seen.values()].filter((n) => n > 1).length;
     assert.equal(collisions, 3);
     assert.equal(new Set(rows.map((r) => r.run_id)).size, rows.length);
+  });
+});
+
+describe("layout invariants", { skip: !HAVE }, () => {
+  const css = readFileSync(new URL("../assets/styles/company.css", import.meta.url), "utf8");
+
+  it("gives the masthead, content and footer one measure", () => {
+    // They sat at different left edges: the masthead outside any container and
+    // the content capped, so the difference read as dead space.
+    assert.match(css, /\.masthead,\s*\n\s*\.company,\s*\n\s*\.cmp-footer \{[^}]*--measure/);
+  });
+
+  it("anchors the vintage stamps right without relying on a spacer element", () => {
+    // base.css does this with a .spacer that this page's markup does not have.
+    assert.match(css, /\.masthead-vintage \{ margin-left: auto/);
+  });
+
+  it("gives section headers more presence than body text", () => {
+    const header = css.match(/\.cmp-h \{[^}]*\}/)[0];
+    assert.match(header, /font-size: var\(--step-2\)/);
+    assert.doesNotMatch(header, /--step--1/, "a section header must not be caption-sized");
+    assert.match(header, /border-top/);
+  });
+});
+
+describe("the pre-screen is a search question", { skip: !HAVE }, () => {
+  it("does not appear on a company page", async () => {
+    const { roots } = await renderCompany("ACHC");
+    for (const root of Object.values(roots)) {
+      assert.doesNotMatch(root.textContent, /recent EDGAR block/);
+      assert.doesNotMatch(root.textContent, /Item 2\.02 8-Ks/);
+    }
+  });
+
+  it("is still reachable from the boundary, for the screen that needs it", async () => {
+    installDom();
+    stubFetch();
+    const source = await load("data/source.js");
+    const screen = await source.getFilerScreen("AAPL");
+    assert.equal(typeof screen.item_202_in_recent, "boolean");
   });
 });

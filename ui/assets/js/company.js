@@ -47,13 +47,12 @@ async function paint() {
   const ticker = EXAMPLES[which];
   document.body.dataset.example = which;
 
-  const [state, company, runs, series, scoring, screen] = await Promise.all([
+  const [state, company, runs, series, scoring] = await Promise.all([
     source.getExportState(),
     source.getCompany(ticker),
     source.listRuns(ticker),
     source.getPriceSeries(ticker),
     source.listScoringRecords(),
-    source.getFilerScreen(ticker),
   ]);
 
   if (state.state === source.NO_EXPORT) {
@@ -62,7 +61,7 @@ async function paint() {
   }
 
   renderMastheadVintage($("masthead-vintage"), state.manifest);
-  renderIdentity($("identity"), { company, runs, series, screen });
+  renderIdentity($("identity"), { company, runs });
   renderSeries($("series"), { series, runs });
   renderFilings($("filings"), { company, runs });
   renderRuns($("runs"), {

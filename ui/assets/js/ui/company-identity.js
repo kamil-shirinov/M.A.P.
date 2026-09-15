@@ -14,7 +14,7 @@ const el = (tag, cls, text) => {
   return n;
 };
 
-export function renderIdentity(root, { company, runs, series, screen }) {
+export function renderIdentity(root, { company, runs }) {
   root.textContent = "";
   root.append(el("h2", "cmp-h", "Company"));
 
@@ -43,7 +43,9 @@ export function renderIdentity(root, { company, runs, series, screen }) {
 
   root.append(standing(company, runs));
   root.append(exchangeNote());
-  if (!isAbsent(screen)) root.append(filerNote(screen));
+  // NO PRE-SCREEN LINE. `item_202_in_recent` answers "does this company file
+  // earnings at all" — a search-screen question, asked before you reach a company.
+  // On a page already showing six runs it tells a reader nothing they cannot see.
 }
 
 function countRuns(runs) {
@@ -82,31 +84,6 @@ function exchangeNote() {
   return p;
 }
 
-/** The pre-screen reads only the submissions *recent* block, so it answers
-    recency and not history. The copy says so. */
-function filerNote(screen) {
-  const p = el("p", "cmp-note");
-  if (screen.item_202_in_recent) {
-    p.append(
-      document.createTextNode("This filer published "),
-      renderFigure(screen.count),
-      document.createTextNode(" "),
-      // "Item 2.02 8-K" is a form designation and carries digits in both halves.
-      // The audit has no heuristics -- it cannot tell a citation from a quantity
-      // -- so the whole designation is marked as chrome rather than left looking
-      // like an unmarked figure.
-      chromeText("Item 2.02 8-Ks", "an SEC form designation, not a quantity"),
-      document.createTextNode(" in its recent EDGAR block."),
-    );
-  } else {
-    p.append(document.createTextNode("No recent earnings 8-K for this filer."));
-  }
-  return p;
-}
-
-/** Each pair is its own grid item. As bare dt/dd children they flowed as
-    independent cells, so a label landed at the end of one row and its value at
-    the start of the next. */
 function addFact(dl, label, valueNode) {
   const pair = document.createElement("div");
   pair.className = "cmp-fact";

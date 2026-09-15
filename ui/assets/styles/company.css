@@ -10,14 +10,39 @@
      --fab     fabricated provenance, from components.css
    A band is a factual partition and carries no colour at all. */
 
-.company { max-width: 78rem; margin: 0 auto; padding: var(--sp-6) var(--sp-5); }
+/* ONE measure for the whole page. The masthead sat outside any container while
+   the content was capped, so they began at different left edges and the gap read
+   as dead space rather than as margin. Every band now shares this. */
+:root { --measure: 82rem; --gutter: var(--sp-6); }
+
+.masthead,
+.company,
+.cmp-footer { max-width: var(--measure); margin-inline: auto; padding-inline: var(--gutter); }
+
+.masthead {
+  display: flex; align-items: baseline; gap: var(--sp-4);
+  padding-block: var(--sp-4);
+}
+/* The vintages anchor right. base.css does this with a .spacer element that this
+   page does not have, so it is done here instead of relying on markup. */
+.masthead-vintage { margin-left: auto; }
+
+.company { padding-block: var(--sp-6); }
 
 .cmp-section { margin-bottom: var(--sp-7); }
 
+/* SECTION HEADERS CARRY THE PAGE. At 11px grey uppercase they weighed the same
+   as a caption, and on a page this long a reader had nothing to navigate by.
+   Larger, brighter, and preceded by a rule, so a section reads as a section. */
 .cmp-h {
-  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .12em;
-  color: var(--ink-2); font-weight: 600; margin: 0 0 var(--sp-4);
+  font-size: var(--step-2); text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ink); font-weight: 600;
+  margin: 0 0 var(--sp-5); padding-top: var(--sp-5);
+  border-top: 1px solid var(--rule-2);
+  display: flex; align-items: baseline;
 }
+/* The first section needs no rule above it; the masthead already provides one. */
+.cmp-section:first-of-type .cmp-h { border-top: 0; padding-top: 0; }
 .cmp-h3 { font-size: var(--step-1); margin: 0 0 var(--sp-3); font-weight: 600; }
 
 /* ---- identity ---------------------------------------------------- */
@@ -53,6 +78,8 @@
 
 /* ---- series ------------------------------------------------------ */
 .cmp-series-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.cmp-series-head .cmp-h { flex: 1 1 auto; margin-bottom: var(--sp-4); }
+.cmp-series-head .cmp-series-meta { padding-top: var(--sp-5); }
 .cmp-series-meta { font-size: var(--step--1); color: var(--ink-2); font-family: var(--font-mono); }
 .cmp-plot-wrap { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: var(--sp-3); }
 .cmp-plot { width: 100%; height: auto; display: block; }
@@ -172,7 +199,7 @@
 .cmp-refusals strong { color: var(--ink); }
 
 /* ---- footer and empty state -------------------------------------- */
-.cmp-footer { max-width: 78rem; margin: 0 auto; padding: var(--sp-5); border-top: 1px solid var(--rule); }
+.cmp-footer { padding-block: var(--sp-5); border-top: 1px solid var(--rule); }
 .cmp-stamps { display: flex; gap: var(--sp-5); flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); }
 .cmp-empty { max-width: 58ch; margin: var(--sp-7) auto; }
 .cmp-empty pre {
