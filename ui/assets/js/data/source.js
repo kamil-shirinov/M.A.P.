@@ -178,13 +178,46 @@ export async function listCorpusCompanies() {
     first keystroke, not at boot. */
 export async function searchSymbols(query, { limit = 20 } = {}) {
   const rows = await readJson("symbols.json");
-  if (rows === null) return { rows: [], provenance: MEASURED };
+  if (rows === null) return { rows: [], matched: 0, indexSize: null, provenance: MEASURED };
   const needle = query.trim().toUpperCase();
-  if (!needle) return { rows: [], provenance: MEASURED };
-  const hits = rows
-    .filter((r) => r.ticker.startsWith(needle) || r.name.toUpperCase().includes(needle))
-    .slice(0, limit);
-  return { rows: hits, provenance: MEASURED };
+  // The index is open either way, so its size is knowable even for an empty
+  // query. That is what lets the box stop saying "index not read".
+  if (!needle) return { rows: [], matched: 0, indexSize: rows.length, provenance: MEASURED };
+  const hits = rows.filter(
+    (r) => r.ticker.startsWith(needle) || r.name.toUpperCase().includes(needle),
+  );
+  return {
+    // `limit: Infinity` returns every hit, for a caller that groups them by
+    // resolution before cutting each group.
+    rows: limit === Infinity ? hits : hits.slice(0, limit),
+    matched: hits.length,
+    indexSize: rows.length,
+    provenance: MEASURED,
+  };
+}
+
+/** Filing and run counts per corpus company, from corpus.json.
+
+    Separate from `listCorpusCompanies` on purpose. universe.json is 7.5 KB and
+    every view needs it at boot; corpus.json is 106 KB and these counts are worth
+    it exactly when a row that displays them is on screen. The search screen
+    calls this on its first corpus hit.
+
+    `runs` counts the runs the ledger maps to a company's filings. It is NOT
+    `ledger.items_settled`, which is 709 across the corpus and counts completed
+    runs and terminal failures together. */
+export async function getCorpusFilingCounts() {
+  const companies = await readJson("corpus.json");
+  if (companies === null) return new Map();
+  return new Map(
+    companies.map((c) => [
+      c.ticker,
+      {
+        filings: c.filings.length,
+        runs: c.filings.reduce((n, f) => n + f.runs.length, 0),
+      },
+    ]),
+  );
 }
 
 /** Whether a ticker's filer publishes earnings 8-Ks at all.

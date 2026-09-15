@@ -10,14 +10,24 @@
      --fab     fabricated provenance, from components.css
    A band is a factual partition and carries no colour at all. */
 
-/* ONE measure for the whole page. The masthead sat outside any container while
-   the content was capped, so they began at different left edges and the gap read
-   as dead space rather than as margin. Every band now shares this. */
-:root { --measure: 82rem; --gutter: var(--sp-6); }
+/* TWO measures, and the frame is the shared one. The masthead, the content and
+   the footer still begin at the same left edge -- that part was right and is
+   unchanged. What was wrong is that prose and data were held to the SAME right
+   edge: 82rem is a reading measure, and the filings table and the run cards
+   were squeezed inside it with dead space either side.
+
+   So the frame is wide and prose caps itself INSIDE the frame, left-aligned
+   there, so only the right edge moves. */
+:root { --measure: 100rem; --measure-prose: 82rem; --gutter: var(--sp-6); }
 
 .masthead,
 .company,
 .cmp-footer { max-width: var(--measure); margin-inline: auto; padding-inline: var(--gutter); }
+
+/* Narrow: identity and scoring are paragraphs. Wide: the series, the filings
+   table and the run cards, which are the sections that wanted the room. */
+#identity,
+#scoring { max-width: var(--measure-prose); }
 
 .masthead {
   display: flex; align-items: baseline; gap: var(--sp-4);

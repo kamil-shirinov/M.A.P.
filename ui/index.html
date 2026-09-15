@@ -1,86 +1,37 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>M.A.P. — Market's Agentic Projections</title>
+<title>M.A.P. — find a company</title>
 <link rel="stylesheet" href="assets/styles/tokens.css">
 <link rel="stylesheet" href="assets/styles/base.css">
 <link rel="stylesheet" href="assets/styles/components.css">
+<link rel="stylesheet" href="assets/styles/company.css">
+<link rel="stylesheet" href="assets/styles/search.css">
 </head>
 <body>
-<div class="shell">
-
   <header class="masthead">
-    <h1>M.A.P.</h1>
-    <span class="tag">Market&rsquo;s Agentic Projections &mdash; local inference, scored forecasts</span>
-    <span class="spacer"></span>
-    <span class="tag" id="vintage"></span>
+    <div>
+      <strong>M.A.P.</strong>
+      <span class="tag">Market&rsquo;s Agentic Projections &mdash; local inference, scored forecasts</span>
+    </div>
+    <div class="masthead-vintage" id="masthead-vintage"></div>
   </header>
 
-  <div class="provenance-banner" role="status">
-    <strong>Sample data.</strong>
-    <span>Every figure on this page is fabricated for development. Nothing here is a result.</span>
-    <span class="legend" data-chrome="marker legend">&dagger; marks a fabricated figure</span>
-  </div>
+  <!-- Order is box -> status -> results, with nothing between them. The funnel
+       follows the results; everything explanatory is in one closed disclosure
+       below it. An earlier layout put the resolutions and the funnel commentary
+       above the rows and the page read as an essay about search. -->
+  <main class="search-page" id="search-page">
+    <section id="box"       class="srch-section"></section>
+    <section id="results"   class="srch-section" aria-live="polite"></section>
+    <section id="funnel"    class="srch-section"></section>
+    <section id="why"       class="srch-section srch-section--prose"></section>
+  </main>
 
-  <div class="stack">
-    <section class="panel full search-panel">
-      <div class="body">
-        <div class="search" id="search"></div>
-      </div>
-    </section>
+  <footer class="cmp-footer" id="footer"></footer>
 
-    <div class="layout" id="forecast-root">
-      <section class="panel">
-        <header>
-          <h2 id="ticker-name">&mdash;</h2>
-          <span class="note" id="ticker-meta"></span>
-        </header>
-        <div class="body">
-          <div class="chart-wrap">
-            <div id="chart"></div>
-            <div class="chart-watermark" aria-hidden="true"><span>Sample data</span></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
-        <header><h2>Horizon</h2></header>
-        <div class="body" id="horizon"></div>
-      </section>
-
-      <section class="panel full">
-        <header>
-          <h2>Scenarios</h2>
-          <span class="note">weighted, from one filing</span>
-        </header>
-        <div class="body">
-          <div class="scenarios" id="scenarios"></div>
-        </div>
-      </section>
-
-      <section class="panel full">
-        <header>
-          <h2>Track record for this company</h2>
-          <span class="note">individual forecasts, not a rate</span>
-        </header>
-        <div class="body" id="track-record"></div>
-      </section>
-
-      <section class="panel">
-        <header><h2>Measured reliability</h2><span class="note">corpus-wide</span></header>
-        <div class="body" id="reliability"></div>
-      </section>
-
-      <section class="panel">
-        <header><h2>Audit</h2></header>
-        <div class="body" id="audit"></div>
-      </section>
-    </div>
-  </div>
-</div>
-
-<script type="module" src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/search-page.js"></script>
 </body>
 </html>

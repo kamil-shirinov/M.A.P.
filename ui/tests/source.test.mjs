@@ -229,3 +229,52 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.equal(screen.count.provenance, s.MEASURED);
   });
 });
+
+describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () => {
+  it("returns the index size and the full match total", async () => {
+    stubFetch();
+    const s = await load();
+    const { rows, matched, indexSize } = await s.searchSymbols("A", { limit: 5 });
+    assert.equal(indexSize, 10398, "the funnel's headline count");
+    assert.equal(rows.length, 5, "limit still cuts");
+    assert.ok(matched > 5, "matched counts every hit, not the slice");
+    const all = await s.searchSymbols("A", { limit: Infinity });
+    assert.equal(all.rows.length, matched);
+  });
+
+  it("knows the index size even for an empty query", async () => {
+    stubFetch();
+    const s = await load();
+    const { indexSize, matched } = await s.searchSymbols("  ", { limit: 5 });
+    assert.equal(indexSize, 10398);
+    assert.equal(matched, 0);
+  });
+
+  it("counts a company's filings and runs without loading them at boot", async () => {
+    stubFetch();
+    const s = await load();
+    const counts = await s.getCorpusFilingCounts();
+    assert.equal(counts.size, 120);
+    const totalFilings = [...counts.values()].reduce((n, c) => n + c.filings, 0);
+    const totalRuns = [...counts.values()].reduce((n, c) => n + c.runs, 0);
+    assert.equal(totalFilings, 709);
+    // 701, NOT the 709 of ledger.items_settled: this counts runs the ledger maps
+    // to filings, and 8 filings settled as terminal failures with no run.
+    assert.equal(totalRuns, 701);
+  });
+
+  it("finds a filer row for every symbol, so the fourth group never fires here", async () => {
+    // `getFilerScreen` can answer NOT_APPLICABLE and the search screen groups
+    // those separately. Against THIS export it is unreachable: all 10,398
+    // symbols are covered by the 7,998 filers. The branch stays — a later
+    // pre-screen walk can miss a filer — and this pins the current fact.
+    stubFetch();
+    const s = await load();
+    const rows = await (await fetch("assets/export/symbols.json")).json();
+    const sample = ["AAPL", "TSLA", "CNTX", "CNLHN", rows.at(-1).ticker];
+    for (const ticker of sample) {
+      const screen = await s.getFilerScreen(ticker);
+      assert.notEqual(screen.absent, s.NOT_APPLICABLE, `${ticker} had no filer row`);
+    }
+  });
+});
