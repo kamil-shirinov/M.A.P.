@@ -6,9 +6,9 @@
 
    WHAT LOADS WHEN, which is most of the design:
      boot            universe.json, 7.5 KB — the 120 corpus companies.
-     first corpus hit corpus.json, 106 KB — the filing and run counts a corpus
+     first corpus hit corpus.json, 108.8 KB — the filing and run counts a corpus
                      row shows. NOT at boot: universe.json carries ticker, name
-                     and split only, and the counts are worth 106 KB exactly
+                     and split only, and the counts are worth 108.8 KB exactly
                      when a row that displays them exists.
      first keystroke symbols.json, 864 KB — the full index.
      first hit that

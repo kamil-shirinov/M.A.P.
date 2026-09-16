@@ -320,3 +320,32 @@ describe("the pre-screen is a search question", { skip: !HAVE }, () => {
     assert.equal(typeof screen.item_202_in_recent, "boolean");
   });
 });
+
+describe("URL forms", { skip: !HAVE }, () => {
+  const js = readFileSync(new URL("../assets/js/company.js", import.meta.url), "utf8");
+
+  it("accepts ?ticker= as the linked form and keeps ?example= for review", () => {
+    assert.match(js, /params\.get\("ticker"\)/);
+    assert.match(js, /params\.get\("example"\)/);
+  });
+
+  it("marks a ticker link as linked, never as an example name", () => {
+    // Styling keyed on an example must not silently apply to an arbitrary
+    // company reached from search.
+    assert.match(js, /mode: "linked"/);
+    assert.match(js, /dataset\.example = mode/);
+  });
+
+  it("renders a stated absence for a ticker the corpus does not hold", () => {
+    // CD's patch header said the identity section already handled this. It did
+    // not: renderIdentity prints undefined and renderFilings throws on
+    // company.filings. The guard is in the composition root instead.
+    assert.match(js, /source\.isAbsent\(company\)/);
+    assert.match(js, /function renderUnknownCompany/);
+    assert.doesNotMatch(
+      js.slice(js.indexOf("onToggle:"), js.indexOf("renderScoring")),
+      /function renderUnknownCompany/,
+      "the handler must be at module level, not inside a callback",
+    );
+  });
+});

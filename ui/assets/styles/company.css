@@ -217,3 +217,8 @@
   padding: var(--sp-3); font-size: var(--step-0); overflow-x: auto;
 }
 .masthead-vintage { display: flex; gap: var(--sp-4); font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
+
+/* A ticker the corpus does not hold: the page states the absence and offers the
+   one place that lists what does have a page. */
+.cmp-back { display: inline-block; margin-top: var(--sp-5); color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-size: var(--step-0); }
+.cmp-back:hover { text-decoration: underline; }

@@ -112,6 +112,28 @@ Sentence builders now return a third part kind, `{kind: "chrome", text, why}`, s
 a date arrives as a marked node instead of as string interpolation. The unit test
 now asserts *no digit at all* in a text part.
 
+#### The same argument from the other side: the audit only sees what renders
+
+Building the search screen, the audit reported sixteen unmarked numbers. Fourteen
+were visible in a screenshot. Two were not:
+
+- the **cold-phase status line**, replaced the moment the index is requested;
+- the **pending empty state**, which exists only in the window between a keystroke
+  and `symbols.json` landing, with no corpus hit to fill the gap.
+
+Neither survives long enough to photograph, and both are real states a reader
+reaches. Screenshotting the page found fourteen and would have shipped two.
+
+What found them was hooking `console.error` in the browser and replaying the
+transitions — cold, mid-fetch, ready, no-match — collecting every violation the
+audit raised rather than every violation still on screen when the shutter closed.
+
+**So the audit has no blind spots and a narrow field of view.** It is exhaustive
+over what is rendered at the instant it runs, and says nothing about a state that
+has already been replaced. The unit test misses what you did not imagine; the
+screenshot misses what does not persist; the audit misses nothing, as long as you
+make the page render the state first. Check transitions, not just screens.
+
 **3. Calibration is one attribute.** `lib/calibration.js` owns
 `CALIBRATED_HORIZONS = [5]` and nothing else decides. Every visual difference
 hangs off `[data-calibration]` on the forecast root, so half of it cannot be

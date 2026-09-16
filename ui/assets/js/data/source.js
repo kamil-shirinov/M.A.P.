@@ -199,7 +199,7 @@ export async function searchSymbols(query, { limit = 20 } = {}) {
 /** Filing and run counts per corpus company, from corpus.json.
 
     Separate from `listCorpusCompanies` on purpose. universe.json is 7.5 KB and
-    every view needs it at boot; corpus.json is 106 KB and these counts are worth
+    every view needs it at boot; corpus.json is 108.8 KB and these counts are worth
     it exactly when a row that displays them is on screen. The search screen
     calls this on its first corpus hit.
 
