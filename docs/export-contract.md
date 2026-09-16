@@ -115,9 +115,28 @@ runs shows 701 and misstates the corpus.
 **Rows are sorted by `anchor_date`, newest first**, within each of the four files. Do
 not re-sort to display most-recent-first; you already have it.
 
-**`ledger_item.filing_date` is carried, never derivable.** A corpus forecast is dated the
-day *after* the filing it reads. Only **66 of 701** have `filing_date == anchor_date`.
-Reconstructing it from the anchor is wrong on 635 runs, silently. Use the field.
+**`ledger_item.filing_date` is carried, never derivable — in either direction.** A corpus
+forecast is dated the day *after* the filing it reads, and its anchor is the trading
+session that resolves to. Only **66 of 701** have `filing_date == anchor_date`.
+
+Both directions of that arithmetic are wrong, and the second does not read as covered by
+a warning written about the first:
+
+| you have | you want | why it fails |
+|---|---|---|
+| an anchor | the filing date | `anchor − 1` is wrong on the 66 where they coincide |
+| a filing date | the anchor | `filed + 1` is wrong on the same 66, from the other side |
+
+The second form is the one that bites, because it looks like a lookup rather than a
+derivation. **A repeat's panel run is the ledger run at the same `anchor_date`** — that
+resolves 73 of the 74 repeats unambiguously, and the 74th has no panel run at all. Never
+find it by date, in either direction. Having found it, read `filing_date` off its
+`ledger_item`.
+
+Where no panel run exists there is nothing to carry the date, and a filing must be
+matched by date. Match `anchor` **or** `anchor − 1`: across all 701 runs the anchor is
+one of those two and never anything else, so the pair is exhaustive where either alone
+is not.
 
 **There is no reliable key joining a run to its scored item, and the obvious one is the
 same trap.** A scored item carries `as_of` — the forecast's *own* date, the day after the
