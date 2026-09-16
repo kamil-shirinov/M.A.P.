@@ -127,10 +127,15 @@ function corpusRow(row) {
   // example names, which gave 117 of the 120 corpus companies no URL.
   a.href = `company.html?ticker=${encodeURIComponent(row.ticker)}`;
   const badge = el("span", "cmp-badge", row.split);
-  if (row.split === "holdout") badge.classList.add("cmp-badge--holdout");
+  badge.dataset.split = row.split;
   const counts = el("span", "srch-counts");
   counts.append(
-    count(row.filings), chromeText(" filings · ", "separator"), count(row.runs), chromeText(" runs", "runs the ledger maps to those filings"),
+    count(row.filings),
+    chromeText(" filings · ", "separator"),
+    count(row.runs),
+    // NAMED, because the company page counts something else: every run for the
+    // ticker, repeats included. TSLA is 12 here and 16 there.
+    chromeText(" panel runs", "runs the ledger maps to those filings; repeats are not counted"),
   );
   a.append(
     el("span", "srch-ticker", row.ticker),

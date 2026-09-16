@@ -80,7 +80,12 @@ function panelRunCell(filing, repeats) {
   label.textContent = "held, not run";
   wrap.append(label);
 
-  const readBy = repeats.some((r) => nextDay(filing.filed) === r.anchor_date);
+  // Same window as company-runs.js: an anchor is the filing date or the next
+  // day, never anything else across all 701 panel runs. Matching only `+1` missed
+  // the 66 where they coincide.
+  const readBy = repeats.some(
+    (r) => r.anchor_date === filing.filed || nextDay(filing.filed) === r.anchor_date,
+  );
   if (readBy) {
     const note = document.createElement("div");
     note.className = "cmp-subnote";
@@ -90,9 +95,10 @@ function panelRunCell(filing, repeats) {
   return wrap;
 }
 
-/** A corpus forecast opens the day after the filing it reads. Used ONLY to spot
-    a repeat that read an unrun filing — never to produce a filing_date, which is
-    carried on `ledger_item` and equal to the anchor on just 66 of 701 runs. */
+/** Used ONLY to spot a repeat that read an unrun filing, and only alongside an
+    exact-date match — never to produce a filing_date, which is carried on
+    `ledger_item`. The 66 of 701 runs whose anchor IS the filing date are exactly
+    the ones a `+1`-only rule gets wrong. */
 function nextDay(iso) {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1);

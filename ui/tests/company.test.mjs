@@ -349,3 +349,59 @@ describe("URL forms", { skip: !HAVE }, () => {
     );
   });
 });
+
+describe("the four screen defects", { skip: !HAVE }, () => {
+  const css = readFileSync(new URL("../assets/styles/company.css", import.meta.url), "utf8");
+
+  it("resolves a repeat's panel run by anchor, not by filing arithmetic", async () => {
+    // TSLA's 2026-01-02 filing is one of the 66 whose anchor IS the filing date.
+    // A `filing + 1` rule found nothing there and printed ATI's copy about a
+    // panel run that does not exist, while a9b0c9d8 sat in the filings table on
+    // the same page.
+    const { roots } = await renderCompany("TSLA");
+    const text = roots.runs.textContent;
+    assert.doesNotMatch(text, /filing not identified/);
+    assert.doesNotMatch(text, /whose panel run does not exist/);
+    assert.match(text, /the panel's run is a9b0c9d8, anchored 2026-01-02/);
+  });
+
+  it("still reports the one repeat whose panel run really is absent", async () => {
+    const { roots } = await renderCompany("ATI");
+    assert.match(roots.runs.textContent, /filed 2026-02-03, whose panel run does not exist/);
+  });
+
+  it("names the two different run counts rather than showing one", async () => {
+    // Search counts panel runs from corpus.json; this page counts every run for
+    // the ticker. TSLA is 12 and 16. Unlabelled they read as a contradiction.
+    const { roots, runs, company } = await renderCompany("TSLA");
+    const panel = company.filings.reduce((n, f) => n + f.run_ids.length, 0);
+    const all = Object.values(runs.bySource).flat().length;
+    assert.equal(panel, 12);
+    assert.equal(all, 16);
+    assert.match(roots.identity.textContent, /Panel runs/);
+    assert.match(roots.identity.textContent, /Runs on this page/);
+  });
+
+  it("colours neither half of the split", () => {
+    // Accent means panel membership, and dev and holdout are both the panel.
+    // Same overloading that took clean/ambiguous neutral.
+    assert.doesNotMatch(css, /\.cmp-badge--holdout \{/);
+    assert.doesNotMatch(css, /\.cmp-badge--dev \{/);
+    const base = css.match(/\.cmp-badge \{[^}]*\}/)[0];
+    assert.doesNotMatch(base, /var\(--accent/);
+  });
+
+  it("gives the badge an outline that survives the row it sits on", () => {
+    // The dev text measured 6.62:1 and was never the problem: the border was
+    // --rule-2, about 1.3:1 on a sunken row, so the badge had no shape.
+    const base = css.match(/\.cmp-badge \{[^}]*\}/)[0];
+    assert.match(base, /border: 1px solid var\(--ink-3\)/);
+    assert.doesNotMatch(base, /border: 1px solid var\(--rule-2\)/);
+  });
+
+  it("centres the unknown-company state instead of pinning it to the top", () => {
+    const empty = css.match(/\.cmp-empty \{[^}]*\}/)[0];
+    assert.match(empty, /min-height/);
+    assert.match(empty, /justify-content: center/);
+  });
+});

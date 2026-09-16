@@ -25,7 +25,11 @@ export function renderIdentity(root, { company, runs }) {
   tick.textContent = company.ticker;
   head.append(tick);
 
-  const badge = el("span", `cmp-badge cmp-badge--${company.split}`, company.split);
+  // No per-split class: the two halves are a factual partition and carry no
+  // colour. `data-split` stays as a hook for anything that needs to select on it
+  // without implying one half is the notable one.
+  const badge = el("span", "cmp-badge", company.split);
+  badge.dataset.split = company.split;
   badge.dataset.chrome = "which half of the panel this company is in";
   head.append(badge);
 
@@ -38,7 +42,11 @@ export function renderIdentity(root, { company, runs }) {
   // fetch 864 KB to fill one field.
   addFact(facts, "Exchange", el("em", "cmp-absent", "not loaded"));
   addFact(facts, "Filings held", renderFigure(figure(company.filings.length, MEASURED, "int")));
-  addFact(facts, "Runs", renderFigure(figure(countRuns(runs), MEASURED, "int")));
+  /* TWO COUNTS, because they are two things and a page that shows one unlabelled
+     disagrees with the search screen for no visible reason. TSLA: 12 panel runs
+     and 16 runs in all, the difference being 4 repeats. ACGL: 5 and 5. */
+  addFact(facts, "Panel runs", renderFigure(figure(panelRuns(company), MEASURED, "int")));
+  addFact(facts, "Runs on this page", renderFigure(figure(countRuns(runs), MEASURED, "int")));
   root.append(facts);
 
   root.append(standing(company, runs));
@@ -48,6 +56,15 @@ export function renderIdentity(root, { company, runs }) {
   // On a page already showing six runs it tells a reader nothing they cannot see.
 }
 
+/** Runs the ledger maps to this company's filings — what the search screen
+    counts, and what `corpus.json` holds. Excludes repeats and anything outside
+    the corpus. */
+function panelRuns(company) {
+  return company.filings.reduce((n, f) => n + f.run_ids.length, 0);
+}
+
+/** Every run for this ticker, across all four document sources: what this page
+    actually lists as cards. */
 function countRuns(runs) {
   // Four files, counted per source and summed here — never merged into one array
   // and filtered, which is how an out-of-corpus run reaches a corpus figure.
@@ -62,10 +79,10 @@ function standing(company, runs) {
   p.append(
     document.createTextNode(
       "This is a record of forecasts already made for this company, not a current " +
-        "projection. The export holds no live forecast. Of its ",
+        "projection. The export holds no live forecast. Of the ",
     ),
     renderFigure(figure(rows.length, MEASURED, "int")),
-    document.createTextNode(" horizons, "),
+    document.createTextNode(" runs on this page, "),
     renderFigure(figure(closed, MEASURED, "int")),
     document.createTextNode(" have closed."),
   );

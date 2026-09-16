@@ -63,12 +63,20 @@
 }
 .cmp-name { color: var(--ink-2); font-size: var(--step-1); }
 
+/* The text measured 6.62:1 against the row and was never the problem — the
+   BORDER was. `--rule-2` on a sunken row is about 1.3:1, so the outline vanished
+   and the word floated, reading as a failed badge rather than a quiet one. The
+   holdout variant looked fine only because its accent border drew the shape. */
 .cmp-badge {
   font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em;
-  padding: .1rem .4rem; border-radius: var(--radius); border: 1px solid var(--rule-2);
+  padding: .1rem .4rem; border-radius: var(--radius); border: 1px solid var(--ink-3);
   color: var(--ink-2);
 }
-.cmp-badge--holdout { border-color: var(--accent); color: var(--accent); }
+/* NO COLOUR VARIANT. dev and holdout are a factual partition, like clean and
+   ambiguous, and those read neutral for exactly this reason. Accent means panel
+   membership in this page's colour discipline -- and both halves ARE the panel,
+   so accenting one implied a distinction that does not exist. The word says
+   which half; the colour says nothing, because there is nothing to say. */
 
 .cmp-facts {
   display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-7);
@@ -211,7 +219,15 @@
 /* ---- footer and empty state -------------------------------------- */
 .cmp-footer { padding-block: var(--sp-5); border-top: 1px solid var(--rule); }
 .cmp-stamps { display: flex; gap: var(--sp-5); flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); }
-.cmp-empty { max-width: 58ch; margin: var(--sp-7) auto; }
+/* A page whose subject does not exist has one thing to say, so it says it in the
+   middle of the field rather than in a narrow column pinned to the top of a tall
+   empty one. min-height leaves room for the masthead and footer. */
+.cmp-empty {
+  max-width: 62ch; margin-inline: auto;
+  min-height: 60vh; display: flex; flex-direction: column; justify-content: center;
+}
+.cmp-empty h1 { margin: 0 0 var(--sp-4); }
+.cmp-empty .cmp-standing { margin-bottom: var(--sp-3); }
 .cmp-empty pre {
   background: var(--sunken); border: 1px solid var(--rule); border-radius: var(--radius);
   padding: var(--sp-3); font-size: var(--step-0); overflow-x: auto;

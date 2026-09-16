@@ -36,11 +36,11 @@ export function renderRuns(root, { runs, company, open, onToggle }) {
 
   const list = document.createElement("div");
   list.className = "cmp-cards";
-  for (const run of rows) list.append(card(run, company, open, onToggle));
+  for (const run of rows) list.append(card(run, company, open, onToggle, rows));
   root.append(list);
 }
 
-function card(run, company, open, onToggle) {
+function card(run, company, open, onToggle, siblings) {
   const art = document.createElement("article");
   art.className = "cmp-card";
   art.dataset.relation = run.corpus_relation;
@@ -86,7 +86,7 @@ function card(run, company, open, onToggle) {
     art.append(p);
   }
 
-  if (run.corpus_relation === "repeat_of_exhibit") art.append(panelRunBlock(run, company));
+  if (run.corpus_relation === "repeat_of_exhibit") art.append(panelRunBlock(run, company, siblings));
 
   art.append(disclosure(run, open, onToggle));
   art.append(outcomeBlock(run));
@@ -99,9 +99,22 @@ function card(run, company, open, onToggle) {
 /* The three panel-run states                                          */
 /* ------------------------------------------------------------------ */
 
-function panelRunBlock(run, company) {
-  const filed = filingReadBy(run, company);
-  const panel = filed && filed.ran ? filed : null;
+function panelRunBlock(run, company, siblings) {
+  /* A repeat's panel run is the LEDGER RUN AT THE SAME ANCHOR, not a filing found
+     by date arithmetic. This resolved by `filing + 1 day`, which is right for 635
+     of the 701 panel runs and wrong for the 66 whose anchor IS the filing date —
+     TSLA's 2026-01-02 is one, so three of its repeats fell through to "(filing
+     not identified)" and printed ATI's copy about a panel run that does not
+     exist, while a9b0c9d8 sat in the filings table on the same page.
+
+     Anchor matching resolves 73 of the 74 repeats. ATI's is the one true
+     absence. */
+  const panel = siblings.find(
+    (r) => r.corpus_relation === "ledger_item" && r.anchor_date === run.anchor_date,
+  ) ?? null;
+  const filed = panel && !isAbsent(panel.ledger_item)
+    ? panel.ledger_item.filing_date          // carried, never derived
+    : filingNear(run, company);              // no panel run: the filing itself
 
   const box = document.createElement("div");
   box.className = panel ? "cmp-panel-link" : "cmp-panel-missing";
@@ -110,8 +123,10 @@ function panelRunBlock(run, company) {
     // STATE 1 — linked, and the link is marked inferred.
     box.append(
       document.createTextNode("Read the exhibit filed "),
-      chromeText(panel.filed, "the filing date this repeat read"),
-      document.createTextNode("; a panel run is anchored "),
+      chromeText(filed, "the filing date this repeat read, from the panel run's ledger entry"),
+      document.createTextNode("; the panel's run is "),
+      chromeText(panel.run_id.slice(0, 8), "the panel run's abbreviated id"),
+      document.createTextNode(", anchored "),
       chromeText(run.anchor_date, "the anchor the pairing matched on"),
       document.createTextNode("."),
     );
@@ -142,7 +157,7 @@ function panelRunBlock(run, company) {
   box.append(
     document.createTextNode("Read the exhibit filed "),
     filed
-      ? chromeText(filed.filed, "the filing this repeat read")
+      ? chromeText(filed, "the filing this repeat read")
       : document.createTextNode("(filing not identified)"),
     document.createTextNode(
       ", whose panel run does not exist: the corpus settled that filing as a " +
@@ -153,10 +168,19 @@ function panelRunBlock(run, company) {
   return box;
 }
 
-/** The filing a repeat read, found the only way the export allows. A corpus run
-    opens the day after the filing it reads. */
-function filingReadBy(run, company) {
-  return company.filings.find((f) => nextDay(f.filed) === run.anchor_date) ?? null;
+/** The filing a repeat read, for the case where NO panel run exists to carry the
+    date. Used only there: where a panel run exists its `ledger_item.filing_date`
+    is carried and read directly.
+
+    An anchor is the resolved trading session for a forecast dated the day after
+    its filing, so it is the filing date or the next day — across all 701 panel
+    runs it is one of those two and never anything else (66 and 635). Matching
+    both is exhaustive; matching only `+1` is the bug this replaced. */
+function filingNear(run, company) {
+  const hit = company.filings.find(
+    (f) => f.filed === run.anchor_date || nextDay(f.filed) === run.anchor_date,
+  );
+  return hit ? hit.filed : null;
 }
 
 function nextDay(iso) {
