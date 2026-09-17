@@ -2397,3 +2397,47 @@ is reported when its figures are in a tracked artifact — the spend record or a
 report — and prose about it is written after that, from it. For a re-scoreable split the
 scoring-record store now does this by construction. For a one-shot sample nothing did.
 
+---
+
+## 58 · The spend record names a commit the published history does not contain
+
+`corpus/holdout_spend.jsonl` records that the holdout was scored at commit
+`9cb1b84f2172…`. **That commit is on no branch.** The published history carries
+`710879a` in its place — same author date, same message, a different tree.
+
+**What happened.** On 2026-09-08 a `git pull --rebase origin main` picked up two
+commits made in GitHub's web interface and replayed 25 local commits on top of them.
+Author dates survived, committer dates moved to 09-08, and all 25 got new SHAs —
+including the one HEAD pointed at when the holdout was spent three days earlier.
+
+**Nothing about the spend itself is in doubt.** The record's `forecast_digest` is
+`null`, which says the tree was dirty when the holdout was scored, so that commit never
+identified the code that ran. The band, the item count, the freeze version and digest,
+the date and the price vintage all stand, and the primary results are figures with
+intervals. What lapsed is the ability to resolve one field of the record. (#57 is the
+separate question of what the holdout report does not carry at all.)
+
+**A rebase is a rewrite.** Nothing warned, and nothing checks: a field naming a commit
+is a claim about a history that any later rebase can move underneath it, silently. The
+durable form is to write the SHA down only once the history holding it is published —
+or to pin it, as below.
+
+### What the originals were hanging from
+
+Only this machine's reflog. They were never pushed, and unreachable objects are
+prunable by any `git gc` roughly 30 days after they fall out of a ref — here from about
+2026-10-08. Found on 2026-09-17, nine days into that window, while scoping an unrelated
+history rewrite.
+
+- **`refs/archive/pre-rebase-2026-09-08`** pins `5fe46e0`, the pre-rebase tip, which
+  holds all 25 originals including `9cb1b84`. Reachable means gc cannot take them.
+- **`~/Desktop/repo-bundles/M.A.P.-2026-09-17.bundle`** is a `--all` bundle, verified
+  as a complete history and test-restored: `9cb1b84` comes back carrying its original
+  `2026-09-05 05:23:25` committer date. map-ui has one beside it.
+
+### The rule that follows
+
+**Any history rewrite must exclude `refs/archive/*`.** A rewrite walks every ref, so
+including the archive rewrites the very commits it exists to preserve and leaves the pin
+holding copies under new SHAs — the one thing it is there not to do. The bundles are the
+second line, and they sit outside the repository for the same reason.

@@ -753,6 +753,14 @@ uv run lint-imports          # architecture boundaries — see ADR 0004
 The test suite must pass with the inference server switched off. If it ever needs a live
 model, CI is broken.
 
+### `refs/archive/*`, and what a history rewrite must not touch
+
+`refs/archive/*` pins commits nothing else reaches — today the 25 originals that a
+2026-09-08 rebase replaced, including the one `corpus/holdout_spend.jsonl` names.
+**Any history rewrite must exclude `refs/archive/*`**, or it rewrites the commits the
+ref exists to preserve. See Findings #58; the bundles outside the repository are the
+second line.
+
 ### Coverage is gated at 100%, and `scripts/` is outside the gate
 
 `addopts` measures `--cov=mapf`, so the gate covers the package and **not** `scripts/`,
