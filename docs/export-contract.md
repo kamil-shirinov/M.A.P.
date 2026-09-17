@@ -18,7 +18,7 @@ current corpus (120 companies, 709 filings, 779 runs) and will grow with it.
 
 | Path | Load | Size | Rows |
 |---|---|---|---|
-| `manifest.json` | **eager, first** | 1.8 KB | — |
+| `manifest.json` | **eager, first** | 1.9 KB | — |
 | `universe.json` | **eager** | 7.5 KB | 120 |
 | `corpus.json` | **eager** | 108.8 KB | 120 |
 | `runs/by_source/corpus.json` | **eager** | 0.0 KB | 0 |

@@ -2300,3 +2300,100 @@ have been in a reader treating it as an identity. Same family as the `head_tail_
 entry in #39, from the other direction: there one name covered two states, here one state
 produced seven names.
 
+---
+
+## 57 · A pre-registered measure, reported five times, and never as a number
+
+Git note record 14 fixed the holdout report before the spend: a primary test, seven
+secondary measures, and **"EVERY ITEM ON THE LIST IS REPORTED, IN THE ORDER GIVEN,
+WHATEVER IT SAYS."** One of the seven was
+
+```
+S5  corrected and uncorrected against all three baselines -- random walk, GARCH,
+    earnings-scaled random walk -- on CRPS and log score
+```
+
+— twelve comparisons: two forecasts, three baselines, two rules.
+
+**What survives of S5 is one sentence.** It appears in five documents, all written on
+2026-09-05 after the spend (ea47f4b): ADR 0033, STATE.md and Timeline §16 (5ada5aa), that
+commit's own message, and the README's Phase 3 section (a75d156).
+
+> Corrected, the system beats the earnings-scaled random walk on CRPS — up from
+> indistinguishable — and still loses to GARCH and the plain random walk on both rules.
+
+The Timeline alone adds *"as it did uncorrected"*. No figure and no interval for S5 exist
+anywhere. Every neighbouring measure does have them: P1 and P2, S1 to S3, S4's tilt and
+Anderson–Darling statistic, S6 and S7 all have figures in Timeline §16. S5 is the one
+reported in words only.
+
+### What the sentence does not say
+
+Of the twelve comparisons:
+
+- **two are not stated at all** — both forecasts against the earnings-scaled random walk
+  on the log score;
+- **four rest on "as it did uncorrected"**, in one of the five documents — the uncorrected
+  forecast against GARCH and the plain random walk, on both rules;
+- one is stated by implication — uncorrected against the earnings-scaled random walk on
+  CRPS, via "up from indistinguishable";
+- five are stated outright, as a verb.
+
+**And none says what "loses" means.** The evaluator writes a comparison in exactly one of
+two forms (`eval/aggregate.py`): a significant one as `worse by 5.4% [+0.00071, +0.00278]`,
+anything else as `indistinguishable at n=175 … interval spans zero — this is not evidence
+of no difference`. The distance between those forms is the whole content of the result.
+On development, M.A.P. against GARCH on CRPS came out *indistinguishable*,
+`[-0.00035, +0.00220]`. "Loses" on the holdout could be either form. Record 14 committed to
+reporting S5 whatever it said, and what survives does not say what it said.
+
+### Why it cannot be recovered
+
+- The holdout's per-item scores were never persisted, and `map evaluate --split holdout`
+  refuses before computing anything once the spend is recorded (ADR 0031). No re-run exists
+  that does not defeat the guard.
+- `corpus/holdout_spend.jsonl` holds what ADR 0031 specified — date, band, item count,
+  commit, digests, calibration — and no results. ADR 0031 said nothing either way about
+  keeping them.
+- The scoring-record store (83370f6) arrived on 2026-09-09, four days after the spend. The
+  development summaries now in the export were produced by re-scoring development, which is
+  re-scoreable. Nothing did the same for a sample that cannot be scored twice.
+- The printed output is not in any retained session transcript.
+
+The gap is permanent, and it is a gap in the report, not in the holdout: the spend was
+single and clean, and the primary result stands on figures with intervals.
+
+### What is and is not affected
+
+- **The Phase 3 result is untouched.** P1 and P2 are figures: log score −0.28778
+  [−0.45255, −0.11117], CRPS −0.00090 [−0.00178, −0.00012].
+- **The development comparison is intact and exported** — `scores/clean.dev.*` carries all
+  six comparisons — three baselines on each rule — with intervals, and on its own supports "does not beat a
+  plain random walk or GARCH" for the development companies.
+- **What cannot be checked** is that the same held on the holdout, and the one improvement
+  the sentence reports — corrected against the earnings-scaled random walk on CRPS — which
+  rests on nothing but the sentence. The front end's door therefore says "on the
+  development companies", the version every figure behind it is in an exported file for.
+
+Found 2026-09-17, checking a front-page claim against the export before it shipped — not
+by re-reading the Phase 3 write-up, where the sentence reads as a summary of rows that
+were simply not tabled.
+
+### The shape
+
+Same family as #50 — the sentence travelled further than the number — with nothing left at
+the other end. There, a correct figure was restated wrongly and the story about it outlived
+the correction; #50's rule was to re-derive the sentence when the figure changes. Here
+there is no figure to re-derive from.
+
+**A pre-registration that fixes *what* is reported without fixing *its form* can be
+satisfied by a sentence.** Record 14 required every item reported whatever it said. It did
+not say *as figures with their intervals*, and a sentence meets that letter while dropping
+the one distinction the evaluator exists to make. Reporting it beside tables for every
+neighbouring measure is what made the gap invisible: the section looks complete.
+
+**The practical rule:** for a sample that cannot be scored again, a pre-registered measure
+is reported when its figures are in a tracked artifact — the spend record or a committed
+report — and prose about it is written after that, from it. For a re-scoreable split the
+scoring-record store now does this by construction. For a one-shot sample nothing did.
+

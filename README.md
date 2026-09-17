@@ -140,6 +140,16 @@ history is the record of the single spend:
 The band-level results are the table above. Everything else — the 173 individual CRPS,
 log-score and PIT values — existed only in one terminal session.
 
+**One band-level result is stated, not verifiable.** The comparison against the three
+baselines — pre-registered as secondary measure S5, for both the corrected and the
+uncorrected forecast — survives only as the sentence in Phase 3 above: better than the
+earnings-scaled random walk on CRPS, losing to GARCH and the plain random walk on both
+rules. Every other secondary measure has its figures and intervals in the Development
+Timeline. S5 has no figure and no interval in any artifact; the sentence does not say
+whether "loses" means an interval excluding zero, and two of its twelve comparisons are not
+stated at all. The same comparison on the development half is persisted with its intervals,
+under `var/corpus/scores/` and in the export. See Findings #57.
+
 Development-half scoring passes *are* persisted, under `var/corpus/scores/`, because dev
 is re-scoreable. So the asymmetry in this repository is deliberate: you can re-derive any
 development number from an artifact, and no holdout number.
