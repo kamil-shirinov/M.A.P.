@@ -721,6 +721,8 @@ earnings-scaled random walk on CRPS — a change from indistinguishable — and 
 it did uncorrected. A better-calibrated statement of the same information is worth
 having and is not the same as a better forecast.
 
+*Added 2026-09-17:* this sentence is all that survives of the baseline comparison (record 14's S5) — no figure or interval exists in any artifact, and the holdout cannot be re-scored. See [[Findings & Incidents]] #57.
+
 **Next:** the three-agent ablation ([[Findings & Incidents]] #46), which has a
 specific prediction to test rather than being a loose end. The holdout is spent and
 cannot be reused.

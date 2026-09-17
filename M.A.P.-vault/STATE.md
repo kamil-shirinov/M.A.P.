@@ -43,6 +43,8 @@ random walk on CRPS — up from indistinguishable — and still loses to GARCH a
 plain random walk on both rules. Keep the two claims apart: a better-calibrated
 statement of the same information is not a better forecast.
 
+*Added 2026-09-17:* this sentence is all that survives of the baseline comparison (record 14's S5) — no figure or interval exists in any artifact, and the holdout cannot be re-scored. See [[Findings & Incidents]] #57.
+
 **Two things a reader will get wrong unless told:**
 
 1. The development success condition **FAILED** ([0.6997, 0.9931], excluding 1.0 by

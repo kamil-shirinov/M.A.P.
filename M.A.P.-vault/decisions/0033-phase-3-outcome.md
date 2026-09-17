@@ -44,6 +44,8 @@ to GARCH and the plain random walk on both rules. A better-calibrated statement 
 the same information is not a better forecast, and the two claims are kept apart
 wherever this phase is reported.
 
+*Added 2026-09-17:* this sentence is all that survives of the baseline comparison (record 14's S5) — no figure or interval exists in any artifact, and the holdout cannot be re-scored. See [[Findings & Incidents]] #57.
+
 ## Three places the pre-registration was incomplete
 
 **1 · The success condition did not specify its estimator.** Record 3 said
