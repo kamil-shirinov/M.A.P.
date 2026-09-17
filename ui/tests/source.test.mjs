@@ -230,6 +230,27 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
   });
 });
 
+describe("run counts from the manifest", { skip: !HAVE_EXPORT }, () => {
+  it("returns one read count per runs file and no total", async () => {
+    stubFetch();
+    const s = await load();
+    const { manifest } = await s.getExportState();
+    const counts = s.runCountsBySource(manifest);
+    assert.deepEqual(Object.keys(counts), s.SOURCES, "four populations, in the files' order, and nothing else");
+    for (const source of s.SOURCES) {
+      assert.equal(counts[source].provenance, "measured");
+      const rows = JSON.parse(readFileSync(new URL(`runs/by_source/${source}.json`, EXPORT), "utf8"));
+      assert.equal(counts[source].value, rows.length, `${source} matches its file`);
+    }
+  });
+
+  it("states an export older than runs.rows as absent, not as zero runs", async () => {
+    const s = await load();
+    assert.ok(s.isAbsent(s.runCountsBySource({ export_version: "1.1.0" })));
+    assert.ok(s.isAbsent(s.runCountsBySource({ runs: { rows: { unknown: 779 } } })), "a partial set is not four counts");
+  });
+});
+
 describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () => {
   it("returns the index size and the full match total", async () => {
     stubFetch();

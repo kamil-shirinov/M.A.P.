@@ -201,7 +201,12 @@ async function boot() {
   renderWhy($("why"));
 
   box = mountBox($("box"), { onQuery });
-  const door = mountDoor($("door"), { onQuery, companies: state.corpus.length });
+  const door = mountDoor($("door"), {
+    onQuery,
+    companies: state.corpus.length,
+    runsBySource: source.runCountsBySource(exportState.manifest),
+    finding: source.devScoringRecordExported(exportState.manifest),
+  });
   mode = createModeController({ doorInput: door.input, pageInput: box.input });
 
   /* Home is the empty box, reached the way clearing reaches it. Through onQuery

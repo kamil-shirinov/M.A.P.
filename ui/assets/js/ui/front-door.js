@@ -19,7 +19,8 @@
    Everything visual is CSS keyed on `body[data-mode]`, including the rosette's
    scale and opacity. This file only decides the mode and preserves the caret. */
 
-import { DERIVED, chromeText, figure, renderFigure } from "../lib/figure.js";
+import { DERIVED, chromeText, derive, figure, renderFigure } from "../lib/figure.js";
+import { isAbsent } from "../data/source.js";
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -67,8 +68,11 @@ export function mountMastheadNav(host, { current }) {
     so a crest built by this function is not there to be matched, and the morph
     from company.html silently becomes a fade.
 
-    Counts are passed in, never hardcoded, so they stay true to the freeze. */
-export function mountDoor(host, { onQuery, companies }) {
+    Counts are passed in, never hardcoded, so they stay true to the freeze:
+    `companies` from universe.json, `runsBySource` as the boundary reads the
+    manifest's four counts (or its absence), and `finding` true only when the
+    export carries the development scoring record the finding is stated from. */
+export function mountDoor(host, { onQuery, companies, runsBySource, finding }) {
   const block = host.querySelector(".door-block");
 
   const box = el("div", "door-box");
@@ -82,13 +86,41 @@ export function mountDoor(host, { onQuery, companies }) {
   box.append(el("span", "door-slash", "/"), input);
   block.append(box);
 
-  /* Only what a file loaded at boot can say. A run count needs
-     runs/by_source/, 649 KB, and boot reads universe.json alone. A random-walk
-     finding is backed by the export for the development companies only: the
-     holdout's comparison was never persisted (manifest `scores.absent`), so a
-     line saying it was measured on held-out companies has nothing under it. */
   const strip = el("div", "door-strip");
+  const dot = () => el("span", "door-dot", "·");
   strip.append(count(companies), chromeText(" companies", "companies in the frozen corpus"));
+
+  /* The pooling happens HERE, in sight. The manifest carries one count per runs
+     file and no total, because the export keeps the four populations apart. A
+     door's "N runs" is an inventory of everything recorded — repeats and runs
+     outside the corpus included, which is why it is not 701 — so the four are
+     added, and derive() marks the sum as computed on this page, not read. */
+  strip.append(dot());
+  if (isAbsent(runsBySource)) {
+    strip.append(chromeText("runs not counted", runsBySource.why));
+  } else {
+    const perSource = Object.values(runsBySource);
+    const total = derive(perSource.reduce((n, f) => n + f.value, 0), "int", ...perSource);
+    strip.append(
+      renderFigure(total),
+      chromeText(" runs", "every run recorded, summed here across the four document sources"),
+    );
+  }
+
+  /* Stated for the development companies only, because that is the half an
+     exported file backs: scores/*.dev.* carries both rules against both
+     baselines with their intervals. The holdout's comparison survives as a
+     sentence and no figure (M.A.P. Findings #57), so the line does not reach it,
+     and without the development record it is not stated at all. */
+  if (finding) {
+    strip.append(
+      dot(),
+      chromeText(
+        "does not beat a plain random walk or GARCH on the development companies",
+        "stated from the exported development scoring record, where neither baseline is beaten on CRPS or log score",
+      ),
+    );
+  }
 
   host.append(strip);
   input.addEventListener("input", () => onQuery(input.value));

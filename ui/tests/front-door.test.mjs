@@ -110,7 +110,10 @@ describe("mode controller", () => {
 });
 
 describe("the door's strip", { skip: !HAVE }, () => {
-  it("says only what universe.json can count, with the count marked", () => {
+  const exported = (name) => JSON.parse(readFileSync(new URL(name, EXPORT), "utf8"));
+
+  /** Mount the door into a stub tree and return its strip's parts. */
+  function strip(options) {
     class Node {
       constructor(tag) { this.tagName = tag; this.children = []; this.dataset = {}; this._text = ""; this.parentElement = null; }
       set textContent(v) { this._text = String(v); this.children = []; }
@@ -123,16 +126,73 @@ describe("the door's strip", { skip: !HAVE }, () => {
     const host = new Node("section");
     host.querySelector = (sel) => (sel === ".door-block" ? block : null);
     globalThis.document = { createElement: (t) => new Node(t) };
+    mountDoor(host, { onQuery: () => {}, ...options });
+    const node = host.children.find((c) => c.className === "door-strip");
+    return { node, block, parts: node.children.map((c) => c.textContent) };
+  }
 
-    const companies = JSON.parse(readFileSync(new URL("universe.json", EXPORT), "utf8")).length;
-    mountDoor(host, { onQuery: () => {}, companies });
+  it("counts runs from the manifest's four counts, summed on the page and marked derived", async () => {
+    const source = await import("../assets/js/data/source.js");
+    const manifest = exported("manifest.json");
+    const companies = exported("universe.json").length;
+    const runsBySource = source.runCountsBySource(manifest);
+    const { node, block, parts } = strip({ companies, runsBySource, finding: source.devScoringRecordExported(manifest) });
 
-    const strip = host.children.find((c) => c.className === "door-strip");
-    assert.equal(strip.textContent, `${companies} companies`);
-    const figure = strip.children[0];
-    assert.equal(figure.dataset.prov, "derived");
-    assert.ok(strip.children.slice(1).every((c) => c.dataset.chrome !== undefined));
+    const rowsInFiles = source.SOURCES.reduce((n, s) => n + exported(`runs/by_source/${s}.json`).length, 0);
+    assert.deepEqual(parts, [
+      String(companies), " companies", "·",
+      rowsInFiles.toLocaleString("en-US"), " runs", "·",
+      "does not beat a plain random walk or GARCH on the development companies",
+    ]);
+    const [companyFig, , , runFig] = node.children;
+    assert.equal(companyFig.dataset.prov, "derived");
+    assert.equal(runFig.dataset.prov, "derived", "a sum of four read counts is computed here, not read");
+    for (const [i, child] of node.children.entries()) {
+      if (i !== 0 && i !== 3) assert.ok(child.dataset.chrome !== undefined || child.className === "door-dot", `part ${i} is marked`);
+    }
     assert.ok(block.children.some((c) => c.className === "door-box"), "the box goes into the static block");
+  });
+
+  it("adds all four populations, not whichever one holds the runs today", async () => {
+    // Every real run is `unknown`, so the export alone cannot tell a sum from a read.
+    const { figure } = await import("../assets/js/lib/figure.js");
+    const runsBySource = { corpus: 2, edgar: 1, news: 0, unknown: 4 };
+    for (const k of Object.keys(runsBySource)) runsBySource[k] = figure(runsBySource[k], "measured", "int");
+    const { parts } = strip({ companies: 120, runsBySource, finding: false });
+    assert.equal(parts[3], "7");
+  });
+
+  it("states a missing run count instead of reading an old export as zero", async () => {
+    const source = await import("../assets/js/data/source.js");
+    const { runs, ...older } = exported("manifest.json");
+    const { parts, node } = strip({ companies: 120, runsBySource: source.runCountsBySource(older), finding: false });
+    assert.deepEqual(parts, ["120", " companies", "·", "runs not counted"]);
+    assert.match(node.children[3].dataset.chrome, /predates runs\.rows/);
+  });
+
+  it("makes no claim about baselines when the export carries no development record", async () => {
+    const source = await import("../assets/js/data/source.js");
+    const manifest = { ...exported("manifest.json"), scores: { records: [], absent: [] } };
+    assert.equal(source.devScoringRecordExported(manifest), false);
+    const { parts } = strip({ companies: 120, runsBySource: source.runCountsBySource(manifest), finding: false });
+    assert.ok(!parts.some((p) => /random walk|GARCH/.test(p)));
+  });
+
+  it("is still true of every development record the export carries", () => {
+    // The finding is prose, so a re-export cannot update it. This is what fails
+    // if a later development pass beats either baseline on either rule.
+    const records = exported("manifest.json").scores.records.filter((r) => r.split === "dev");
+    assert.ok(records.length > 0, "the finding needs a development record under it");
+    for (const { file } of records) {
+      const { summaries } = exported(file);
+      for (const rule of ["crps", "log score"]) {
+        for (const baseline of ["random_walk", "garch"]) {
+          const line = summaries[rule].find((l) => l.startsWith(`M.A.P. vs ${baseline}:`));
+          assert.ok(line, `${file}: no ${rule} comparison against ${baseline}`);
+          assert.match(line, /: (worse by|indistinguishable at)/, `${file}: ${line}`);
+        }
+      }
+    }
   });
 });
 

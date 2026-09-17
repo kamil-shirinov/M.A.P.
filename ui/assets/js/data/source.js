@@ -547,6 +547,32 @@ export function describeCorpusSize(manifest) {
   ];
 }
 
+/** Runs per document source, from the manifest's `runs.rows` — one count per
+    runs/by_source/ file, so "N runs" needs 1.9 KB rather than 649 KB.
+
+    Four figures and deliberately no total: the export keeps the populations
+    apart, and so does this boundary. A caller that wants a total adds them
+    itself, where the pooling can be seen. An export older than 1.2.0 has no
+    `runs.rows`, and that is stated rather than read as zero. */
+export function runCountsBySource(manifest) {
+  const rows = manifest?.runs?.rows;
+  if (!rows || !SOURCES.every((s) => Number.isInteger(rows[s]))) {
+    return absent(
+      NOT_COMPUTED,
+      "this export predates runs.rows (export_version 1.2.0); re-export to count runs without loading them",
+    );
+  }
+  return Object.fromEntries(SOURCES.map((s) => [s, figure(rows[s], MEASURED, "int")]));
+}
+
+/** Whether the export carries a development scoring record. The one finding a
+    page states in prose about baselines is backed by that file and by nothing
+    else — the holdout's comparison was never persisted (M.A.P. Findings #57) —
+    so without the record the finding has nothing under it and is not stated. */
+export function devScoringRecordExported(manifest) {
+  return (manifest?.scores?.records ?? []).some((r) => r.split === "dev");
+}
+
 // --------------------------------------------------------------------------
 // Fixtures
 // --------------------------------------------------------------------------
