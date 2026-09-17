@@ -1,2 +1,5 @@
 .DS_Store
 assets/export/
+
+# Claude Code settings: configures a machine, not the project.
+.claude/settings.json
