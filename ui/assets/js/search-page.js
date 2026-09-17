@@ -98,20 +98,32 @@ async function group(term) {
   };
 }
 
+/** The index is requested on the FIRST keystroke, never at boot, and the
+    keystroke that requested it does not wait for it.
+
+    It used to. The handler awaited symbols.json and then set the phase to ready
+    — but by the time 864 KB lands that handler is usually several keystrokes
+    stale and bails at the sequence check, so nothing repainted: the chip stayed
+    on "fetching" with the index open, and a term with no corpus hit kept saying
+    absence was not yet knowable. "ZZQ" typed faster than the file arrived left
+    it there until the next keystroke. So when the file lands, the query in the box NOW
+    is re-run, whichever keystroke asked for the file.
+
+    It also painted before grouping, so the first keystroke showed "No corpus
+    company matches" for a term with corpus hits while the index was fetched. */
+function requestIndex() {
+  state.phase = "fetching";
+  source.searchSymbols("", { limit: 1 }).then(({ indexSize }) => {
+    state.symbolCount = indexSize ?? null;
+    state.phase = "ready";
+    onQuery(state.query);
+  });
+}
+
 async function onQuery(value) {
   state.query = value;
   const term = value.trim().toUpperCase();
   const mine = ++state.seq;
-
-  // The index is requested on the FIRST keystroke, never at boot.
-  if (state.phase === "cold" && term) {
-    state.phase = "fetching";
-    paint();
-    const { indexSize } = await source.searchSymbols(term, { limit: 1 });
-    if (mine !== state.seq && state.phase === "fetching") { /* keep going: the file is shared */ }
-    state.symbolCount = indexSize ?? null;
-    state.phase = "ready";
-  }
 
   if (!term) {
     state.groups = {};
@@ -119,6 +131,8 @@ async function onQuery(value) {
     paint();
     return;
   }
+
+  if (state.phase === "cold") requestIndex();
 
   const { groups, matched, screened } = await group(term);
   if (mine !== state.seq) return; // a later keystroke owns the screen
