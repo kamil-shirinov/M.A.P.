@@ -165,6 +165,30 @@ def test_runs_are_written_per_population_with_no_combined_file(
     assert not (tmp_path / "export" / "runs" / "all.json").exists()
 
 
+def test_the_manifest_counts_each_population_as_written_and_never_a_total(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A front door wants "N runs" without fetching 649 KB of records. The manifest
+    gives it one count per file, taken from the rows written into that file, and no
+    total: the sum is the consumer's to take, in code where the pooling is visible.
+    A run the journal cannot read is in no file, so it is in no count."""
+    _ready(tmp_path)
+    runs = tmp_path / "runs"
+    _write_run(runs, source="corpus")
+    _write_run(runs, source="corpus")
+    _write_run(runs, source="edgar", freeze_version=None)
+    _write_run(runs, source=None, freeze_version=None)
+    _write_run(runs, source="corpus", manifest=False)
+
+    result = _export(tmp_path, "--ledger-path", str(tmp_path / "absent.jsonl"), "--allow-partial")
+
+    assert result.exit_code == 0, result.output
+    rows = _read(tmp_path, "manifest.json")["runs"]
+    assert rows == {"rows": {"corpus": 2, "edgar": 1, "news": 0, "unknown": 1}}
+    for source, count in rows["rows"].items():
+        assert len(_read(tmp_path, f"runs/by_source/{source}.json")) == count
+
+
 def test_a_run_record_is_the_same_object_map_runs_emits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -404,7 +428,7 @@ def test_the_manifest_carries_each_sources_own_stamp_not_one_invented_date(
     assert manifest["freeze"]["digest"]
     assert manifest["prices"]["snapshot"] == VINTAGE.isoformat()
     assert manifest["ledger"]["items_settled"] == 1
-    assert manifest["export_version"] == "1.1.0"
+    assert manifest["export_version"] == "1.2.0"
     # The pre-screen's own stamps, as the set they are: every row carries its
     # `fetched_on` and a resumed walk spans days.
     assert manifest["filers"] == {"rows": 2, "vintages": ["2026-09-09"]}

@@ -8,7 +8,7 @@ uv run map export --out ./export          # write it
 uv run map export --out ./export --check  # has anything moved since?
 ```
 
-`export_version` is **1.1.0**. It is the shape of these files, not the age of the data
+`export_version` is **1.2.0**. It is the shape of these files, not the age of the data
 — read it first and refuse a version you do not know. Every size below is at the
 current corpus (120 companies, 709 filings, 779 runs) and will grow with it.
 
@@ -405,10 +405,11 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 ## 7. The manifest, and what `--check` compares
 
 ```json
-{ "export_version": "1.1.0", "exported_at": "2026-09-09",
+{ "export_version": "1.2.0", "exported_at": "2026-09-09",
   "freeze":  { "version": "2.6.0", "digest": "7cf4ae3d…" },
   "code":    { "commit": "e5a38f2…", "forecast_digest": "fb673274…" },
   "ledger":  { "items_settled": 709 },
+  "runs":    { "rows": { "corpus": 0, "edgar": 0, "news": 0, "unknown": 779 } },
   "symbols": { "synced_on": "2026-08-11" },
   "prices":  { "snapshot": "2026-09-05", "companies": 120 },
   "filers":  { "rows": 8001, "vintages": ["2026-09-09"] },
@@ -423,13 +424,15 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 | `freeze.version` / `freeze.digest` | Which frozen corpus, and a hash of the fields that govern a forecast. |
 | `code.commit` / `code.forecast_digest` | Which code. The digest hashes only the files that can produce a forecast (`config/`, `src/mapf/`, minus scoring, rendering and evaluation), so it does **not** move when scoring or CLI-reporting code changes. `null` = the tree was dirty when the export ran, in **any** file — including documentation, which cannot affect a forecast. Treat null as "unidentifiable", not as "changed". |
 | `ledger.items_settled` | See below. |
+| `runs.rows` | One count per `runs/by_source/` file, counted from the rows written into it — the per-population count `map runs` prints. **Four counts and no total.** A total would be the export pooling what its files keep apart; a consumer that wants one adds them, in code where that is visible. Not compared by `--check`. Added in 1.2.0. |
 | `symbols.synced_on` | Vintage of the symbol index — **a month older than the prices**, which is why there is no single export vintage. |
 | `prices.snapshot` | The pinned price vintage every series and outcome was read from. |
 | `filers.rows` / `filers.vintages` | Pre-screen size and the set of days it was walked over. |
 | `files` | Every path written, with its byte size. |
 
-Every stamp above is **carried from its own source**. The export mints only
-`exported_at`, because one export-wide vintage would flatten several different moments
+Every identity stamp above is **carried from its own source**. The counts —
+`prices.companies`, `filers.rows`, `runs.rows` — are counted from what the export read or
+wrote. The export mints only `exported_at`, because one export-wide vintage would flatten several different moments
 into one date and assert a uniformity that does not exist.
 
 **`--check` re-derives seven identities from a live checkout and names what moved:**
@@ -451,7 +454,8 @@ empty `runs` array.
 
 Call it **"corpus items settled"**, or do not show it. If a UI needs "forecasts produced",
 count `ledger_item` runs — **701** — or sum non-empty `runs` arrays. Labelling 709 as runs
-overstates the corpus by 8.
+overstates the corpus by 8. And `runs.rows` sums to **779**, which is every run recorded —
+repeats and the four outside the corpus included — not forecasts of corpus items.
 
 ### Two dev scoring records ship, and one describes a tree that no longer exists
 

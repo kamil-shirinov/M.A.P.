@@ -10,7 +10,9 @@ by `runs.as_dict`, the same serialiser `map runs --json` uses — two serialiser
 one record are two things that drift. No field is computed here, no aggregate is
 taken, and no count is emitted that is not already a count somewhere. The manifest's
 figures are identity fingerprints for staleness detection, not statistics about
-forecasts.
+forecasts — with one kind of exception, row counts of what was written. `runs.rows`
+is the size of each population as it went into its file: the per-population count
+`map runs` already prints, and never a total.
 
 *Populations cannot be pooled.* Runs are written to `runs/by_source/<source>.json`,
 mirroring `Journal`'s four accessors, and there is no combined file. A consumer that
@@ -49,7 +51,8 @@ from mapf.settings import load
 # The export's own format version. A front end that reads these files is entitled
 # to refuse a shape it does not know, and a version it can compare is the only way
 # it can. Distinct from every vintage in the manifest, which describe the DATA.
-EXPORT_VERSION = "1.1.0"
+# 1.2.0 added `runs.rows` to the manifest; nothing was removed or renamed.
+EXPORT_VERSION = "1.2.0"
 
 # The Item 2.02 pre-screen. Written by scripts/edgar_prescreen.py, untracked like
 # every other computed input.
@@ -241,8 +244,10 @@ def export(
             ledger_items=ledger_items,
         )
         runs_by_item: dict[tuple[str, str, str], list[str]] = {}
+        rows_by_source: dict[str, int] = {}
         for source in SOURCES:
             entries = journal.of(source)
+            rows_by_source[source] = len(entries)
             sizes[f"runs/by_source/{source}.json"] = _write(
                 out / "runs" / "by_source" / f"{source}.json", [as_dict(e) for e in entries]
             )
@@ -386,6 +391,11 @@ def export(
             # plus 8 that failed terminally, which is exactly why 8 held filings
             # carry an empty run list.
             "ledger": {"items_settled": len(resolved)},
+            # One count per runs file, counted from the entries written into it, so it
+            # cannot disagree with the file. Four counts and no total: a total would be
+            # the export pooling the populations its files exist to keep apart, and a
+            # consumer that wants one adds them where the pooling can be seen.
+            "runs": {"rows": rows_by_source},
             "symbols": {"synced_on": synced_on.isoformat() if synced_on else None},
             "prices": {"snapshot": vintage.isoformat(), "companies": len(priced)},
             # Every row stamps its own `fetched_on`, and a resumed walk spans days,
