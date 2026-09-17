@@ -18,19 +18,19 @@ current corpus (120 companies, 709 filings, 779 runs) and will grow with it.
 
 | Path | Load | Size | Rows |
 |---|---|---|---|
-| `manifest.json` | **eager, first** | 1.7 KB | — |
+| `manifest.json` | **eager, first** | 1.8 KB | — |
 | `universe.json` | **eager** | 7.5 KB | 120 |
 | `corpus.json` | **eager** | 108.8 KB | 120 |
 | `runs/by_source/corpus.json` | **eager** | 0.0 KB | 0 |
 | `runs/by_source/edgar.json` | **eager** | 0.0 KB | 0 |
 | `runs/by_source/news.json` | **eager** | 0.0 KB | 0 |
-| `runs/by_source/unknown.json` | **eager** | 632.8 KB | 779 |
+| `runs/by_source/unknown.json` | **eager** | 649.2 KB | 779 |
 | `symbols.json` | lazy | 864.5 KB | 10,398 |
 | `filers.json` | lazy | 1,234.4 KB | 8,001 |
-| `prices/<TICKER>.json` | lazy, per company | 2,074.9 KB total · 17.3 KB median | 120 files |
+| `prices/<TICKER>.json` | lazy, per company | 2,074.1 KB total · 17.3 KB median | 120 files |
 | `scores/<band>.<split>.<vintage>.<digest>.json` | lazy | 133.5 KB each | 2 files |
 
-**Eager total 0.75 MB. Whole export 5.19 MB.**
+**Eager total 0.77 MB. Whole export 5.21 MB.**
 
 Load `symbols.json` on the first keystroke in search, not at boot: 120 companies have
 something to show and 10,398 do not. `filers.json` answers "does this ticker's filer

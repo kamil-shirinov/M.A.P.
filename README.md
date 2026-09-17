@@ -170,14 +170,14 @@ is the proof, and `corpus/holdout_spend.jsonl` is the record of the single holdo
 Phase 4's *structure* is verifiable from the source and the test suite — that the journal
 cannot compute a score, that populations have no pooled accessor, that a scoring record
 refuses to be overwritten. Phase 4's *numbers* are not: 779 runs, 701/74/4, 777 closed,
-5.19 MB all come from `var/` and `runs/`, which this repository does not ship. Clone it
+5.21 MB all come from `var/` and `runs/`, which this repository does not ship. Clone it
 and `map export --allow-partial` writes 0.09 MB — the corpus and nothing else.
 
 That boundary is the honest claim. A reader can confirm the machinery does what is
 described here; only someone with the artifacts can confirm the counts.
 
-**`map export --out <dir>`** writes the whole readable state as flat JSON — 5.19 MB, of
-which 1.57 MB is eager. No server, no dependency. **`map export --check`** re-derives
+**`map export --out <dir>`** writes the whole readable state as flat JSON — 5.21 MB, of
+which 0.77 MB is eager. No server, no dependency. **`map export --check`** re-derives
 the identity of all seven inputs and names what has moved since the export was written,
 because a copy goes silently behind and a date alone does not make that visible.
 
@@ -698,11 +698,12 @@ universe.json    the 120 companies that have something to show      eager
 corpus.json      all 709 held filings, each with the runs that read it
 runs/by_source/{corpus,edgar,news,unknown}.json
 symbols.json     the full 10,398-row index                          lazy
+filers.json      the Item 2.02 pre-screen, 8,001 filer rows          lazy
 prices/<TICKER>.json                                                lazy
 scores/<band>.<split>.<vintage>.<digest>.json                       lazy
 ```
 
-**3.96 MB total, 1.57 MB of it eager.** Only prices, symbols and scores are lazy.
+**5.21 MB total, 0.77 MB of it eager.** Only symbols, filers, prices and scores are lazy.
 
 **Populations cannot be pooled.** There is no combined runs file — the four files
 mirror `Journal`'s four accessors, so a consumer that wants everything concatenates
