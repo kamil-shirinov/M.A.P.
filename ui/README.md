@@ -134,6 +134,24 @@ has already been replaced. The unit test misses what you did not imagine; the
 screenshot misses what does not persist; the audit misses nothing, as long as you
 make the page render the state first. Check transitions, not just screens.
 
+#### And a third time: setting a value is not typing
+
+The search screen was verified by setting the box's value in one go, which is one
+`input` event. Wiring the front door, the probes typed a key at a time with
+`symbols.json` held back 700 ms, and three defects appeared that one event cannot
+reach:
+
+- the chip stayed on **"fetching" with the index open**, and "ZZQ" went on saying
+  absence was not yet knowable — the keystroke that requested the index had been
+  superseded before the file landed, and nothing else repainted;
+- the first keystroke of a term *with* corpus hits showed **"No corpus company
+  matches"** for as long as the index took, because the page painted before grouping;
+- at 60 ms a key, **"TSLA" arrived as "TSA"**: focus waited a frame for the view
+  transition, and the L landed on a box that was already hidden.
+
+All three live between keystrokes. Drive the page the way a person does — one key
+at a time, with the network slower than the typing.
+
 **3. Calibration is one attribute.** `lib/calibration.js` owns
 `CALIBRATED_HORIZONS = [5]` and nothing else decides. Every visual difference
 hangs off `[data-calibration]` on the forecast root, so half of it cannot be

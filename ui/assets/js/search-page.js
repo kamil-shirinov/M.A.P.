@@ -23,6 +23,8 @@ import { mountBox, renderResults } from "./ui/search-box.js";
 import { renderFunnel, renderWhy } from "./ui/search-funnel.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
+import { mountRosette } from "./ui/rosette.js";
+import { createModeController, mountDoor } from "./ui/front-door.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -45,6 +47,7 @@ const state = {
 };
 
 let box;
+let mode;
 
 function orderFor(term) {
   return (a, b) => {
@@ -153,15 +156,28 @@ function paint() {
   renderFunnel($("funnel"), { symbolCount: state.symbolCount });
   applyPageProvenance();
   enforce();
+  /* Last, and here rather than at the end of onQuery. A view transition
+     snapshots the page as it stands when the mode flips, so the flip follows
+     the render or the door morphs into the previous query's rows. And every
+     path out of onQuery that changes the screen comes through paint, including
+     the empty box — which is the way back to the door, and which an early
+     return skipped when the call sat at the end of the handler. */
+  mode.sync(state.query);
 }
 
 async function boot() {
+  // The ground carries no data, so it does not wait for any.
+  mountRosette($("ground"));
+
   const [exportState, companies] = await Promise.all([
     source.getExportState(),
     source.listCorpusCompanies(),
   ]);
 
   if (exportState.state === source.NO_EXPORT) {
+    /* No door without an export: there is nothing to search. And door mode
+       hides the page this state is written into, which left a blank screen. */
+    document.body.dataset.mode = "open";
     const main = $("search-page");
     main.textContent = "";
     const box2 = document.createElement("div");
@@ -185,8 +201,21 @@ async function boot() {
   renderWhy($("why"));
 
   box = mountBox($("box"), { onQuery });
+  const door = mountDoor($("door"), { onQuery, companies: state.corpus.length });
+  mode = createModeController({ doorInput: door.input, pageInput: box.input });
+
+  /* Home is the empty box, reached the way clearing reaches it. Through onQuery
+     rather than straight to the mode controller: a query still in flight would
+     otherwise land afterwards, repaint, and reopen the page with its term back
+     in the box. A modified click still opens index.html the ordinary way. */
+  document.querySelector(".masthead h1 a").addEventListener("click", (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    onQuery("");
+  });
+
   paint();
-  box.focus();
+  mode.focus();
 }
 
 boot();

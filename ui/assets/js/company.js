@@ -25,6 +25,7 @@ import { renderRuns } from "./ui/company-runs.js";
 import { renderScoring } from "./ui/company-scoring.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
+import { mountMastheadNav } from "./ui/front-door.js";
 
 const EXAMPLES = { typical: "ACHC", ati: "ATI", aapl: "AAPL" };
 
@@ -169,4 +170,5 @@ function renderUnknownCompany(ticker, absence, manifest) {
   enforce();
 }
 
+mountMastheadNav($("masthead-nav"), { current: "company" });
 paint();

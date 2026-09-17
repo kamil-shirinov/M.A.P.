@@ -1,0 +1,146 @@
+/* The front door — the empty box IS the front door.
+
+   There is no separate landing route and no submit-through. `index.html` was
+   already one page (box -> status -> results); the door is that page with an
+   empty box, so the first keystroke collapses the crest and the results appear
+   in place, and clearing the box is the way back. No navigation either way.
+
+   Mode is two axes, not one. This module owns `door | open`. The index fetch
+   phase (`cold | fetching | ready`) is search-box.js's and is independent: you
+   can be at the door with the index already loaded, or open and still cold.
+
+   The box and the crest exist TWICE — bare in the door, chromed in the card —
+   because one element cannot be in two parents. They carry matching
+   `view-transition-name`s (front-door.css), so the browser morphs one into the
+   other instead of crossfading. Both stay in the DOM; CSS shows one per mode,
+   which keeps the transition names unique among rendered elements and makes
+   focus restoration a `.focus()` rather than a remount.
+
+   Everything visual is CSS keyed on `body[data-mode]`, including the rosette's
+   scale and opacity. This file only decides the mode and preserves the caret. */
+
+import { DERIVED, chromeText, figure, renderFigure } from "../lib/figure.js";
+
+const el = (tag, className, text) => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+
+const count = (n) => renderFigure(figure(n, DERIVED, "int"));
+
+/** Masthead nav. Three screens, one link between them today, and the fourth
+    named but inert — `--ink-3` and `cursor:default`, not `--rule-2`: at 1.5:1
+    "coming" renders as a smudge and reads as a bug rather than a state. */
+export function mountMastheadNav(host, { current }) {
+  const nav = el("nav", "masthead-nav");
+  const items = [
+    { key: "search", label: "find a company", href: "index.html" },
+    { key: "company", label: "company", href: "company.html" },
+    { key: "ledger", label: "run ledger", href: null },
+  ];
+  for (const item of items) {
+    if (item.key === current) {
+      const here = el("span", "masthead-nav-here", item.label);
+      here.setAttribute("aria-current", "page");
+      nav.append(here);
+    } else if (item.href) {
+      const a = el("a", null, item.label);
+      a.href = item.href;
+      nav.append(a);
+    } else {
+      const soon = el("span", "masthead-nav-soon", item.label);
+      soon.title = "Not built yet";
+      nav.append(soon);
+    }
+  }
+  host.append(nav);
+  return nav;
+}
+
+/** The door's box and its counts strip, mounted into the static `.door-block`.
+
+    The crest and subtitle are NOT built here; they are markup in index.html. A
+    cross-document view transition matches names against the incoming page's
+    first rendered frame, and that frame is painted before any module has run —
+    so a crest built by this function is not there to be matched, and the morph
+    from company.html silently becomes a fade.
+
+    Counts are passed in, never hardcoded, so they stay true to the freeze. */
+export function mountDoor(host, { onQuery, companies }) {
+  const block = host.querySelector(".door-block");
+
+  const box = el("div", "door-box");
+  const input = document.createElement("input");
+  input.type = "search";
+  input.className = "door-input";
+  input.placeholder = "ticker or company name";
+  input.autocomplete = "off";
+  input.spellcheck = false;
+  input.setAttribute("aria-label", "Search ticker or company name");
+  box.append(el("span", "door-slash", "/"), input);
+  block.append(box);
+
+  /* Only what a file loaded at boot can say. A run count needs
+     runs/by_source/, 649 KB, and boot reads universe.json alone. A random-walk
+     finding is backed by the export for the development companies only: the
+     holdout's comparison was never persisted (manifest `scores.absent`), so a
+     line saying it was measured on held-out companies has nothing under it. */
+  const strip = el("div", "door-strip");
+  strip.append(count(companies), chromeText(" companies", "companies in the frozen corpus"));
+
+  host.append(strip);
+  input.addEventListener("input", () => onQuery(input.value));
+  return { input };
+}
+
+/** The controller. `doorInput` and `pageInput` are the two boxes.
+
+    `sync(query)` is called at the end of every paint of the search page — after
+    the results DOM is updated, because a view transition snapshots the page as
+    it stands when the mode flips. It is idempotent and cheap when the mode does
+    not change, so calling it on every keystroke is correct. */
+export function createModeController({ doorInput, pageInput }) {
+  const modeFor = (query) => (query.trim() ? "open" : "door");
+
+  /* Focus moves to the box the new mode shows, and it moves INSIDE the flip.
+     Waiting for the transition's `ready` leaves a frame in which the box being
+     typed into is display:none and a keystroke lands on <body>: typed at 60 ms a
+     key, "TSLA" arrived as "TSA". The value is carried across from the box that
+     had focus, because a keystroke that arrived after the last paint is in that
+     box and nowhere else yet. */
+  const restore = (mode) => {
+    const [from, to] = mode === "open" ? [doorInput, pageInput] : [pageInput, doorInput];
+    if (!to) return;
+    if (from && document.activeElement === from) to.value = from.value;
+    to.focus();
+    const n = to.value.length;
+    try { to.setSelectionRange(n, n); } catch { /* type=search in some engines */ }
+  };
+
+  return {
+    /** Mirror `query` into both boxes, then flip the mode inside a view
+        transition if it changed. Without the API the flip is an instant swap. */
+    sync(query) {
+      const next = modeFor(query);
+      if (doorInput && doorInput.value !== query) doorInput.value = query;
+      if (pageInput && pageInput.value !== query) pageInput.value = query;
+      if (document.body.dataset.mode === next) return next;
+
+      const flip = () => {
+        document.body.dataset.mode = next;
+        restore(next);
+      };
+      if (document.startViewTransition) document.startViewTransition(flip);
+      else flip();
+      return next;
+    },
+
+    /** Focus whichever box the current mode shows. At boot that is the door's:
+        the page's box is display:none there, and focusing it does nothing. */
+    focus() {
+      restore(document.body.dataset.mode);
+    },
+  };
+}

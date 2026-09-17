@@ -9,13 +9,24 @@
 <link rel="stylesheet" href="assets/styles/components.css">
 <link rel="stylesheet" href="assets/styles/company.css">
 <link rel="stylesheet" href="assets/styles/search.css">
+<link rel="stylesheet" href="assets/styles/front-door.css">
 </head>
-<body>
-  <header class="masthead">
-    <div>
-      <strong>M.A.P.</strong>
-      <span class="tag">Market&rsquo;s Agentic Projections &mdash; local inference, scored forecasts</span>
+<body data-mode="door">
+  <div class="ground" id="ground"></div>
+
+  <!-- The crest is markup, not built by front-door.js: a cross-document view
+       transition matches against the first rendered frame, which is painted
+       before any module runs. front-door.js adds the box and the strip. -->
+  <section class="door" id="door">
+    <div class="door-block">
+      <div class="door-crest"><span class="door-rule"></span><h1>M.A.P.</h1><span class="door-rule"></span></div>
+      <div class="door-sub">Market&rsquo;s Agentic Projections</div>
     </div>
+  </section>
+
+  <header class="masthead">
+    <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
+    <span class="tag">Market&rsquo;s Agentic Projections &mdash; local inference, scored forecasts</span>
     <div class="masthead-vintage" id="masthead-vintage"></div>
   </header>
 

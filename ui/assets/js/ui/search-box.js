@@ -101,6 +101,7 @@ export function mountBox(host, { onQuery }) {
   input.addEventListener("input", () => onQuery(input.value));
 
   return {
+    input,
     focus: () => input.focus(),
     update({ phase, searchable }) {
       const [label, why] = PHASE_CHIP[phase];

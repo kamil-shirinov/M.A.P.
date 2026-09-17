@@ -6,16 +6,19 @@
    three lines of JS, which live outside the two files this change was scoped to.
 
    NETWORK DEPENDENCY, DECLARED: the @import below is the only outbound request
-   the app makes. Neither Inter nor JetBrains Mono is installed on this machine,
-   and with no build step there is nowhere else to get them. Delete the line and
-   the stacks fall through to system faces with no other change. */
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap");
+   the app makes. None of Inter, JetBrains Mono or Newsreader is installed on this
+   machine, and with no build step there is nowhere else to get them. The serif is
+   a third family on this same request rather than a second <link>, so the count
+   of outbound requests stays at one. Delete the line and the stacks fall through
+   to system faces with no other change. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap");
 
 :root {
   color-scheme: dark light;
 
   --font-sans: "Inter", ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-serif: "Newsreader", ui-serif, Georgia, "Times New Roman", serif;
 
   /* Tighter than the research-document scale: a terminal reads small. */
   --step--1: 0.6875rem;   /* 11px  — labels, axis ticks */
