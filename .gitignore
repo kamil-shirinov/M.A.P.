@@ -51,3 +51,6 @@ graphify-out/
 # who opens it.
 **/.obsidian/workspace.json
 **/.obsidian/workspace-mobile.json
+
+# Claude Code settings: configures a machine, not the project.
+.claude/settings.json
