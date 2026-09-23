@@ -316,6 +316,49 @@ export async function listRuns(ticker) {
   return { bySource, provenance: MEASURED };
 }
 
+/** The whole journal, still kept apart by source.
+
+    `listRuns` answers "this company's runs"; this answers "every run", which is
+    what a ledger screen draws. Same four keys and still no combined array: the
+    caller that wants everything loops SOURCES itself, so the pooling is written
+    where it can be seen rather than handed out pre-flattened.
+
+    The four files together are 649.2 KB, almost all of it `unknown.json`. This
+    is the one screen that opens them; the front door counts runs from the
+    manifest instead. */
+export async function listJournal() {
+  const bySource = {};
+  for (const name of SOURCES) {
+    const rows = await readJson(`runs/by_source/${name}.json`);
+    bySource[name] = (rows ?? []).map(adaptRun);
+  }
+  return { bySource, provenance: MEASURED };
+}
+
+/** Filings the corpus holds that no run ever read — 8 today, each a terminal
+    failure the ledger settled. They are NOT runs and cannot be rows on a screen
+    that counts runs; `ledger.items_settled` counts them and this does not.
+
+    Computed from the file rather than carried: a hardcoded list goes stale the
+    first time a corpus item settles. */
+export async function listUnrunFilings() {
+  const companies = await readJson("corpus.json");
+  if (companies === null) return [];
+  const out = [];
+  for (const company of companies) {
+    for (const filing of company.filings) {
+      if (filing.runs.length) continue;
+      out.push({
+        ticker: company.ticker,
+        filed: filing.filed,
+        band: filing.band,
+        split: filing.split ?? company.split,
+      });
+    }
+  }
+  return out;
+}
+
 function adaptRun(run) {
   const spot = run.anchor_spot;
   return {
@@ -337,6 +380,10 @@ function adaptRun(run) {
 
     document_source: run.document_source,
     corpus_relation: run.corpus_relation,
+    // Null means UNRECORDED, not "no freeze": 68 runs predate the field. An
+    // absence says which, where a null rendered as a blank cell says neither.
+    freeze_version: run.freeze_version ?? absent(NOT_COMPUTED, "this run predates the field"),
+    document_is_frozen_exhibit: run.document_is_frozen_exhibit,
     arm: run.arm,
     // Present only when `corpus_relation` is "ledger_item".
     ledger_item: run.ledger_item ?? absent(NOT_APPLICABLE, "this run is not a panel item"),
@@ -519,7 +566,10 @@ export function describeOutcome(run) {
     chrome(o.retrieved_on, "the day the close was read"),
     text(" from the "),
     chrome(o.snapshot, "the pinned price vintage it was read from"),
-    text(" snapshot."),
+    text(" snapshot, "),
+    // No digits, so plain text parts: the provider and the adjustment basis the
+    // close was read on. `split_adjusted` is written as it reads aloud.
+    text(`${o.provider}, ${o.adjustment.replace(/_/g, "-")}.`),
   ];
 }
 

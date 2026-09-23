@@ -18,6 +18,10 @@ export const fmt = {
   // actions. Six places collapses them to the two that exist; ratio3 rounds
   // 0.988142 to 0.988 and loses the digits that identify the event.
   ratio: (v) => v.toFixed(6),
+  // File sizes as the export contract states them: DECIMAL KB, so 649,217 bytes
+  // is 649.2 KB and not 634.0. Under 1000 the byte count is the honest figure —
+  // "0.0 KB" for a 2-byte empty array reads as missing rather than empty.
+  kb: (bytes) => (bytes < 1000 ? `${bytes} bytes` : (bytes / 1000).toFixed(1) + " KB"),
   isoDate: (d) => d,
   shortDate: (iso) => {
     const [y, m, d] = iso.split("-");

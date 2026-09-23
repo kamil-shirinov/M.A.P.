@@ -42,7 +42,7 @@ export function mountMastheadNav(host, { current }) {
     // "runs", not "run ledger": the rows are runs, and `ledger.items_settled` in the
     // export counts corpus items — 709 settled against 779 runs. The export contract
     // warns against reading one as the other, and a screen title is where that starts.
-    { key: "runs", label: "runs", href: null },
+    { key: "runs", label: "runs", href: "runs.html" },
   ];
   for (const item of items) {
     if (item.key === current) {

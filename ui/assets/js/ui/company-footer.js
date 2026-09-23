@@ -23,6 +23,9 @@ export function renderFooter(root, manifest) {
     ["prices", manifest.prices.snapshot],
     ["symbols", manifest.symbols.synced_on],
     ["freeze", manifest.freeze.version],
+    // Which code wrote the export. Abbreviated to seven, like every other commit
+    // reference in this project.
+    ["code", manifest.code.commit.slice(0, 7)],
   ]) {
     stamps.append(chromeText(`${label} ${value}`, `the ${label} vintage stamp`));
   }

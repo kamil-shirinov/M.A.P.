@@ -244,7 +244,12 @@ function outcomeBlock(run) {
     p.append(
       document.createTextNode(" Realised "),
       renderFigure(run.outcome.realised_log_return),
-      document.createTextNode(" (log)."),
+      // NOT "(log)". The stored quantity is a log return; `fmt.logpct` applies
+      // expm1 before printing, so the number on screen is the simple return that
+      // log return equals. The label described the value in the field rather
+      // than the one in front of the reader, which is the same error in the
+      // other direction from sharing one helper between the two conventions.
+      document.createTextNode(" — a log return, shown as the simple return it equals."),
     );
   }
   return p;

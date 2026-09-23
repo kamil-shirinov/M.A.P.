@@ -68,11 +68,16 @@ on 2026-08-11 (21-session).
 **Horizon** — 777 runs at 5 sessions, 2 at 21.
 
 **Freeze version** — which frozen corpus the run executed under: 2.6.0 ×359, 2.4.0 ×214,
-2.3.0 ×135, 2.5.0 ×3, and **68 with none at all** (they predate the field). Five values
-plus an absence, not four.
+2.3.0 ×135, 2.5.0 ×3, and **68 with none at all** (they predate the field). **Four**
+versions plus an absence — an earlier draft of this profile said five, and the screen's
+freeze filter is built from the data rather than from that list.
 
 **Drift** — 9 runs carry `anchor_drift`, where the pinned snapshot disagrees with the
-spot the run recorded: 7 SCCO (a 1.012 split, ratio ≈0.988142) and 2 AAPL (≈1.007509).
+spot the run recorded: 7 SCCO (ratio ≈0.988142) and 2 AAPL (≈1.007509). The export carries
+**the ratio and nothing else** — no event, no size, no name. "A 1.012 split" is not in these
+files: it is 1 ÷ 0.988142, and a split is one of several corporate actions with that shape.
+The screen shows the ratio measured and, beside it, 1 ÷ ratio marked derived, called a
+corporate action.
 
 **Band and split** — of the 701 ledger runs, 351 are `clean` and 350 `ambiguous`. By the
 ticker's split, the 779 runs divide 398 dev / 381 holdout.
@@ -109,8 +114,9 @@ times December or June.
 2026-01-30 (22), 2026-04-30 (18), 2026-02-04 (18).
 
 **Widths** — tickers are at most 5 characters; the longest company name is 36 (DJT).
-`run_id` is a 36-character UUID, and **the first 6 characters are already unique across
-all 779**, so an abbreviation is safe (the company page abbreviates to 8).
+`run_id` is a 36-character UUID, and **the first 5 characters are already unique across
+all 779** — 4 collide on five pairs. An abbreviation is safe from 5 up; the screens use 8
+to match each other, not because 8 is needed.
 
 ---
 
@@ -126,11 +132,15 @@ all 779**, so an abbreviation is safe (the company page abbreviates to 8).
   "ledger_item": null,
   "outcome": { "trading_date": "2026-08-20", "close": 311.29998779296875,
                "provider": "yfinance", "adjustment": "split_adjusted",
-               "snapshot": "2026-09-05", "retrieved_on": "2026-09-09" },
+               "snapshot": "2026-09-05", "retrieved_on": "2026-09-17" },
   "outcome_status": "closed" }
 ```
 
 Every run has exactly 3 scenarios. `document_is_frozen_exhibit` is true on 775 of 779.
+
+**`retrieved_on` moves on every export.** It is the day the export read the close: 2026-09-17
+on all 777 closed runs today, 2026-09-09 a week ago. No copy may hardcode it — read it from
+the row, as `describeOutcome` does.
 
 Four things the fields do **not** support:
 
