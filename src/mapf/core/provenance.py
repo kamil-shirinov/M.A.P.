@@ -64,6 +64,9 @@ class CodeVersion(DomainModel):
     # A dirty tree means the commit does not fully describe what ran. Recorded
     # rather than forbidden: refusing to run on uncommitted changes would make
     # every experiment need a commit first, and the honest alternative is to say so.
+    #
+    # "Dirty" means FORECAST_ROOTS are dirty, not that the checkout is. See
+    # `code_version` for why the scope narrowed and what it now excludes.
     dirty: bool = False
     # A hash over the contents of every file that can produce a forecast (ADR 0026).
     #
@@ -146,12 +149,36 @@ def code_version(root: Path | None = None) -> CodeVersion:
     repository are all ordinary situations, and none of them is a reason to fail a
     run that would otherwise succeed — an unknown version recorded as unknown is
     strictly better than a run that did not happen.
+
+    `dirty` answers "are the forecast-producing roots uncommitted", NOT "is the
+    checkout clean". An edit to `ui/`, `docs/` or the vault leaves it False.
     """
     where = root or Path(__file__).resolve().parent.parent.parent.parent
     commit = _git(["rev-parse", "HEAD"], where)
     if commit is None or len(commit) != 40:
         return CodeVersion()
-    status = _git(["status", "--porcelain"], where)
+    # Scoped to FORECAST_ROOTS, which is the fix proposed and deferred in Findings
+    # #54. The digest is a hash of those roots AT `commit`, so it is honest exactly
+    # when those roots match the commit — and dirt outside them cannot make it
+    # dishonest. Bare `git status --porcelain` suppressed the digest for a README
+    # edit, which is the 208 problem arriving for no reason at all.
+    #
+    # WHY IT IS APPLIED NOW, having been refused before. #54 declined it because
+    # loosening the rule means recording a digest while *something* uncommitted is
+    # present, and the argument that the something cannot matter is the argument
+    # ADR 0030 had to make by hand for 208 items. That reasoning assumed the only
+    # things outside these roots were prose. The front end now lives in `ui/`, so
+    # the common case is an uncommitted UI file during a twelve-night corpus run,
+    # and the conservative direction has inverted: the whole-tree rule would now
+    # manufacture undigested strata as a matter of routine, from a folder that
+    # cannot be imported by the pipeline and is not read by any forecast.
+    #
+    # The exclusions in NOT_FORECAST_PATHS are deliberately NOT subtracted here.
+    # They are provably downstream of a forecast and so are left out of the hash,
+    # but dirt in them still suppresses the digest: narrowing to the roots is the
+    # change #54 argued for, and narrowing further is a second decision nobody has
+    # made. Over-refusing inside `src/mapf` stays visible and recoverable.
+    status = _git(["status", "--porcelain", "--", *FORECAST_ROOTS], where)
     dirty = bool(status)
     # No digest on a dirty tree: the commit does not describe the files that ran, so
     # any hash taken from it would name code that was not executed.

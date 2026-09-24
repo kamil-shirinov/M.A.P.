@@ -141,3 +141,115 @@ def test_the_lookup_is_cached_for_the_life_of_the_process() -> None:
     """Committing mid-run changes what git answers but not the code executing, so
     the cached first answer is the accurate one."""
     assert code_version() is code_version()
+
+
+# ---------------------------------------------------------------------------
+# What counts as dirty — Findings #54, applied
+# ---------------------------------------------------------------------------
+# These run against a REAL repository rather than a monkeypatched `subprocess`.
+# The whole change is which pathspec is handed to `git status`, and a fake that
+# ignores its arguments would pass whatever the pathspec was.
+def _repo(root: Path) -> str:
+    """A checkout shaped like this one: forecast roots, a UI folder, and prose."""
+    for path, body in {
+        "src/mapf/core/thing.py": "VALUE = 1\n",
+        "config/default.toml": "[models]\nalias = 'x'\n",
+        "ui/assets/js/app.js": "export const a = 1;\n",
+        "ui/index.html": "<!doctype html>\n",
+        "docs/note.md": "prose\n",
+        "README.md": "prose\n",
+    }.items():
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(body, encoding="utf-8")
+    git = ["git", "-c", "user.email=t@t", "-c", "user.name=t"]
+    subprocess.run([*git, "init", "-q"], cwd=root, check=True)  # noqa: S603, S607
+    subprocess.run([*git, "add", "-A"], cwd=root, check=True)  # noqa: S603, S607
+    subprocess.run([*git, "commit", "-q", "-m", "in"], cwd=root, check=True)  # noqa: S603, S607
+    return subprocess.run(  # noqa: S603, S607
+        ["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+
+def _version(root: Path) -> CodeVersion:
+    code_version.cache_clear()
+    try:
+        return code_version(root)
+    finally:
+        code_version.cache_clear()
+
+
+def test_an_edit_under_ui_leaves_the_tree_counted_as_clean(tmp_path: Path) -> None:
+    """The front end cannot reach a forecast, and before this it silenced one.
+
+    `ui/` is not importable by the pipeline and is read by no run. Under the old
+    whole-tree rule an uncommitted UI file made every forecast produced beside it
+    record `forecast_digest: null` — the 208 problem, manufactured by a stylesheet.
+    """
+    _repo(tmp_path)
+    clean = _version(tmp_path)
+    assert clean.dirty is False
+    assert clean.forecast_digest is not None
+
+    (tmp_path / "ui/assets/js/app.js").write_text("export const a = 2;\n", encoding="utf-8")
+    edited = _version(tmp_path)
+    assert edited.dirty is False
+    assert edited.reproducible is True
+    # And the digest is not merely present: it is the SAME one. The UI is outside
+    # what is hashed, so an identical digest is the claim being made — these two
+    # checkouts are forecast-equivalent.
+    assert edited.forecast_digest == clean.forecast_digest
+
+
+def test_an_edit_under_src_mapf_still_makes_it_dirty(tmp_path: Path) -> None:
+    """The narrowing must not reach the roots it was narrowed to."""
+    _repo(tmp_path)
+    (tmp_path / "src/mapf/core/thing.py").write_text("VALUE = 2\n", encoding="utf-8")
+    version = _version(tmp_path)
+    assert version.dirty is True
+    assert version.forecast_digest is None
+    assert version.reproducible is False
+
+
+def test_config_is_inside_the_dirty_scope_too(tmp_path: Path) -> None:
+    """Both roots, not just the code one: a config key changes what was asked."""
+    _repo(tmp_path)
+    (tmp_path / "config/default.toml").write_text("[models]\nalias = 'y'\n", encoding="utf-8")
+    assert _version(tmp_path).dirty is True
+
+
+def test_prose_outside_the_roots_no_longer_suppresses_the_digest(tmp_path: Path) -> None:
+    """The case Findings #54 was written about: a README edit took the identity out
+    of an export that the same document described a rule for choosing by."""
+    _repo(tmp_path)
+    (tmp_path / "README.md").write_text("more prose\n", encoding="utf-8")
+    (tmp_path / "docs/note.md").write_text("more prose\n", encoding="utf-8")
+    version = _version(tmp_path)
+    assert version.dirty is False
+    assert version.forecast_digest is not None
+
+
+def test_an_untracked_file_counts_by_where_it_is(tmp_path: Path) -> None:
+    """Untracked is dirty — `git status --porcelain` reports it — and the pathspec
+    decides which untracked files are heard. A new module under `src/mapf` is the
+    strongest case for refusing: it is code that exists and is in no commit."""
+    _repo(tmp_path)
+    (tmp_path / "ui/assets/js/new.js").write_text("export const b = 1;\n", encoding="utf-8")
+    assert _version(tmp_path).dirty is False
+
+    (tmp_path / "src/mapf/core/new.py").write_text("VALUE = 3\n", encoding="utf-8")
+    assert _version(tmp_path).dirty is True
+
+
+def test_dirt_in_an_excluded_forecast_path_still_suppresses(tmp_path: Path) -> None:
+    """NOT_FORECAST_PATHS are left OUT of the hash and left IN the dirty scope.
+
+    Narrowing to the roots is the change Findings #54 argued for. Narrowing further
+    — so that an uncommitted `src/mapf/eval/` recorded a digest — is a second
+    decision, and nobody has made it. Over-refusing here stays visible.
+    """
+    _repo(tmp_path)
+    evaluate = tmp_path / "src/mapf/eval/aggregate.py"
+    evaluate.parent.mkdir(parents=True, exist_ok=True)
+    evaluate.write_text("MEAN = 1\n", encoding="utf-8")
+    assert _version(tmp_path).dirty is True
