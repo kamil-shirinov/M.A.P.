@@ -168,9 +168,12 @@ body[data-mode="door"] .ground { transform: translate(-50%, -50%) scale(1.08); o
   font-size: var(--step--1);
 }
 .masthead-nav a { color: var(--ink-3); }
+/* The door's run count links to the runs screen and looks like what it already
+   was: the accent arrives on hover, not as a third colour in a three-item strip. */
+.door-strip .door-runs { color: inherit; text-decoration: none; }
+.door-strip .door-runs:hover .fig { color: var(--accent); }
 .masthead-nav a:hover { color: var(--ink-num); text-decoration: none; }
 .masthead-nav-here { color: var(--ink-num); border-bottom: 1px solid var(--accent); padding-bottom: var(--sp-1); }
-.masthead-nav-soon { color: var(--ink-3); cursor: default; }
 
 @media (prefers-reduced-motion: reduce) {
   [data-band] { animation: none; }

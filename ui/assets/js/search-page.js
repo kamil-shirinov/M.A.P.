@@ -24,7 +24,7 @@ import { renderFunnel, renderWhy } from "./ui/search-funnel.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { mountRosette } from "./ui/rosette.js";
-import { createModeController, mountDoor } from "./ui/front-door.js";
+import { createModeController, mountDoor, mountMastheadNav } from "./ui/front-door.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -200,6 +200,7 @@ async function boot() {
   renderFooter($("footer"), exportState.manifest);
   renderWhy($("why"));
 
+  mountMastheadNav($("masthead-nav"), { current: "search" });
   box = mountBox($("box"), { onQuery });
   const door = mountDoor($("door"), {
     onQuery,

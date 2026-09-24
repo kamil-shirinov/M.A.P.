@@ -170,5 +170,6 @@ function renderUnknownCompany(ticker, absence, manifest) {
   enforce();
 }
 
-mountMastheadNav($("masthead-nav"), { current: "company" });
+// A company page is a detail page: neither section is "here".
+mountMastheadNav($("masthead-nav"), { current: null });
 paint();

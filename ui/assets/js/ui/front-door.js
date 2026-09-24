@@ -31,17 +31,22 @@ const el = (tag, className, text) => {
 
 const count = (n) => renderFigure(figure(n, DERIVED, "int"));
 
-/** Masthead nav. Three screens, one link between them today, and the fourth
-    named but inert — `--ink-3` and `cursor:default`, not `--rule-2`: at 1.5:1
-    "coming" renders as a smudge and reads as a bug rather than a state. */
+/** Masthead nav: two sections, and the crest goes home.
+
+    A company page is NOT a nav item. It is a detail page, reached from a search
+    result or a runs row, and an item that needs a subject before it means
+    anything would have to pick one — which is how "company" came to link to an
+    arbitrary example. `current` is null on such a page: neither section is where
+    you are, and nothing is marked.
+
+    "runs", not "run ledger": the rows are runs, and `ledger.items_settled` in
+    the export counts corpus items — 709 settled against 779 runs. The contract
+    warns against reading one as the other, and a screen's name is where that
+    starts. */
 export function mountMastheadNav(host, { current }) {
   const nav = el("nav", "masthead-nav");
   const items = [
     { key: "search", label: "find a company", href: "index.html" },
-    { key: "company", label: "company", href: "company.html" },
-    // "runs", not "run ledger": the rows are runs, and `ledger.items_settled` in the
-    // export counts corpus items — 709 settled against 779 runs. The export contract
-    // warns against reading one as the other, and a screen title is where that starts.
     { key: "runs", label: "runs", href: "runs.html" },
   ];
   for (const item of items) {
@@ -49,14 +54,10 @@ export function mountMastheadNav(host, { current }) {
       const here = el("span", "masthead-nav-here", item.label);
       here.setAttribute("aria-current", "page");
       nav.append(here);
-    } else if (item.href) {
+    } else {
       const a = el("a", null, item.label);
       a.href = item.href;
       nav.append(a);
-    } else {
-      const soon = el("span", "masthead-nav-soon", item.label);
-      soon.title = "Not built yet";
-      nav.append(soon);
     }
   }
   host.append(nav);
@@ -104,10 +105,17 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding }) {
   } else {
     const perSource = Object.values(runsBySource);
     const total = derive(perSource.reduce((n, f) => n + f.value, 0), "int", ...perSource);
-    strip.append(
+    /* The count is the way in. It is already the thing a reader looks at, and the
+       screen it names exists — so it is a link, styled as the text it already was
+       rather than as a new element competing with the box. */
+    const link = el("a", "door-runs");
+    link.href = "runs.html";
+    link.title = "Every run in the export";
+    link.append(
       renderFigure(total),
       chromeText(" runs", "every run recorded, summed here across the four document sources"),
     );
+    strip.append(link);
   }
 
   /* Stated for the development companies only, because that is the half an

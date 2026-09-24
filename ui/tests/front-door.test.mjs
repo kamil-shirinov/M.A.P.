@@ -141,14 +141,18 @@ describe("the door's strip", { skip: !HAVE }, () => {
     const rowsInFiles = source.SOURCES.reduce((n, s) => n + exported(`runs/by_source/${s}.json`).length, 0);
     assert.deepEqual(parts, [
       String(companies), " companies", "·",
-      rowsInFiles.toLocaleString("en-US"), " runs", "·",
+      // The run count is one part now: a link to the screen it names.
+      `${rowsInFiles.toLocaleString("en-US")} runs`, "·",
       "does not beat a plain random walk or GARCH on the development companies",
     ]);
-    const [companyFig, , , runFig] = node.children;
+    const [companyFig, , , runLink] = node.children;
     assert.equal(companyFig.dataset.prov, "derived");
+    assert.equal(runLink.href, "runs.html", "the count is the way in to the runs screen");
+    const runFig = runLink.children[0];
     assert.equal(runFig.dataset.prov, "derived", "a sum of four read counts is computed here, not read");
     for (const [i, child] of node.children.entries()) {
-      if (i !== 0 && i !== 3) assert.ok(child.dataset.chrome !== undefined || child.className === "door-dot", `part ${i} is marked`);
+      if (i === 0 || i === 3) continue;
+      assert.ok(child.dataset.chrome !== undefined || child.className === "door-dot", `part ${i} is marked`);
     }
     assert.ok(block.children.some((c) => c.className === "door-box"), "the box goes into the static block");
   });
@@ -159,7 +163,7 @@ describe("the door's strip", { skip: !HAVE }, () => {
     const runsBySource = { corpus: 2, edgar: 1, news: 0, unknown: 4 };
     for (const k of Object.keys(runsBySource)) runsBySource[k] = figure(runsBySource[k], "measured", "int");
     const { parts } = strip({ companies: 120, runsBySource, finding: false });
-    assert.equal(parts[3], "7");
+    assert.equal(parts[3], "7 runs");
   });
 
   it("states a missing run count instead of reading an old export as zero", async () => {
@@ -229,6 +233,40 @@ describe("wiring in search-page.js", () => {
     const boot = bodyOf(page, "async function boot()");
     assert.match(boot, /mode\.focus\(\)/);
     assert.doesNotMatch(boot, /box\.focus\(\)/);
+  });
+});
+
+describe("masthead nav", () => {
+  it("offers two sections and never a company", async () => {
+    const doc = stubDocument({ api: false });
+    const { mountMastheadNav } = await import("../assets/js/ui/front-door.js");
+    const host = { children: [], append(...k) { this.children.push(...k); } };
+    doc.createElement = (t) => {
+      const n = { tagName: t, children: [], dataset: {}, _cls: new Set(), attrs: {},
+        set className(v) { this._cls = new Set(String(v).split(/\s+/)); },
+        get className() { return [...this._cls].join(" "); },
+        set textContent(v) { this._text = String(v); },
+        get textContent() { return (this._text ?? "") + this.children.map((c) => c.textContent ?? "").join(""); },
+        setAttribute(k, v) { this.attrs[k] = v; }, addEventListener() {},
+        append(...k) { this.children.push(...k); } };
+      return n;
+    };
+    const nav = mountMastheadNav(host, { current: "search" });
+    const labels = nav.children.map((c) => c.textContent);
+    assert.deepEqual(labels, ["find a company", "runs"]);
+    assert.ok(!labels.some((l) => /company$/.test(l) && l !== "find a company"));
+    // A detail page marks neither section rather than inventing a third.
+    const none = mountMastheadNav(host, { current: null });
+    assert.equal(none.children.filter((c) => c.attrs["aria-current"]).length, 0);
+    assert.equal(mountMastheadNav(host, { current: "runs" }).children.filter((c) => c.attrs["aria-current"]).length, 1);
+  });
+
+  it("mounts on every screen that is a section, and not at the door", () => {
+    for (const page of ["index.html", "company.html", "runs.html"]) {
+      assert.match(read(page), /<div id="masthead-nav"><\/div>/, `${page} has a nav host`);
+    }
+    // The door hides the masthead entirely, which is what keeps it nav-free.
+    assert.match(read("assets/styles/front-door.css"), /body\[data-mode="door"\][^{]*\.masthead/);
   });
 });
 
