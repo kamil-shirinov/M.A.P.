@@ -714,6 +714,59 @@ def test_a_declared_missing_pre_screen_names_what_search_loses(tmp_path: Path) -
     assert not (tmp_path / "export" / "filers.json").exists()
 
 
+def test_the_holdout_spend_record_travels_and_its_absence_entry_points_at_it(
+    tmp_path: Path,
+) -> None:
+    """All that survives of the holdout is its terms. The per-item scores were
+    printed once and never written, so the spend record is the only holdout
+    artifact there is — and an interface can state the terms rather than only the
+    absence."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    spend = tmp_path / "holdout_spend.jsonl"
+    spend.write_text(
+        json.dumps(
+            {
+                "band": "clean",
+                "calibration": {"a": -0.0757, "b": 1.3305, "form": "z -> (z - a) / b"},
+                "items": 173,
+                "scored_on": "2026-09-05",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)), "--spend-path", str(spend))
+
+    body = _read(tmp_path, "scores/holdout_spend.json")
+    assert isinstance(body, list), "append-only: a second spend would be a second line"
+    assert body[0]["calibration"]["b"] == 1.3305
+    assert "map_crps" not in json.dumps(body), "the spend record carries no scores"
+    absent = _read(tmp_path, "manifest.json")["scores"]["absent"][0]
+    assert absent["exported_as"] == "scores/holdout_spend.json"
+    assert absent["spends"] == 1
+    assert absent["exported"] is False, "the SCORES are still absent; only the terms travel"
+
+
+def test_a_missing_spend_record_is_an_absence_rather_than_a_silent_gap(tmp_path: Path) -> None:
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    result = _export(
+        tmp_path,
+        "--ledger-path",
+        str(_ledger(tmp_path, run_id)),
+        "--spend-path",
+        str(tmp_path / "nowhere.jsonl"),
+    )
+
+    assert result.exit_code == 0, result.output
+    manifest = _read(tmp_path, "manifest.json")
+    assert manifest["scores"]["absent"][0]["exported_as"] is None
+    assert any(gap["what"] == "holdout_spend" for gap in manifest["absent"])
+
+
 def test_the_ledger_figure_cannot_be_read_as_a_run_count(tmp_path: Path) -> None:
     """It is every item the ledger will not attempt again — 701 complete plus 8
     terminal failures in the real corpus, which is exactly why 8 held filings carry

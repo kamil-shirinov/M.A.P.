@@ -38,7 +38,7 @@ import typer
 
 from mapf.bootstrap import build_price_snapshot, build_symbol_index
 from mapf.cli.app import app, fail, handle
-from mapf.cli.commands.evaluate import SCORES_DIR, SCORING_VINTAGE
+from mapf.cli.commands.evaluate import HOLDOUT_LEDGER, SCORES_DIR, SCORING_VINTAGE
 from mapf.cli.commands.runs import FROZEN, LEDGER, as_dict
 from mapf.core.errors import MapError
 from mapf.core.provenance import code_version, freeze_digest
@@ -124,6 +124,7 @@ def export(
     ledger_path: Path = typer.Option(LEDGER, help="The corpus ledger."),
     runs_dir: Path = typer.Option(Path("runs"), help="Where run artifacts live."),
     scores_dir: Path = typer.Option(SCORES_DIR, help="Where scoring passes are recorded."),
+    spend_path: Path = typer.Option(HOLDOUT_LEDGER, help="The holdout spend record."),
     filers_path: Path = typer.Option(
         FILERS,
         help=(
@@ -373,6 +374,32 @@ def export(
         else:
             missing("scores", scores_dir, "no scoring pass has been recorded")
 
+        # -- the holdout's terms, which are all that survives of it --
+        # The spend record is the one holdout artifact that exists: coefficients,
+        # fitted form, item count and stamps. Copied verbatim from the tracked
+        # JSONL, as a list, because the file is append-only and a second spend
+        # would be a second line. It carries no scores and cannot: those were
+        # printed once and never written (ADR 0031).
+        holdout = dict(HOLDOUT_ABSENCE)
+        if spend_path.is_file():
+            spends = [
+                json.loads(line)
+                for line in spend_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            name = "scores/holdout_spend.json"
+            sizes[name] = _write(out / "scores" / "holdout_spend.json", spends)
+            holdout["exported_as"] = name
+            holdout["spends"] = len(spends)
+        else:
+            holdout["exported_as"] = None
+            missing(
+                "holdout_spend",
+                spend_path,
+                "the holdout's terms — its coefficients, item count and stamps — "
+                "cannot be shown, only its absence",
+            )
+
         version = code_version()
         manifest = {
             "export_version": EXPORT_VERSION,
@@ -404,7 +431,7 @@ def export(
                 "rows": len(filers),
                 "vintages": sorted({str(r.get("fetched_on")) for r in filers}),
             },
-            "scores": {"records": records, "absent": [HOLDOUT_ABSENCE]},
+            "scores": {"records": records, "absent": [holdout]},
             "absent": absent,
             "files": dict(sorted(sizes.items())),
         }

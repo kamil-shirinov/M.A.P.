@@ -492,8 +492,18 @@ so a re-run under changed code lands beside its predecessor rather than replacin
                   the single spend)",
   "what_survives": [
     "the calibration coefficients and their fitted form",
-    "the band, item count, date, commit, freeze version and price vintage" ] }
+    "the band, item count, date, commit, freeze version and price vintage" ],
+  "exported_as": "scores/holdout_spend.json", "spends": 1 }
 ```
+
+**`exported_as` names the file those terms are now in** — `scores/holdout_spend.json`,
+the tracked `corpus/holdout_spend.jsonl` copied verbatim as a list, because the file is
+append-only and a second spend would be a second line. It carries the coefficients
+(`a`, `b`, the fitted form and what it was fitted on), the item count, the dates and the
+identity stamps. **It carries no scores and cannot**: those were printed once and never
+written. `exported` stays `false` for exactly that reason — the terms travel, the
+measurements do not — and `exported_as` is `null` when the spend record itself could not
+be read, with the gap named in the manifest's own `absent` list.
 
 **`what_survives` is the field to render from**, not `reason`. `reason` explains why the
 per-item detail is gone and reads as an apology; `what_survives` says what a reader can
