@@ -162,9 +162,15 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     stubFetch();
     const s = await load();
     const { records, identifiable } = await s.listScoringRecords();
-    assert.equal(records.length, 2);
-    assert.ok(records[0].forecast_digest, "the identifiable record must come first");
-    assert.equal(identifiable.length, 1);
+    // The rule, not the count: a new scoring pass changes how many records ship.
+    const firstDirty = records.findIndex((r) => !r.forecast_digest);
+    assert.ok(records.length >= 2, "the export ships a dirty record beside an identified one");
+    assert.ok(firstDirty > 0, "an identified record comes first");
+    assert.ok(
+      records.slice(firstDirty).every((r) => !r.forecast_digest),
+      "every identified record sorts before every dirty one",
+    );
+    assert.deepEqual(identifiable, records.filter((r) => r.forecast_digest));
   });
 
   it("says items_settled is not a count of forecasts", async () => {

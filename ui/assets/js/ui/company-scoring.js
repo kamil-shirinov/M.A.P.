@@ -45,11 +45,16 @@ function devRecord(scoring, company) {
     return box;
   }
 
-  // Prefer the record with a forecast_digest. A null digest means the pass ran
-  // from an uncommitted tree, so nothing identifies its code. The other record is
-  // the same measurement under a different code state, not a second result, and
-  // it is neither shown as one nor averaged in.
-  const record = identified[0];
+  /* Prefer the record with a forecast_digest. A null digest means the pass ran
+     from an uncommitted tree, so nothing identifies its code. The other record is
+     the same measurement under a different code state, not a second result, and
+     it is neither shown as one nor averaged in.
+
+     And pick the CLEAN band by name. `identified[0]` was the whole selection
+     while one band was scored; the ambiguous band's record now ships too and
+     sorts first by filename, which would have put an ambiguous record under copy
+     that says "its clean-band items are inside this record's scope". */
+  const record = identified.find((r) => r.band === "clean") ?? identified[0];
   const h = document.createElement("h3");
   h.className = "cmp-h3";
   h.append(
@@ -82,6 +87,24 @@ function devRecord(scoring, company) {
     ),
   );
   box.append(scope);
+
+  // The other band, when it is scored: a different population, not more of this one.
+  const control = identified.find((r) => r.band !== record.band);
+  if (control) {
+    const note = document.createElement("p");
+    note.className = "cmp-subnote";
+    note.append(
+      document.createTextNode("The "),
+      chromeText(`${control.band} band`, "the other band, scored as the leakage control"),
+      document.createTextNode(" is scored separately, over "),
+      renderFigure(figure(control.n, MEASURED, "int")),
+      document.createTextNode(
+        " items — the training-cutoff control, a different population and not part of " +
+          "this record.",
+      ),
+    );
+    box.append(note);
+  }
 
   if (scoring.records.length > identified.length) {
     const other = document.createElement("p");

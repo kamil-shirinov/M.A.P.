@@ -184,6 +184,24 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.match(text, /modelling presented as reading/);
   });
 
+  it("shows the clean-band record, and names the other band as a control", async () => {
+    /* `identified[0]` picked whichever record sorted first. When the ambiguous
+       band was scored it sorted ahead of clean by filename, which would have put
+       an ambiguous record under copy about clean-band scope. */
+    const { roots, source } = await renderCompany("ACHC");
+    const { identifiable } = await source.listScoringRecords();
+    const clean = identifiable.find((r) => r.band === "clean");
+    const text = roots.scoring.textContent;
+    assert.match(text, new RegExp(`${clean.n} items corpus-wide`));
+    assert.match(text, /clean band/);
+    const control = identifiable.find((r) => r.band !== "clean");
+    if (control) {
+      assert.match(text, /training-cutoff control/);
+      assert.match(text, new RegExp(String(control.n)));
+      assert.ok(!text.includes(`${control.n} items corpus-wide`), "the control is not the record");
+    }
+  });
+
   it("never prints a per-run score", async () => {
     const { roots } = await renderCompany("ACHC");
     for (const word of ["CRPS", "crps", "PIT", "Brier", "log score"]) {
