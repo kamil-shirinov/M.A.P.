@@ -1,3 +1,19 @@
+const MINUS = "\u2212";
+
+/** Fixed decimals with a real minus sign. Negative zero prints as zero: a
+    difference that rounds to nothing is not a direction. */
+const fixed = (v, places) => {
+  const text = Math.abs(v).toFixed(places);
+  return (v < 0 && Number(text) !== 0 ? MINUS : "") + text;
+};
+
+/** The same, with the sign always shown. */
+const signed = (v, places) => {
+  const text = Math.abs(v).toFixed(places);
+  if (Number(text) === 0) return "0." + "0".repeat(places);
+  return (v < 0 ? MINUS : "+") + text;
+};
+
 export const fmt = {
   price: (v) => v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
   pct:   (v) => (v * 100).toFixed(1) + "%",
@@ -18,6 +34,16 @@ export const fmt = {
   // actions. Six places collapses them to the two that exist; ratio3 rounds
   // 0.988142 to 0.988 and loses the digits that identify the event.
   ratio: (v) => v.toFixed(6),
+  /* Scores, at the places the record's own summary lines use: CRPS to five,
+     log score to four. A REAL MINUS (U+2212), not a hyphen — these sit in a
+     column of signed differences where the sign is the finding, and a hyphen at
+     11px in Inter is a third the width of a plus and reads as a dash.
+     `signed` always shows the sign, because "+0.00163 worse" and "-0.00100
+     better" are the same column and an unsigned entry in it is ambiguous. */
+  dec5: (v) => fixed(v, 5),
+  dec4: (v) => fixed(v, 4),
+  signed5: (v) => signed(v, 5),
+  signed4: (v) => signed(v, 4),
   // File sizes as the export contract states them: DECIMAL KB, so 649,217 bytes
   // is 649.2 KB and not 634.0. Under 1000 the byte count is the honest figure —
   // "0.0 KB" for a 2-byte empty array reads as missing rather than empty.

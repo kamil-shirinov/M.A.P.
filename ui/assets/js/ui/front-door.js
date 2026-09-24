@@ -31,7 +31,7 @@ const el = (tag, className, text) => {
 
 const count = (n) => renderFigure(figure(n, DERIVED, "int"));
 
-/** Masthead nav: two sections, and the crest goes home.
+/** Masthead nav: three sections, and the crest goes home.
 
     A company page is NOT a nav item. It is a detail page, reached from a search
     result or a runs row, and an item that needs a subject before it means
@@ -48,6 +48,10 @@ export function mountMastheadNav(host, { current }) {
   const items = [
     { key: "search", label: "find a company", href: "index.html" },
     { key: "runs", label: "runs", href: "runs.html" },
+    // "results", not "evaluation" or "scores": the screen shows one measurement
+    // and its controls, and "scores" is the word the export uses for the records
+    // themselves — several of which the screen deliberately does not show.
+    { key: "results", label: "results", href: "results.html" },
   ];
   for (const item of items) {
     if (item.key === current) {

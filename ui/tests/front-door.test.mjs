@@ -237,7 +237,7 @@ describe("wiring in search-page.js", () => {
 });
 
 describe("masthead nav", () => {
-  it("offers two sections and never a company", async () => {
+  it("offers three sections and never a company", async () => {
     const doc = stubDocument({ api: false });
     const { mountMastheadNav } = await import("../assets/js/ui/front-door.js");
     const host = { children: [], append(...k) { this.children.push(...k); } };
@@ -253,16 +253,18 @@ describe("masthead nav", () => {
     };
     const nav = mountMastheadNav(host, { current: "search" });
     const labels = nav.children.map((c) => c.textContent);
-    assert.deepEqual(labels, ["find a company", "runs"]);
+    assert.deepEqual(labels, ["find a company", "runs", "results"]);
     assert.ok(!labels.some((l) => /company$/.test(l) && l !== "find a company"));
     // A detail page marks neither section rather than inventing a third.
     const none = mountMastheadNav(host, { current: null });
     assert.equal(none.children.filter((c) => c.attrs["aria-current"]).length, 0);
-    assert.equal(mountMastheadNav(host, { current: "runs" }).children.filter((c) => c.attrs["aria-current"]).length, 1);
+    for (const current of ["search", "runs", "results"]) {
+      assert.equal(mountMastheadNav(host, { current }).children.filter((c) => c.attrs["aria-current"]).length, 1, `${current} marks itself`);
+    }
   });
 
   it("mounts on every screen that is a section, and not at the door", () => {
-    for (const page of ["index.html", "company.html", "runs.html"]) {
+    for (const page of ["index.html", "company.html", "runs.html", "results.html"]) {
       assert.match(read(page), /<div id="masthead-nav"><\/div>/, `${page} has a nav host`);
     }
     // The door hides the masthead entirely, which is what keeps it nav-free.

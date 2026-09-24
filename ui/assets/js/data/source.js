@@ -53,6 +53,7 @@
    onto runs, and exposes scoring records whole. */
 
 import { DERIVED, FABRICATED, MEASURED, figure, weakest } from "../lib/figure.js";
+import { inverseNormalCdf } from "../lib/gaussian.js";
 
 const ROOT = "assets/export";
 
@@ -473,12 +474,39 @@ export async function listScoringRecords() {
   const records = [...(manifest.scores?.records ?? [])].sort(
     (a, b) => Number(Boolean(b.forecast_digest)) - Number(Boolean(a.forecast_digest)),
   );
+  const identifiable = records.filter((r) => r.forecast_digest);
   return {
     records,
-    identifiable: records.filter((r) => r.forecast_digest),
+    identifiable,
+    /* One record per band, and never an average of two.
+
+       The clean band ships twice — the same 175 items scored from a committed
+       tree and from a dirty one — and the two are one measurement recorded under
+       two code states, not two results. `preferred` picks the identifiable one;
+       `twins` names what was left out so a page can say it exists rather than
+       quietly drop it. */
+    preferred: bands(identifiable),
+    twins: bands(records.filter((r) => !r.forecast_digest)),
     holdout: adaptHoldout(manifest.scores?.absent ?? []),
     provenance: MEASURED,
   };
+}
+
+/* The measurement first, then its control. The records sort digest-first and
+   then by filename, which puts "ambiguous" before "clean" — fine for choosing a
+   record, wrong for a control that reads left to right. */
+const BAND_ORDER = ["clean", "ambiguous"];
+
+/** First record per band, in reading order. */
+function bands(records) {
+  const out = new Map();
+  for (const r of records) if (!out.has(r.band)) out.set(r.band, r);
+  return new Map(
+    [...out].sort((a, b) => {
+      const rank = (n) => (BAND_ORDER.indexOf(n) + 1 || BAND_ORDER.length + 1);
+      return rank(a[0]) - rank(b[0]) || (a[0] < b[0] ? -1 : 1);
+    }),
+  );
 }
 
 /** The holdout is a STATED FACT, not a pending state.
@@ -514,7 +542,131 @@ export async function getScoringRecord(file) {
     summaries: record.summaries,
     items: record.items,
     forecast_digest: record.forecast_digest,
+    // Which code scored this pass, and which frozen corpus it scored. Not the
+    // export's own commit: the export ships records older than itself, and the
+    // footer's `code` stamp is a different fact from this one.
+    commit: record.commit,
+    freeze_version: record.freeze_version,
+    freeze_digest: record.freeze_digest,
+    file,
     provenance: MEASURED,
+  };
+}
+
+/** The holdout's TERMS — the only thing that survived the one spend.
+
+    Not its scores. `map evaluate --split holdout` is refused once the spend is
+    recorded, the per-item detail was printed once and never persisted, and this
+    file is the ledger row rather than a result. It is a LIST because the ledger
+    is append-only; a second spend would append, and the last row is the current
+    state. Today it holds one.
+
+    The manifest points at the file through `absent[holdout].exported_as`. When
+    that is null the terms were not exported and the absence is returned whole,
+    with `spends` so a page can say the spend happened without the terms. */
+export async function readHoldoutSpend() {
+  const { manifest, state } = await getExportState();
+  if (state === NO_EXPORT) return absent(NOT_COMPUTED, "no export has been generated");
+  const entry = (manifest.scores?.absent ?? []).find((e) => e.split === "holdout");
+  if (!entry) return absent(NOT_APPLICABLE, "this export records no holdout spend");
+  if (!entry.exported_as) {
+    return absent(CANNOT_BE_COMPUTED, entry.reason, { spends: entry.spends ?? null });
+  }
+  const rows = await readJson(entry.exported_as);
+  if (rows === null || !rows.length) {
+    return absent(NOT_COMPUTED, `${entry.exported_as} is named by the manifest but not in this export`);
+  }
+  return { spend: rows.at(-1), spends: rows.length, reason: entry.reason, provenance: MEASURED };
+}
+
+/** Everything the page computes from one record's items, worked out ONCE.
+
+    Per-render recomputation of 175 items x four models is cheap enough not to
+    show, which is exactly why it would never be noticed growing; and a band
+    switch that recomputes is a band switch that can disagree with itself between
+    two paints. Every field here is DERIVED — none of it is in the record.
+
+    `z` IS Phi^-1(PIT), not realised/sigma. See lib/gaussian.js: the two differ
+    (11 against 13 over 2.5 on the clean band) and this is the one the project's
+    pre-registration names and published. */
+export function scoreStatistics(items, { bins = 10 } = {}) {
+  const n = items.length;
+  const mean = (f) => items.reduce((t, i) => t + f(i), 0) / n;
+  const rms = (f) => Math.sqrt(items.reduce((t, i) => t + f(i) ** 2, 0) / n);
+
+  const pit = items.map((i) => i.map_pit);
+  const histogram = new Array(bins).fill(0);
+  // p === 1 lands in the last bin rather than in a bin that does not exist. It
+  // is a real outcome — the close above every simulated path — not a rounding
+  // artefact to drop.
+  for (const p of pit) histogram[Math.min(Math.floor(p * bins), bins - 1)] += 1;
+
+  /* z is undefined at the boundary. A PIT of exactly 0 or 1 means the outcome
+     fell outside every simulated path, which is a real event and belongs in the
+     histogram; it has no finite standardised distance, and clamping it to some
+     large z would put a made-up number in a tail bucket. So those items are
+     counted OUT of the tail statistics and counted separately, and the page
+     names the shortfall rather than quietly reporting a smaller denominator.
+     No item in the current export is at the boundary. */
+  const standardisable = items.filter((i) => i.map_pit > 0 && i.map_pit < 1);
+  const z = standardisable.map((i) => inverseNormalCdf(i.map_pit));
+  const beyond = (t) => z.filter((v) => Math.abs(v) > t).length;
+  const blocks = (t) =>
+    new Set(standardisable.filter((_, k) => Math.abs(z[k]) > t).map((i) => Math.floor(i.day_index / 10))).size;
+
+  const names = Object.keys(items[0].baseline_crps);
+  const baseline = (key, name) => mean((i) => i[key][name]);
+
+  return {
+    n,
+    tickers: new Set(items.map((i) => i.ticker)).size,
+    dates: new Set(items.map((i) => i.as_of)).size,
+    horizons: [...new Set(items.map((i) => i.horizon_days))],
+    clusters: new Set(items.map((i) => Math.floor(i.day_index / 10))).size,
+    histogram,
+    bins,
+    pitMean: mean((i) => i.map_pit),
+    // RMS(stated sigma) over RMS(realised), the `k` of ADR 0018. Above 1.0 is
+    // too wide, below is too narrow.
+    calibrationRatio: rms((i) => i.map_sigma) / rms((i) => i.realised_return),
+    tails: { 2.5: beyond(2.5), 3: beyond(3) },
+    tailBlocks: { 2.5: blocks(2.5), 3: blocks(3) },
+    // The denominator the tail counts are actually over, and the shortfall.
+    zn: standardisable.length,
+    zUndefined: n - standardisable.length,
+    /* The OTHER definition — realised / sigma, which ignores where the forecast
+       was centred. Not shown as a result: carried so the page can state the
+       contrast for the band on screen. On the clean band the two give 13 and 11
+       over 2.5; on the ambiguous band they agree at 11 and differ at 3. A page
+       that quoted one band's pair while showing the other would be wrong half
+       the time. */
+    tailsIgnoringCentre: {
+      2.5: items.filter((i) => Math.abs(i.realised_return / i.map_sigma) > 2.5).length,
+      3: items.filter((i) => Math.abs(i.realised_return / i.map_sigma) > 3).length,
+    },
+    map: {
+      crps: mean((i) => i.map_crps),
+      log_score: mean((i) => i.map_log_score),
+      brier: mean((i) => i.map_brier),
+    },
+    baselines: Object.fromEntries(
+      names.map((name) => [name, {
+        crps: baseline("baseline_crps", name),
+        log_score: baseline("baseline_log_score", name),
+        brier: baseline("baseline_brier", name),
+      }]),
+    ),
+    /* Checked, not assumed. Every baseline scores exactly 0.25 on every item
+       because each predicts a zero mean, so P(up) is 0.5 whatever the outcome —
+       one comparison wearing three names. The page prints one row and says why;
+       if this ever came back false the page would have to print three. */
+    baselineBrierIsOneComparison: items.every((i) =>
+      Object.values(i.baseline_brier).every((v) => v === 0.25)),
+    directionRight: items.filter((i) => (i.map_probability_up > 0.5) === (i.realised_return > 0)).length,
+    probabilityUp: {
+      min: Math.min(...items.map((i) => i.map_probability_up)),
+      max: Math.max(...items.map((i) => i.map_probability_up)),
+    },
   };
 }
 
