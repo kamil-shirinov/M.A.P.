@@ -72,7 +72,10 @@ three baselines set mean zero by construction and score identically, so this is 
 comparison against a coin.
 
 **No measurable training-cutoff leakage.** Clean band 0.0318 against ambiguous 0.0335, a
-difference of **−0.0017 with an interval from −0.0093 to +0.0060**. The system scores
+difference of **−0.0017 with an interval from −0.0093 to +0.0060**. Both halves are now
+persisted scoring records, so that difference is re-derivable rather than quoted: mean
+CRPS **0.03179** on 175 clean/dev items against **0.03348** on 174 ambiguous/dev items is
+**−0.00169**, reproducing the published figure from artifacts. The system scores
 marginally worse on the filings it might have memorised — the direction that embarrasses
 the contamination hypothesis rather than supporting it. This design could have detected
 gross memorisation and could not have detected a subtle familiarity effect of a few
@@ -180,13 +183,13 @@ is the proof, and `corpus/holdout_spend.jsonl` is the record of the single holdo
 Phase 4's *structure* is verifiable from the source and the test suite — that the journal
 cannot compute a score, that populations have no pooled accessor, that a scoring record
 refuses to be overwritten. Phase 4's *numbers* are not: 779 runs, 701/74/4, 777 closed,
-5.21 MB all come from `var/` and `runs/`, which this repository does not ship. Clone it
+5.34 MB all come from `var/` and `runs/`, which this repository does not ship. Clone it
 and `map export --allow-partial` writes 0.09 MB — the corpus and nothing else.
 
 That boundary is the honest claim. A reader can confirm the machinery does what is
 described here; only someone with the artifacts can confirm the counts.
 
-**`map export --out <dir>`** writes the whole readable state as flat JSON — 5.21 MB, of
+**`map export --out <dir>`** writes the whole readable state as flat JSON — 5.34 MB, of
 which 0.77 MB is eager. No server, no dependency. **`map export --check`** re-derives
 the identity of all seven inputs and names what has moved since the export was written,
 because a copy goes silently behind and a date alone does not make that visible.
@@ -713,7 +716,7 @@ prices/<TICKER>.json                                                lazy
 scores/<band>.<split>.<vintage>.<digest>.json                       lazy
 ```
 
-**5.21 MB total, 0.77 MB of it eager.** Only symbols, filers, prices and scores are lazy.
+**5.34 MB total, 0.77 MB of it eager.** Only symbols, filers, prices and scores are lazy.
 
 **Populations cannot be pooled.** There is no combined runs file — the four files
 mirror `Journal`'s four accessors, so a consumer that wants everything concatenates

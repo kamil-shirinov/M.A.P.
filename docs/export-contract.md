@@ -10,7 +10,8 @@ uv run map export --out ./export --check  # has anything moved since?
 
 `export_version` is **1.2.0**. It is the shape of these files, not the age of the data
 — read it first and refuse a version you do not know. Every size below is at the
-current corpus (120 companies, 709 filings, 779 runs) and will grow with it.
+current corpus (120 companies, 709 filings, 779 runs, three scoring passes) and will
+grow with it.
 
 ---
 
@@ -18,7 +19,7 @@ current corpus (120 companies, 709 filings, 779 runs) and will grow with it.
 
 | Path | Load | Size | Rows |
 |---|---|---|---|
-| `manifest.json` | **eager, first** | 1.9 KB | — |
+| `manifest.json` | **eager, first** | 2.2 KB | — |
 | `universe.json` | **eager** | 7.5 KB | 120 |
 | `corpus.json` | **eager** | 108.8 KB | 120 |
 | `runs/by_source/corpus.json` | **eager** | 0.0 KB | 0 |
@@ -28,9 +29,10 @@ current corpus (120 companies, 709 filings, 779 runs) and will grow with it.
 | `symbols.json` | lazy | 864.5 KB | 10,398 |
 | `filers.json` | lazy | 1,234.4 KB | 8,001 |
 | `prices/<TICKER>.json` | lazy, per company | 2,074.1 KB total · 17.3 KB median | 120 files |
-| `scores/<band>.<split>.<vintage>.<digest>.json` | lazy | 133.5 KB each | 2 files |
+| `scores/<band>.<split>.<vintage>.<digest>.json` | lazy | 133.5 KB each | 3 files |
+| `scores/holdout_spend.json` | lazy | 0.4 KB | 1 spend |
 
-**Eager total 0.77 MB. Whole export 5.21 MB.**
+**Eager total 0.77 MB. Whole export 5.34 MB.**
 
 Load `symbols.json` on the first keystroke in search, not at boot: 120 companies have
 something to show and 10,398 do not. `filers.json` answers "does this ticker's filer
