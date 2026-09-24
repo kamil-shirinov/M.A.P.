@@ -1,18 +1,20 @@
 # The evaluation screen — what the export can support
 
 For CD, before any design. This is a profile of the real export, measured on
-2026-09-24, in the same form as `runs-screen-data.md`. Every number below was
+2026-09-24 and updated the same day after two things were added to it, in the same
+form as `runs-screen-data.md`. Every number below was
 computed from the files a page would read; where a number is quoted from the
 project's own record rather than computed, it says so.
 
-**The export this describes:** `export_version` 1.2.0, freeze 2.6.0, code `b0596c4`,
-exported 2026-09-17, price vintage 2026-09-05.
+**The export this describes:** `export_version` 1.2.0, freeze 2.6.0, code `bfbf92e`,
+exported 2026-09-24, price vintage 2026-09-05.
 
-**The short answer.** The export carries **one** evaluation artifact: a single
-scoring pass over the **clean band of the development half**, 175 items, shipped
-twice. Everything else that has been measured on this project — the holdout, the
-ambiguous band, the four-arm ablation, the calibration fit — is either absent by
-design and unrecoverable, or sits outside the export in M.A.P.
+**The short answer.** The export carries **two scored populations** — the clean and
+ambiguous bands of the development half, 175 and 174 items — plus **the holdout's
+terms**, which are all that survives of it. That is enough for one results screen
+showing a measurement, its leakage control and its stated limits. The holdout's
+numbers are unrecoverable by design; the ablation and the pre-registrations sit
+outside the export in M.A.P.
 
 ---
 
@@ -20,12 +22,14 @@ design and unrecoverable, or sits outside the export in M.A.P.
 
 | File | Load | Size | What it is |
 |---|---|---|---|
-| `scores/clean.dev.2026-09-05.1997f7352e47.json` | lazy | 133.5 KB | the scoring pass, code-identified |
+| `scores/clean.dev.2026-09-05.1997f7352e47.json` | lazy | 133.5 KB | the clean pass, code-identified |
 | `scores/clean.dev.2026-09-05.dirty.json` | lazy | 133.5 KB | the same pass, from an unidentifiable tree |
-| `manifest.json` → `scores.records` | eager, 1.9 KB | — | both records' identity |
-| `manifest.json` → `scores.absent` | eager | — | why there is no holdout record |
+| `scores/ambiguous.dev.2026-09-05.e66b2fab1cfb.json` | lazy | 133.5 KB | the ambiguous pass — the leakage control |
+| `scores/holdout_spend.json` | lazy | **0.4 KB** | the holdout's terms, and no scores |
+| `manifest.json` → `scores.records` | eager, 2.2 KB | — | all three records' identity |
+| `manifest.json` → `scores.absent` | eager | — | why there is no holdout record, and where its terms are |
 
-**The two records hold identical items and identical summaries.** They differ in
+**The two CLEAN records hold identical items and identical summaries.** They differ in
 exactly two fields: `commit` (`83370f6` against `d8c57c3`) and `forecast_digest`
 (a digest against `null`). Same measurement recorded twice under different code
 states — not two results. The contract's rule is to prefer the record whose
@@ -51,7 +55,9 @@ development-split ticker**; 3 SCCO items were refused by the spot-drift guard, a
 printing on the screen, because "175" next to "779 runs" invites the reader to
 divide one by the other.
 
-The 175 items cover **59 tickers and 66 dates**, all 5-session, all clean band.
+The 175 items cover **59 tickers and 66 dates**, all 5-session, all clean band. The
+ambiguous record is the same shape: 177 loaded, **174 scored**, the same 3 refused by
+the spot-drift guard, and one forecast digest across all 350 runs of that band.
 
 **The join still does not exist.** An item carries `as_of`; a run carries
 `anchor_date`. They coincide for **161 of the 175** — the other 14 are Saturdays
@@ -93,6 +99,7 @@ six headline lines.
 | Directional accuracy | 87 of 175 = **49.7%** | 49.7%, 87 of 175 |
 | PIT mean | **0.4891** | 0.4893 |
 | CRPS against the random walk | mean 0.03179 against 0.03016 = **worse by 5.4%** | worse by 5.4% |
+| **Leakage** — clean mean minus ambiguous mean | 0.03179 − 0.03348 = **−0.00169** | −0.00169 |
 
 **Prose only — the page cannot rebuild these.** Every interval in the summaries
 comes from a cluster-robust moving-block bootstrap: 10-day blocks, a fixed seed,
@@ -133,8 +140,21 @@ anything once the spend is recorded. **This is unrecoverable, by design.**
 
 `what_survives` names two things: the calibration coefficients and their fitted
 form, and the band, item count, date, commit, freeze version and price vintage.
-Those live in `corpus/holdout_spend.jsonl` in M.A.P. — **which the export does not
-carry** (see §5). One further limit, recorded as M.A.P. Findings #57: the
+**Those are now in the export**, at `scores/holdout_spend.json`, named by
+`scores.absent[0].exported_as` with `spends: 1` — the tracked JSONL copied verbatim
+as a list, because a second spend would be a second line. `exported` stays **false**:
+the terms travel, the measurements do not.
+
+```json
+{ "a": -0.0757, "b": 1.3305, "form": "z -> (z - a) / b",
+  "fitted_on": "clean/dev, 175 items, log-score objective",
+  "adr": "0032", "amended_by": ["note record 3", "note record 7"],
+  "items": 173, "scored_on": "2026-09-05", "price_vintage": "2026-09-05" }
+```
+
+So a screen can say what the holdout **was** — the correction it tested, fitted on
+the development half, spent once on 173 items — rather than only that its numbers are
+gone. It still cannot show a holdout score, because none exists. One further limit, recorded as M.A.P. Findings #57: the
 holdout's comparison against the three baselines survives as a sentence in five
 documents and as a figure nowhere, so no screen can show it as a number.
 
@@ -142,26 +162,26 @@ documents and as a figure nowhere, so no screen can show it as a number.
 
 ## 5. What is not in the export
 
-| | Where it is | Absent by design? | What exporting costs |
+| | Where it is | Absent by design? | Status |
 |---|---|---|---|
-| Holdout per-item scores | nowhere | **yes** — unrecoverable | nothing to export |
-| Holdout spend record | `corpus/holdout_spend.jsonl`, tracked, 1 line | no | trivial: copy one file |
-| Ambiguous band | not scored into a record | no | one scoring run + one 133 KB file |
-| Ablation's 786 runs | `var/ablation/{A,B,C,D,control,probe}`, 56 MB | no | a second read path; ~650 KB of rows |
-| The 22 pre-registrations | `refs/notes/commits`, 121,186 bytes | no | a git read; the proof does not travel |
-| Stratum membership | not per item anywhere | no | a new field per item; export shape bump |
+| Holdout per-item scores | nowhere | **yes** — unrecoverable | nothing to export, ever |
+| Holdout spend record | was `corpus/holdout_spend.jsonl` | no | **now exported**, 0.4 KB |
+| Ambiguous band | was unscored | no | **now exported**, 174 items, 133.5 KB |
+| Ablation's 786 runs | `var/ablation/{A,B,C,D,control,probe}`, 56 MB | no | not exported: a second read path, ~650 KB of rows |
+| The 22 pre-registrations | `refs/notes/commits`, 121,186 bytes | no | not exported: a git read, and the proof does not travel |
+| Stratum membership | not per item anywhere | no | not exported: a new field per item, export shape bump |
 
-**The holdout spend record** is one tracked JSON line holding `a = −0.0757`,
-`b = 1.3305`, the fitted form, what it was fitted on, 173 items, the dates and the
-identity stamps. Exporting it is the cheapest item on this list and it is the only
-way a screen could state the holdout's *terms* — never its numbers, which do not
-exist.
+**The ambiguous band was scored** on 2026-09-24 as a standalone pass with no
+override: `map evaluate --band ambiguous --split dev --no-leakage`. Its summaries say
+the band is **indistinguishable from all three baselines on CRPS**, and worse by
+18.8% against GARCH and 18.9% against the random walk on the log score.
 
-**The ambiguous band** is the interesting one. It is not the holdout, so it can be
-scored again: `map evaluate --band ambiguous --split dev` already exists, and the
-journal holds 350 ambiguous panel runs. Today the leakage result — clean 0.0318
-against ambiguous 0.0335 — can only be quoted. One scoring run would turn it into
-two exported records a screen could compare directly.
+Scoring it needed a guard fixed first, and the trap is worth knowing because it is
+the same one a screen can fall into: the code-digest guard counted **every** run in
+the ledger while printing "this band", so the clean band's 208 runs from a dirty tree
+refused an ambiguous pass that reads none of them. It is now scoped to the
+populations a pass actually scores (M.A.P. Findings #59). A count that does not name
+its own population will eventually be read as a different one.
 
 **The ablation** lives in the same shape as `runs/` (each run a directory with
 `forecast.json`, `manifest.json`, `trace.jsonl`), in six arm directories holding
@@ -195,7 +215,14 @@ All of this, from the one record, with no new export:
   refused by the spot-drift guard; 59 tickers, 66 dates, one band, one split, one
   horizon. The relationship to the 779 runs, stated rather than left to inference.
 - **The six comparisons, verbatim**, two rules against three baselines, with their
-  intervals as written — and the mean values beside them, which recompute.
+  intervals as written — and the mean values beside them, which recompute. The
+  ambiguous record adds six more, for the control.
+- **The leakage control, computed**: clean 0.03179 against ambiguous 0.03348, a
+  difference of **−0.00169**, reproducing the published figure from two records
+  rather than quoting it. The interval around it, [−0.0093, +0.0060], is still prose.
+- **The holdout's terms**: the correction it tested, what that was fitted on, and
+  that it was spent once on 173 items — beside the statement that its scores do not
+  exist.
 - **Calibration**: the ratio at 0.733, recomputed on the page and agreeing with the
   record; a PIT histogram over all 175 items; the tail counts with their sample named.
 - **Direction**: 87 of 175, and the P(up) span of 0.369 to 0.631 that explains it —
@@ -204,9 +231,9 @@ All of this, from the one record, with no new export:
   `map_sigma` against |realised| — the shape behind the headline percentages.
 - **Which record is being shown**, and that a second exists from an unidentifiable
   tree.
-- **Four absences, stated**: the holdout (never persisted, unrecoverable), the
-  ambiguous band (scoreable, not exported), the ablation (outside the export), and
-  the intervals (prose, not rebuildable).
+- **Three absences, stated**: the holdout's numbers (never persisted,
+  unrecoverable), the ablation (outside the export), and the intervals (prose, not
+  rebuildable).
 
 What it must not do: divide 175 by 779, print a holdout figure, recompute an
 interval, attach a score to a run, or sort the log score as if higher were better.
@@ -215,7 +242,8 @@ interval, attach a score to a run, or sort the log score as if higher were bette
 
 ## 7. Load cost
 
-`manifest.json` (1.9 KB) names both records and the holdout absence; the screen
-needs **one** 133.5 KB record. Nothing else — universe.json (7.5 KB) only if rows
-want company names. The journal's 649.2 KB is not needed on this screen: the
-scoring record carries its own tickers and dates.
+`manifest.json` (2.2 KB) names all three records and points at the spend record. The
+measurement needs **one** 133.5 KB record; the leakage control needs **two**, 267 KB;
+the holdout's terms add 0.4 KB. universe.json (7.5 KB) only if rows want company
+names. The journal's 649.2 KB is not needed here — a scoring record carries its own
+tickers and dates.
