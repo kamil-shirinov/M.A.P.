@@ -1,0 +1,101 @@
+/* Design tokens — terminal skin.
+
+   Dark by default. Light arrives three ways, in ascending priority: the OS
+   preference, then [data-theme="light"] on <html> for an explicit toggle. The
+   toggle machinery is here and ready; the control itself needs one button and
+   three lines of JS, which live outside the two files this change was scoped to.
+
+   NETWORK DEPENDENCY, DECLARED: the @import below is the only outbound request
+   the app makes. None of Inter, JetBrains Mono or Newsreader is installed on this
+   machine, and with no build step there is nowhere else to get them. The serif is
+   a third family on this same request rather than a second <link>, so the count
+   of outbound requests stays at one. Delete the line and the stacks fall through
+   to system faces with no other change. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap");
+
+:root {
+  color-scheme: dark light;
+
+  --font-sans: "Inter", ui-sans-serif, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-serif: "Newsreader", ui-serif, Georgia, "Times New Roman", serif;
+
+  /* Tighter than the research-document scale: a terminal reads small. */
+  --step--1: 0.6875rem;   /* 11px  — labels, axis ticks */
+  --step-0:  0.78125rem;  /* 12.5px — body */
+  --step-1:  0.875rem;    /* 14px  — panel titles */
+  --step-2:  1rem;
+  --step-3:  1.3125rem;   /* 21px  — scenario targets */
+  --step-4:  1.75rem;
+
+  /* Tight vertical rhythm. Every panel and table inherits this. */
+  --sp-1: 0.125rem;  --sp-2: 0.25rem;  --sp-3: 0.5rem;
+  --sp-4: 0.75rem;   --sp-5: 1.125rem; --sp-6: 1.625rem; --sp-7: 2.25rem;
+
+  --radius: 2px;
+
+  /* ---- dark, the default ---- */
+  --paper:   #0a0c10;   /* page */
+  --surface: #12151c;   /* card */
+  --sunken:  #171b23;   /* inset within a card */
+  --ink:     #e4e8ef;
+  --ink-num: #f6f8fc;   /* numbers: the brightest thing on screen */
+  --ink-2:   #98a1b0;
+  --ink-3:   #69717f;
+  --rule:    #1c212a;
+  --rule-2:  #29303c;
+
+  --accent:      #4d8df0;
+  --accent-soft: #12243f;
+  --up:          #46a06b;
+  --down:        #cf6a63;
+
+  /* Provenance is VIOLET, not amber. Amber is reserved for the uncalibrated
+     state, and the two were close enough before that a fabricated figure and an
+     uncalibrated band read as the same warning. They are different claims. */
+  --fab:      #a98bd6;
+  --fab-soft: #1d1730;
+
+  --uncal:      #d9a14a;
+  --uncal-soft: #2a2011;
+
+  --shadow: 0 0 0 1px rgba(0, 0, 0, .35);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --paper:   #eceef2;
+    --surface: #ffffff;
+    --sunken:  #f4f6f9;
+    --ink:     #12151a;
+    --ink-num: #04070c;
+    --ink-2:   #4d5561;
+    --ink-3:   #737b87;
+    --rule:    #dde1e8;
+    --rule-2:  #c3c9d4;
+
+    --accent:      #1f5fc4;
+    --accent-soft: #e3ecfb;
+    --up:          #1f7a4d;
+    --down:        #b03a34;
+
+    --fab:      #6b46b0;
+    --fab-soft: #efe9fa;
+
+    --uncal:      #8a5a10;
+    --uncal-soft: #faf0da;
+
+    --shadow: 0 1px 2px rgba(16, 20, 28, .07);
+  }
+}
+
+/* The explicit toggle wins over the OS in both directions. */
+:root[data-theme="light"] {
+  --paper: #eceef2;  --surface: #ffffff; --sunken: #f4f6f9;
+  --ink: #12151a;    --ink-num: #04070c; --ink-2: #4d5561; --ink-3: #737b87;
+  --rule: #dde1e8;   --rule-2: #c3c9d4;
+  --accent: #1f5fc4; --accent-soft: #e3ecfb; --up: #1f7a4d; --down: #b03a34;
+  --fab: #6b46b0;    --fab-soft: #efe9fa;
+  --uncal: #8a5a10;  --uncal-soft: #faf0da;
+  --shadow: 0 1px 2px rgba(16, 20, 28, .07);
+}

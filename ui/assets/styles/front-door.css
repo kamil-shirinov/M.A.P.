@@ -1,0 +1,184 @@
+/* The door, the collapse, and the ground.
+
+   Cross-document transitions are opted in here and on company.html; the crest
+   carries the same name on both screens, so it holds still while the rest of
+   the page changes under it. The door<->open collapse is a same-document
+   transition on two matched names, driven from front-door.js. */
+
+@view-transition { navigation: auto; }
+
+/* Matched pairs. Only one of each is rendered per mode, so the names stay
+   unique and the browser morphs rather than crossfades. */
+.door-crest h1,
+.masthead h1 a { view-transition-name: map-crest; }
+.door-box,
+.srch-box { view-transition-name: map-searchbox; }
+
+/* ---- mode visibility ---- */
+body[data-mode="door"] .search-page,
+body[data-mode="door"] .masthead,
+body[data-mode="door"] .cmp-footer { display: none; }
+body[data-mode="open"] .door { display: none; }
+
+/* ---- the ground ---- */
+.ground {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  width: min(1240px, 150vw, 150vh);
+  aspect-ratio: 1 / 1;
+  pointer-events: none;
+  /* Below the page, not level with it. At 0 a fixed element paints over every
+     unpositioned block after it, so the rings ran across the result rows and the
+     funnel instead of receding behind them. */
+  z-index: -1;
+  transform: translate(-50%, -50%) scale(.9);
+  opacity: .68;
+  transition: opacity .5s ease, transform .7s cubic-bezier(.2, .7, .2, 1);
+}
+/* Larger and at full weight at the door; it recedes behind the working page. */
+body[data-mode="door"] .ground { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
+.rosette { display: block; width: 100%; height: 100%; overflow: visible; }
+
+/* Differential drift: degrees of swing over minutes, on three periods. Fast
+   enough that the interference is perceptible within a few seconds, slow enough
+   that no single line reads as moving. */
+@keyframes rosette-a { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
+@keyframes rosette-b { from { transform: rotate(5deg);  } to { transform: rotate(-5deg); } }
+@keyframes rosette-c { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
+[data-band] { transform-origin: 500px 500px; }
+[data-band="a"] { animation: rosette-a 34s ease-in-out infinite alternate; }
+[data-band="b"] { animation: rosette-b 46s ease-in-out infinite alternate; }
+[data-band="c"] { animation: rosette-c 58s ease-in-out infinite alternate; }
+
+/* ---- the door ---- */
+.door {
+  position: relative;
+  z-index: 1;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3.25rem var(--sp-5);
+}
+.door-block {
+  width: 100%;
+  max-width: 620px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.door-crest { display: flex; align-items: center; gap: clamp(1rem, 3vw, 2rem); width: 100%; }
+.door-crest h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: clamp(2rem, 6.8vw, 3.75rem);
+  font-weight: 400;
+  letter-spacing: .13em;
+  text-indent: .13em;
+  line-height: 1;
+  color: var(--ink-num);
+  white-space: nowrap;
+}
+.door-rule { flex: 1; height: 1px; background: var(--rule-2); }
+.door-sub {
+  margin-top: var(--sp-4);
+  font-family: var(--font-mono);
+  font-size: clamp(.72rem, 1.9vw, .95rem);
+  letter-spacing: .42em;
+  text-indent: .42em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.door-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  max-width: 560px;
+  margin-top: var(--sp-7);
+  padding: var(--sp-5);
+  background: var(--sunken);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .02), 0 1px 2px rgb(0 0 0 / .4);
+  transition: border-color .12s, box-shadow .12s;
+}
+.door-box:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft), inset 0 1px 0 rgb(255 255 255 / .03);
+}
+.door-slash { font-family: var(--font-mono); font-size: var(--step-3); color: var(--ink-3); }
+.door-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: var(--step-3);
+  letter-spacing: .02em;
+  color: var(--ink-num);
+}
+/* Counts and the measured finding as ambient chrome, not copy. */
+.door-strip {
+  position: absolute;
+  left: var(--sp-5);
+  right: var(--sp-5);
+  bottom: var(--sp-5);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-3) var(--sp-4);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: .07em;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.door-strip .fig { color: var(--ink-2); }
+.door-dot { color: var(--rule-2); }
+
+/* ---- masthead: crest in serif, nav beside it ---- */
+.masthead h1 a { color: var(--ink-num); text-decoration: none; }
+/* No text-indent here, unlike the door's crest. There it balances the trailing
+   tracking of a centred word; in a left-aligned masthead it only moved the crest
+   2.7px off the left edge every section below it starts on. */
+.masthead h1 {
+  font-family: var(--font-serif);
+  font-size: var(--step-3);
+  font-weight: 400;
+  letter-spacing: .13em;
+  line-height: 1;
+  text-transform: none;
+}
+/* On the masthead's own metrics. The vintage stamps it sits beside are mono at
+   --step--1, untracked, with --sp-4 between items; the nav matches them, so the
+   masthead has one rhythm. What separates it from the tag is one step of the
+   same scale up, --sp-6, the gutter: at the shared --sp-4 the tag ran straight
+   on into the first link. */
+.masthead-nav {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-4);
+  margin-left: var(--sp-6);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+}
+.masthead-nav a { color: var(--ink-3); }
+/* The door's run count links to the runs screen and looks like what it already
+   was: the accent arrives on hover, not as a third colour in a three-item strip. */
+.door-strip .door-runs { color: inherit; text-decoration: none; }
+.door-strip .door-runs:hover .fig { color: var(--accent); }
+.masthead-nav a:hover { color: var(--ink-num); text-decoration: none; }
+.masthead-nav-here { color: var(--ink-num); border-bottom: 1px solid var(--accent); padding-bottom: var(--sp-1); }
+
+@media (prefers-reduced-motion: reduce) {
+  [data-band] { animation: none; }
+  .ground { transition: none; }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation-duration: 1ms !important; }
+}

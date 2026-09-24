@@ -1,0 +1,240 @@
+/* Company page. Tokens come from tokens.css unchanged — the spec's token block
+   and that file already agree, so nothing is redefined here.
+
+   Colour discipline, and it is a claim not a palette:
+     --accent  panel membership
+     --down    drift and refusals
+     --uncal   something attempted that did not complete: the missing panel run
+               (a terminal failure), and the uncalibrated state elsewhere.
+               NOT open windows -- see below.
+     --fab     fabricated provenance, from components.css
+   A band is a factual partition and carries no colour at all. */
+
+/* TWO measures, and the frame is the shared one. The masthead, the content and
+   the footer still begin at the same left edge -- that part was right and is
+   unchanged. What was wrong is that prose and data were held to the SAME right
+   edge: 82rem is a reading measure, and the filings table and the run cards
+   were squeezed inside it with dead space either side.
+
+   So the frame is wide and prose caps itself INSIDE the frame, left-aligned
+   there, so only the right edge moves. */
+:root { --measure: 100rem; --measure-prose: 82rem; --gutter: var(--sp-6); }
+
+.masthead,
+.company,
+.cmp-footer { max-width: var(--measure); margin-inline: auto; padding-inline: var(--gutter); }
+
+/* Narrow: identity and scoring are paragraphs. Wide: the series, the filings
+   table and the run cards, which are the sections that wanted the room. */
+#identity,
+#scoring { max-width: var(--measure-prose); }
+
+.masthead {
+  display: flex; align-items: baseline; gap: var(--sp-4);
+  padding-block: var(--sp-4);
+}
+/* The vintages anchor right. base.css does this with a .spacer element that this
+   page does not have, so it is done here instead of relying on markup. */
+.masthead-vintage { margin-left: auto; }
+
+.company { padding-block: var(--sp-6); }
+
+.cmp-section { margin-bottom: var(--sp-7); }
+
+/* SECTION HEADERS CARRY THE PAGE. At 11px grey uppercase they weighed the same
+   as a caption, and on a page this long a reader had nothing to navigate by.
+   Larger, brighter, and preceded by a rule, so a section reads as a section. */
+.cmp-h {
+  font-size: var(--step-2); text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ink); font-weight: 600;
+  margin: 0 0 var(--sp-5); padding-top: var(--sp-5);
+  border-top: 1px solid var(--rule-2);
+  display: flex; align-items: baseline;
+}
+/* The first section needs no rule above it; the masthead already provides one. */
+.cmp-section:first-of-type .cmp-h { border-top: 0; padding-top: 0; }
+.cmp-h3 { font-size: var(--step-1); margin: 0 0 var(--sp-3); font-weight: 600; }
+
+/* ---- identity ---------------------------------------------------- */
+.cmp-identity { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.cmp-ticker {
+  font-family: var(--font-mono); font-size: var(--step-4); font-weight: 600;
+  color: var(--ink-num); letter-spacing: -.01em;
+}
+.cmp-name { color: var(--ink-2); font-size: var(--step-1); }
+
+/* The text measured 6.62:1 against the row and was never the problem — the
+   BORDER was. `--rule-2` on a sunken row is about 1.3:1, so the outline vanished
+   and the word floated, reading as a failed badge rather than a quiet one. The
+   holdout variant looked fine only because its accent border drew the shape. */
+.cmp-badge {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em;
+  padding: .1rem .4rem; border-radius: var(--radius); border: 1px solid var(--ink-3);
+  color: var(--ink-2);
+}
+/* NO COLOUR VARIANT. dev and holdout are a factual partition, like clean and
+   ambiguous, and those read neutral for exactly this reason. Accent means panel
+   membership in this page's colour discipline -- and both halves ARE the panel,
+   so accenting one implied a distinction that does not exist. The word says
+   which half; the colour says nothing, because there is nothing to say. */
+
+.cmp-facts {
+  display: flex; flex-wrap: wrap; gap: var(--sp-3) var(--sp-7);
+  margin: var(--sp-5) 0 var(--sp-4);
+}
+.cmp-fact { min-width: 7rem; }
+.cmp-facts dt {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ink-3); margin-bottom: var(--sp-1);
+}
+.cmp-facts dd { margin: 0; font-family: var(--font-mono); color: var(--ink-num); }
+
+.cmp-standing { max-width: 58ch; line-height: 1.55; margin: 0 0 var(--sp-3); }
+.cmp-note, .cmp-subnote { max-width: 62ch; color: var(--ink-2); font-size: var(--step--1); line-height: 1.5; }
+.cmp-subnote { color: var(--ink-3); margin: var(--sp-2) 0 0; }
+.cmp-absent { color: var(--ink-3); font-style: italic; }
+
+/* ---- series ------------------------------------------------------ */
+.cmp-series-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.cmp-series-head .cmp-h { flex: 1 1 auto; margin-bottom: var(--sp-4); }
+.cmp-series-head .cmp-series-meta { padding-top: var(--sp-5); }
+.cmp-series-meta { font-size: var(--step--1); color: var(--ink-2); font-family: var(--font-mono); }
+.cmp-plot-wrap { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: var(--sp-3); }
+.cmp-plot { width: 100%; height: auto; display: block; }
+
+/* No y-axis: the export gives closes and an invented tick would be a figure with
+   no provenance. Only the first and last session dates appear, as chrome. */
+.cmp-plot-dates {
+  display: flex; justify-content: space-between;
+  font-size: var(--step--1); color: var(--ink-3); font-family: var(--font-mono);
+  padding-top: var(--sp-2);
+}
+
+.cmp-line { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+.cmp-anchor { stroke: var(--accent); stroke-width: 1; opacity: .5; }
+.cmp-anchor--drift { stroke: var(--down); opacity: .8; }
+/* An open window is a fact about the calendar: nothing is wrong, nothing is
+   refused, and it resolves by itself. Neutral, and distinguished by the dash
+   rather than by colour -- amber would make it an attention state and stop the
+   colour meaning "something did not complete", which is the overloading that was
+   removed when the ambiguous band went neutral. */
+.cmp-anchor--open { stroke: var(--ink-3); stroke-dasharray: 2 3; opacity: .9; }
+.cmp-dot { fill: var(--accent); stroke: none; }
+.cmp-anchor--drift.cmp-dot { fill: var(--down); }
+.cmp-anchor--open.cmp-dot { fill: none; stroke: var(--ink-3); stroke-dasharray: 2 2; }
+.cmp-dot--outcome { fill: none; stroke: var(--ink); stroke-width: 1.25; }
+
+.cmp-legend { list-style: none; display: flex; gap: var(--sp-5); flex-wrap: wrap; padding: 0; margin: var(--sp-3) 0 0; font-size: var(--step--1); color: var(--ink-2); }
+.cmp-legend li { display: flex; align-items: center; gap: var(--sp-2); }
+.cmp-swatch { width: .75rem; height: 0; border-top: 2px solid var(--ink-2); display: inline-block; }
+.cmp-swatch.cmp-anchor { border-color: var(--accent); }
+.cmp-swatch.cmp-anchor--drift { border-color: var(--down); }
+.cmp-swatch.cmp-anchor--open { border-color: var(--ink-3); border-top-style: dashed; }
+.cmp-swatch.cmp-dot--outcome { border: 1px solid var(--ink); height: .5rem; width: .5rem; border-radius: 50%; }
+
+/* ---- filings ----------------------------------------------------- */
+.cmp-table { width: 100%; border-collapse: collapse; font-size: var(--step-0); }
+.cmp-table th {
+  text-align: left; font-size: var(--step--1); text-transform: uppercase;
+  letter-spacing: .1em; color: var(--ink-3); font-weight: 500;
+  padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-2);
+}
+.cmp-table td { padding: var(--sp-3); border-bottom: 1px solid var(--rule); vertical-align: top; font-family: var(--font-mono); }
+.cmp-band { color: var(--ink-2); }
+.cmp-row--unrun td { background: var(--sunken); }
+/* Attempted, settled, no forecast -- a terminal failure. This one earns amber. */
+.cmp-unrun { color: var(--uncal); }
+
+/* ---- run cards --------------------------------------------------- */
+.cmp-cards { display: grid; gap: var(--sp-4); }
+.cmp-card {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-left: 2px solid var(--rule-2);
+  border-radius: var(--radius); padding: var(--sp-4) var(--sp-5); box-shadow: var(--shadow);
+}
+.cmp-card[data-relation="ledger_item"] { border-left-color: var(--accent); }
+.cmp-card[data-relation="repeat_of_exhibit"] { border-left-color: var(--rule-2); }
+.cmp-card[data-relation="outside_corpus"] { border-left-color: var(--ink-3); }
+
+.cmp-card-head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; font-family: var(--font-mono); }
+.cmp-anchor-spot { color: var(--ink-num); font-size: var(--step-1); }
+.cmp-card-id { margin-left: auto; display: flex; align-items: baseline; gap: var(--sp-4); }
+.cmp-card-id [data-chrome] { color: var(--ink-3); font-size: var(--step--1); }
+.cmp-relation {
+  font-size: var(--step--1); text-transform: uppercase;
+  letter-spacing: .08em; color: var(--ink-2);
+}
+.cmp-card[data-relation="ledger_item"] .cmp-relation { color: var(--accent); }
+.cmp-why { color: var(--ink-2); font-size: var(--step-0); margin: var(--sp-2) 0; max-width: 62ch; }
+
+.cmp-panel-link { font-size: var(--step-0); color: var(--ink-2); margin: var(--sp-3) 0; }
+.cmp-panel-link a, .cmp-inferred { border-bottom: 1px dashed var(--ink-3); }
+.cmp-inferred {
+  font-size: var(--step--1); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--ink-3); border-bottom: 1px dashed currentColor;
+}
+/* The missing panel run is the one amber case on this page. */
+.cmp-panel-missing {
+  border-left: 2px solid var(--uncal); background: var(--uncal-soft);
+  padding: var(--sp-3) var(--sp-4); margin: var(--sp-3) 0;
+  font-size: var(--step-0); color: var(--ink); max-width: 68ch;
+}
+
+.cmp-disclose {
+  background: none; border: 1px solid var(--rule-2); color: var(--ink-2);
+  border-radius: var(--radius); padding: var(--sp-1) var(--sp-3);
+  font: inherit; font-size: var(--step--1); cursor: pointer; margin: var(--sp-3) 0 0;
+}
+.cmp-disclose:hover { border-color: var(--ink-3); color: var(--ink); }
+
+.cmp-scenarios { width: 100%; border-collapse: collapse; margin-top: var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); }
+.cmp-scenarios td { padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule); }
+.cmp-scenarios td:first-child { color: var(--ink-2); font-family: var(--font-sans); }
+
+.cmp-outcome { margin: var(--sp-3) 0 0; font-size: var(--step-0); max-width: 68ch; }
+.cmp-outcome[data-status="window_open"] { color: var(--ink-2); }
+.cmp-outcome[data-status="absent_from_snapshot"],
+.cmp-outcome[data-status="not_requested"] { color: var(--ink-3); }
+
+.cmp-drift {
+  border-left: 2px solid var(--down); background: color-mix(in srgb, var(--down) 8%, transparent);
+  padding: var(--sp-3) var(--sp-4); margin: var(--sp-3) 0 0;
+  font-size: var(--step-0); max-width: 68ch;
+}
+
+/* ---- scoring ----------------------------------------------------- */
+.cmp-score {
+  background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: var(--sp-4) var(--sp-5); margin-bottom: var(--sp-4);
+}
+.cmp-survives { margin: var(--sp-2) 0; padding-left: var(--sp-5); color: var(--ink-2); font-size: var(--step-0); }
+.cmp-disclosure summary { cursor: pointer; color: var(--ink-2); font-size: var(--step--1); }
+.cmp-refusals ul { list-style: none; padding: 0; display: grid; gap: var(--sp-3); }
+.cmp-refusals li {
+  border-left: 2px solid var(--down); padding-left: var(--sp-4);
+  font-size: var(--step-0); color: var(--ink-2); max-width: 70ch;
+}
+.cmp-refusals strong { color: var(--ink); }
+
+/* ---- footer and empty state -------------------------------------- */
+.cmp-footer { padding-block: var(--sp-5); border-top: 1px solid var(--rule); }
+.cmp-stamps { display: flex; gap: var(--sp-5); flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); }
+/* A page whose subject does not exist has one thing to say, so it says it in the
+   middle of the field rather than in a narrow column pinned to the top of a tall
+   empty one. min-height leaves room for the masthead and footer. */
+.cmp-empty {
+  max-width: 62ch; margin-inline: auto;
+  min-height: 60vh; display: flex; flex-direction: column; justify-content: center;
+}
+.cmp-empty h1 { margin: 0 0 var(--sp-4); }
+.cmp-empty .cmp-standing { margin-bottom: var(--sp-3); }
+.cmp-empty pre {
+  background: var(--sunken); border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: var(--sp-3); font-size: var(--step-0); overflow-x: auto;
+}
+.masthead-vintage { display: flex; gap: var(--sp-4); font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
+
+/* A ticker the corpus does not hold: the page states the absence and offers the
+   one place that lists what does have a page. */
+.cmp-back { display: inline-block; margin-top: var(--sp-5); color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-size: var(--step-0); }
+.cmp-back:hover { text-decoration: underline; }
