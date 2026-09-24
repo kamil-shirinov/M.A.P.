@@ -348,6 +348,57 @@ def test_mixed_commits_can_be_scored_when_acknowledged(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
+def _two_bands_one_mixed(tmp_path: Path) -> None:
+    """Both bands complete. The clean band ran under two code states; the ambiguous
+    band under one — the real corpus's shape, where 208 clean-band runs come from a
+    dirty tree and all 350 ambiguous ones share a digest."""
+    clean = [uuid4(), uuid4()]
+    _finish(tmp_path, clean)
+    _manifest(tmp_path, clean[0], "a" * 40, freeze="2.3.0")
+    _manifest(tmp_path, clean[1], "b" * 40, freeze="2.3.0")
+    ambiguous_id = uuid4()
+    Ledger(tmp_path / "ledger.jsonl").append(
+        LedgerEntry(
+            ticker="AAPL",
+            band="ambiguous",
+            filing_date=AMBIGUOUS,
+            status="complete",
+            run_id=ambiguous_id,
+        )
+    )
+    _write_forecast(tmp_path, ambiguous_id, AMBIGUOUS)
+    _manifest(tmp_path, ambiguous_id, "c" * 40, freeze="2.3.0")
+
+
+def test_a_band_is_not_refused_for_code_spread_it_does_not_score(tmp_path: Path) -> None:
+    """Audit finding #4 (ADR 0022), closed. The guard counted every resolved entry in
+    the ledger while calling the result "this band", so the clean band's two code
+    states refused an ambiguous-band pass that reads none of their runs."""
+    _two_bands_one_mixed(tmp_path)
+
+    result = _invoke(tmp_path, "--band", "ambiguous", "--no-leakage")
+
+    assert result.exit_code == 0, result.output
+    assert "code       digest cccccccccccc (1 runs in ambiguous/dev)" in result.output
+    assert "more than one forecast digest" not in result.output
+    # Stated, not silently skipped: the other band was not scored, so no estimate.
+    assert "leakage: not computed" in result.output
+
+
+def test_the_other_band_is_inside_the_guard_when_the_pass_scores_it(tmp_path: Path) -> None:
+    """The other direction, and the worse one to get wrong. The leakage estimate
+    scores the other band at the same split as part of this pass, so that band's code
+    spread is this pass's business. Scoped to the primary band alone, a pass would
+    read 208 dirty clean-band runs with nothing recorded about them."""
+    _two_bands_one_mixed(tmp_path)
+
+    result = _invoke(tmp_path, "--band", "ambiguous")
+
+    assert result.exit_code != 0
+    assert "more than one forecast digest" in result.output
+    assert "produced ambiguous/dev and clean/dev" in result.output
+
+
 def test_a_dirty_tree_is_visible_in_the_report(tmp_path: Path) -> None:
     ids = [uuid4(), uuid4()]
     _finish(tmp_path, ids)
@@ -1033,7 +1084,9 @@ def test_two_commits_with_one_digest_are_forecast_equivalent(tmp_path: Path) -> 
 
     result = _invoke(tmp_path)
     assert result.exit_code == 0
-    assert "code       digest dddddddddddd (2 runs)" in result.output
+    # The line names the population its count describes. It did not, and a reader
+    # (this one) took a whole-ledger count for a band's.
+    assert "code       digest dddddddddddd (2 runs in clean/dev)" in result.output
 
 
 def test_two_digests_refuse_even_on_one_commit(tmp_path: Path) -> None:

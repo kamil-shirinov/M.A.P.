@@ -29,7 +29,7 @@ from __future__ import annotations
 import json
 import subprocess
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -138,6 +138,14 @@ def evaluate(
         False,
         "--allow-mixed-code",
         help="Score even though runs executed under different commits.",
+    ),
+    no_leakage: bool = typer.Option(
+        False,
+        "--no-leakage",
+        help=(
+            "Score this band and split alone. The leakage estimate scores the other "
+            "band as part of the pass; this leaves it unscored and unreported."
+        ),
     ),
     split: str = typer.Option(
         ...,
@@ -292,12 +300,29 @@ def evaluate(
             ((label, count),) = freezes.most_common()
             typer.secho(f"freeze     {label} ({count} runs)", fg=typer.colors.GREEN)
 
-        versions, example = _code_versions(ledger, runs_dir)
+        # EXACTLY the populations this pass scores, which is what the guard below
+        # must read. `_leakage` scores the OTHER band at the same split as part of
+        # the pass, so a guard scoped to the primary band alone would let that
+        # band's code spread through unrecorded — the worse half of the same audit
+        # finding. `--no-leakage` narrows the pass, and the guard narrows with it.
+        # Computed identically under `--check`, so the pre-flight predicts the run.
+        other_band = next((b.name for b in corpus.criteria.bands if b.name != band), None)
+        scores_other = (
+            other_band is not None
+            and not no_leakage
+            and _outstanding(corpus, ledger, other_band)[0] == 0
+        )
+        populations = ((band, split),) + (
+            ((other_band, split),) if scores_other and other_band else ()
+        )
+        split_of = {str(plan_.ticker): plan_.split for plan_ in corpus.accepted}
+        versions, example = _code_versions(ledger, runs_dir, populations, split_of)
         if not versions:
             typer.secho("code       no manifests found to read", fg=typer.colors.YELLOW)
         elif len(versions) > 1:
             typer.secho(
-                f"code       {len(versions)} distinct forecast digests produced this band:",
+                f"code       {len(versions)} distinct forecast digests produced "
+                f"{_population_label(populations)}:",
                 fg=typer.colors.YELLOW,
             )
             for label, count in versions.most_common():
@@ -315,7 +340,10 @@ def evaluate(
                 )
         else:
             ((label, count),) = versions.most_common()
-            typer.secho(f"code       digest {label} ({count} runs)", fg=typer.colors.GREEN)
+            typer.secho(
+                f"code       digest {label} ({count} runs in {_population_label(populations)})",
+                fg=typer.colors.GREEN,
+            )
 
         # Honours --config like every other command. It did not: a bare `load()`
         # always read the working directory's config, so `map evaluate --config X`
@@ -370,7 +398,14 @@ def evaluate(
                     record=record,
                 )
                 other = next((b.name for b in corpus.criteria.bands if b.name != band), None)
-                if other is not None:
+                if other is not None and no_leakage:
+                    typer.echo("")
+                    typer.secho(
+                        f"  leakage: not computed — --no-leakage, so the {other} band "
+                        "was not scored as part of this pass",
+                        fg=typer.colors.YELLOW,
+                    )
+                elif other is not None:
                     _leakage(
                         other,
                         corpus,
@@ -500,8 +535,9 @@ def _freeze_versions(
     deciding what a model is asked stayed identical — and comparing versions would
     have refused the band on a restart, with no override.
 
-    Band-filtered, unlike `_code_versions` below — which is audit finding #4 and is
-    deferred, not overlooked.
+    Band-filtered. `_code_versions` below is now scoped to the populations a pass
+    scores, which is finer: this one stays band-wide on purpose, because a freeze
+    basis is a property of the band rather than of either split.
 
     Returns the counts and one representative commit per group, so two differing
     records can be recovered from git and the differing fields named.
@@ -681,8 +717,41 @@ def _manifest_of(runs_dir: Path, run_id: object) -> dict[str, object] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
-def _code_versions(ledger: Ledger, runs_dir: Path) -> tuple[Counter[str], dict[str, str]]:
-    """What produced this band's completed runs, keyed by **forecast digest**.
+def _population_label(populations: Sequence[tuple[str, str]]) -> str:
+    """`ambiguous/dev`, or `ambiguous/dev and clean/dev` when a pass scores both."""
+    names = [f"{band}/{split}" for band, split in populations]
+    return " and ".join(names)
+
+
+def _outstanding(corpus: Corpus, ledger: Ledger, band: str) -> tuple[int, int]:
+    """How many of a band's planned items are not yet resolved, and how many there are.
+
+    Read by `_leakage`, which will not estimate on a half-finished band, and by the
+    code-digest guard, which has to know whether this pass will score that band.
+    """
+    wanted = {item.key for item in plan(corpus, band)}
+    resolved = ledger.resolved()
+    return len(wanted) - sum(1 for key in wanted if key in resolved), len(wanted)
+
+
+def _code_versions(
+    ledger: Ledger,
+    runs_dir: Path,
+    populations: Sequence[tuple[str, str]],
+    split_of: Mapping[str, str],
+) -> tuple[Counter[str], dict[str, str]]:
+    """What produced the completed runs THIS PASS SCORES, keyed by **forecast digest**.
+
+    Scoped to the populations the pass actually scores, which is audit finding #4
+    (ADR 0022) closed. It counted every resolved entry in the ledger while calling
+    the result "this band", so the clean band's 208 runs from a dirty tree refused
+    an ambiguous-band score that shares none of them — and the printed counts named
+    a population they did not describe.
+
+    Both directions matter. Too broad refuses on runs the pass never reads. Too
+    narrow is worse: `_leakage` scores the other band at the same split as part of
+    the pass, so a guard scoped to the primary band alone would let that band's
+    code spread through with nothing recorded.
 
     The commit is the wrong equality test. Development continues while a corpus
     runs, so a twelve-night band spans every commit made during it — and a guard
@@ -697,8 +766,11 @@ def _code_versions(ledger: Ledger, runs_dir: Path) -> tuple[Counter[str], dict[s
     """
     seen: Counter[str] = Counter()
     example: dict[str, str] = {}
+    wanted = set(populations)
     for entry in ledger.resolved().values():
         if entry.status != "complete" or entry.run_id is None:
+            continue
+        if (entry.band, split_of.get(str(entry.ticker), "")) not in wanted:
             continue
         manifest = _manifest_of(runs_dir, entry.run_id)
         if manifest is None:
@@ -1080,14 +1152,12 @@ def _leakage(
     other band is scored when it is complete and named as absent when it is not —
     never partially.
     """
-    wanted = {item.key for item in plan(corpus, other)}
-    resolved = ledger.resolved()
-    outstanding = len(wanted) - sum(1 for key in wanted if key in resolved)
+    outstanding, wanted_n = _outstanding(corpus, ledger, other)
     if outstanding:
         typer.echo("")
         typer.secho(
             f"  leakage: not reported — the {other} band has {outstanding} of "
-            f"{len(wanted)} items outstanding, and a leakage estimate on a "
+            f"{wanted_n} items outstanding, and a leakage estimate on a "
             "half-finished band is a different number, not a preliminary one",
             fg=typer.colors.YELLOW,
         )

@@ -2441,3 +2441,69 @@ history rewrite.
 including the archive rewrites the very commits it exists to preserve and leaves the pin
 holding copies under new SHAs — the one thing it is there not to do. The bundles are the
 second line, and they sit outside the repository for the same reason.
+\n
+---
+
+## 59 · A guard that was audited, deferred, and then fired exactly as written
+
+`map evaluate --band ambiguous --split dev --check` refused with **"5 distinct
+forecast digests produced this band"**, listing 208 runs from a dirty tree with no
+digest at all. On that report I told the operator the ambiguous band could not be
+scored without `--allow-mixed-code` — an override whose own help says it *records a
+judgement* that the differing files cannot change a forecast, the adjudication
+[[decisions/0030-code-boundary-adjudication|ADR 0030]] performed for the clean band.
+
+**Every one of those digests belongs to the clean band.** Counted per population:
+
+| Population | Runs | Distinct digests |
+| --- | --- | --- |
+| ambiguous / dev | 177 | **1** |
+| ambiguous / holdout | 173 | **1** |
+| clean / dev | 178 | 4, including **106 dirty** |
+| clean / holdout | 173 | 5, including **102 dirty** |
+
+The ambiguous band is uniform — one digest across all 350 runs — and needs no
+judgement at all.
+
+**This was known.** `_code_versions` iterates `ledger.resolved()` with no band and no
+split while printing "this band", and the function two above it, `_freeze_versions`,
+carries the comment *"Band-filtered, unlike `_code_versions` below — which is audit
+finding #4 and is deferred, not overlooked."* The [[Guard Audit]] wrote it down in
+the abstract: *"an ambiguous-band commit can refuse a clean-band score."* It fired
+in the mirror image, and [[decisions/0022-guard-scope|ADR 0022]] §4 lists it as a
+known limitation.
+
+### What the deferral cost
+
+Nothing in the data, and one wrong report. A deferred finding does not stay
+theoretical: it waits for the first operator who does not know it is there, and then
+it reads as evidence. The refusal was printed by the project's own guard, in the
+project's own words, naming a population it had not measured — so the natural
+reading was that the ambiguous band needed an ADR-level judgement, and the natural
+next step was to make one.
+
+**The operator caught it by arithmetic**: the digest table summed to 701, which is
+every panel run in the corpus, against 177 items in the population being scored. The
+sum was in my own report, and I had not added it up.
+
+### The fix, and why a band filter would have been the wrong one
+
+Scoped to **the populations the pass scores**, not to the primary band. Too broad
+refuses on runs the pass never reads, which is this bug. Too narrow is worse:
+`_leakage` scores the other band at the same split as part of the pass, so a
+band-scoped guard would have let the clean band's 208 dirty runs through with
+nothing recorded — the guard silent on runs that were scored. Both directions are
+tested. `--no-leakage` narrows the pass to one population, and the guard narrows
+with it.
+
+The printed line now names the population its count describes: `digest
+cccccccccccc (1 runs in ambiguous/dev)`, or `produced ambiguous/dev and clean/dev`
+when the leakage estimate brings the second one in. A count that names its own
+population cannot be read as a different one.
+
+### The shape
+
+Same family as [[#50]] — the sentence outliving the number — from the other end. There
+the story about a figure went stale; here the figure was never about what its sentence
+said, and the sentence was in the code. A docstring is not a scope, and a guard that
+prints a population it did not filter on will eventually be believed.
