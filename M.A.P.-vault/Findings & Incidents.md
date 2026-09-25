@@ -2507,3 +2507,49 @@ Same family as [[#50]] — the sentence outliving the number — from the other 
 the story about a figure went stale; here the figure was never about what its sentence
 said, and the sentence was in the code. A docstring is not a scope, and a guard that
 prints a population it did not filter on will eventually be believed.
+
+---
+
+## 60 · A test suite that passed twenty-three hours a day
+
+Two tests asserted `date.today().isoformat()` against values the code stamps with
+`datetime.now(UTC).date()`. The machine runs on BST, so the local date and the UTC date
+disagree between midnight and 01:00. At 00:03 on 2026-09-26 both failed:
+
+```
+tests/unit/test_cli_export.py  manifest["exported_at"]     '2026-09-25' == '2026-09-26'
+tests/unit/test_cli_runs.py    outcome["retrieved_on"]     '2026-09-25' == '2026-09-26'
+```
+
+**The code was right and the tests were wrong.** `exported_at` and `retrieved_on` are
+vintage stamps; a stamp that depends on the exporter's timezone is a stamp two people
+reading the same artifact would disagree about. UTC is the correct choice and it is made
+consistently — `export.py:415` and `runs.py:246` both call `datetime.now(UTC).date()`.
+The assertions simply reached for the wrong clock.
+
+### Why it had survived
+
+It is invisible for most of the year and most of the day. During GMT the two clocks
+agree and the tests cannot fail at all; during BST there is a one-hour window, and
+nobody had run the suite inside it. The failure needs a timezone, a season and an hour
+to coincide, which is exactly the shape of a bug that sits in a repository indefinitely
+and then fires on the day it is least welcome.
+
+### Why it mattered on this particular day
+
+The working agreement had changed that morning: **push after every commit, provided both
+suites pass.** A suite with an hour-long dead zone in it turns that rule into "push
+after every commit except between midnight and one", which nobody would have written
+down and nobody would have remembered. A flaky gate is worse than a slow one, because it
+trains you to push past it.
+
+### The general shape
+
+**A test that constructs an expected value must construct it the way the code does.**
+`date.today()` and `datetime.now(UTC).date()` are the same value 96% of the time, which
+is the worst possible hit rate: often enough to look correct, rare enough that the
+failure arrives with no recent change to blame. The same applies to any clock, locale or
+default that the test and the code each reach for independently.
+
+Related to [[#55]] in kind rather than in subject: two halves individually correct, and
+a composition that is not.
