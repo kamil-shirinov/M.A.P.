@@ -20,14 +20,15 @@ No runner, no `package.json`, no build step — Node's own test runner over
 
 ## Generating the export
 
-The front end reads a static export produced by the M.A.P. CLI. It is **not in this
-repository** — `assets/export/` is gitignored, because it is 5.2 MB of generated JSON
-whose contents change every time the corpus is re-scored.
+The front end reads a static export produced by the M.A.P. CLI. It is **not
+committed** — `ui/assets/export/` is gitignored, because it is 5.3 MB of generated
+JSON whose contents change every time the corpus is re-scored.
 
-    cd ~/Desktop/M.A.P.
-    uv run map export --out ~/Desktop/map-ui/assets/export
+    cd <repository root>
+    uv run map export
 
-Then serve this folder as below. `map export` refuses rather than writing a
+`ui/assets/export` is the default output, so there is no path to remember and no
+way to write an export no page can see. Then serve this folder as below. `map export` refuses rather than writing a
 half-export, naming the first input it could not read:
 
     error: the corpus ledger is missing at var/corpus/ledger.jsonl
@@ -40,7 +41,7 @@ legitimate state and the interface has to render it.
 
 To check an export has not gone stale behind the repository it came from:
 
-    uv run map export --out ~/Desktop/map-ui/assets/export --check
+    uv run map export --check
 
 It re-derives the identity of all seven inputs and names what moved. It writes nothing.
 

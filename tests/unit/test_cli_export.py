@@ -10,7 +10,9 @@ the record it is drawing.
 
 from __future__ import annotations
 
+import inspect
 import json
+import subprocess
 from datetime import date
 from pathlib import Path
 
@@ -18,6 +20,7 @@ import pytest
 from typer.testing import CliRunner
 
 from mapf.cli.app import EXIT_DATA, app
+from mapf.cli.commands.export import UI_EXPORT, export
 from tests.unit.test_cli import _config
 from tests.unit.test_cli_corpus import _frozen
 from tests.unit.test_journal import VINTAGE, _write_run
@@ -855,3 +858,38 @@ def test_span_still_breaks_a_tie_on_the_end_date(tmp_path: Path) -> None:
     _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
 
     assert len(_read(tmp_path, "prices/AAPL.json")["bars"]) == 30
+
+
+def test_the_default_output_is_where_the_front_end_reads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One channel between the Python and the JavaScript, and one path.
+
+    `ui/assets/export` is the only place a page can read from, so it is the default
+    rather than the usual argument. A required `--out` made it possible — and, for
+    a while, routine — to write a valid export that no screen could see.
+    """
+    assert Path("ui/assets/export") == UI_EXPORT
+
+    assert inspect.signature(export).parameters["out"].default.default == UI_EXPORT
+
+    # And behaviourally, from a directory with no export in it: the command that
+    # names the path it looked in must name that one when nobody passed --out.
+    config = _config(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    result = runner.invoke(app, ["export", "--check", "--config", str(config)])
+    assert result.exit_code == EXIT_DATA
+    assert str(UI_EXPORT) in result.output
+
+    # And the directory it names is ignored, not committed: 5 MB of derived JSON
+    # that this command rebuilds. Asserted against the real repository, because the
+    # default is only useful if writing to it does not dirty the tree.
+    root = Path(__file__).resolve().parents[2]
+    ignored = subprocess.run(  # noqa: S603, S607
+        ["git", "check-ignore", "ui/assets/export/manifest.json"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert ignored.returncode == 0, "ui/assets/export/ must be gitignored"

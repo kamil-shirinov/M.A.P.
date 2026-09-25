@@ -189,7 +189,7 @@ and `map export --allow-partial` writes 0.09 MB — the corpus and nothing else.
 That boundary is the honest claim. A reader can confirm the machinery does what is
 described here; only someone with the artifacts can confirm the counts.
 
-**`map export --out <dir>`** writes the whole readable state as flat JSON — 5.34 MB, of
+**`map export`** writes the whole readable state as flat JSON into `ui/assets/export` — 5.34 MB, of
 which 0.77 MB is eager. No server, no dependency. **`map export --check`** re-derives
 the identity of all seven inputs and names what has moved since the export was written,
 because a copy goes silently behind and a date alone does not make that visible.
@@ -693,13 +693,14 @@ quietly and looking like a complete history of a smaller number.
 The readable state as flat JSON, for a front end with no server behind it.
 
 ```bash
-uv run map export --out ./export          # write it
-uv run map export --out ./export --check  # has anything moved since?
+uv run map export                  # write it to ui/assets/export
+uv run map export --check          # has anything moved since?
+uv run map export --out ./export   # somewhere else, for a diff
 ```
 
 | Flag | Default | What it does |
 |---|---|---|
-| `--out` | *required* | Directory to write into. |
+| `--out` | `ui/assets/export` | Directory to write into. The default is where the front end reads. |
 | `--check` | off | Compare an existing export against this checkout. Writes nothing. |
 | `--snapshot` | `2026-09-05` | Price vintage the series and outcomes are read from. |
 | `--frozen` · `--ledger-path` · `--runs-dir` · `--scores-dir` | repo paths | The inputs. |

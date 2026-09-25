@@ -118,8 +118,8 @@ async function readJson(path) {
 // The boundary state
 // --------------------------------------------------------------------------
 
-/** No `manifest.json` at all. `assets/export/` is gitignored and generated, so
-    this is what every clone of this repository sees until someone runs
+/** No `manifest.json` at all. `ui/assets/export/` is gitignored and generated, so
+    this is what every clone of the repository sees until someone runs
     `map export`. Distinct from `partial`: there is nothing to read an absence
     FROM, so the export cannot state its own gaps and this module states them. */
 export const NO_EXPORT = "no-export";
@@ -138,9 +138,9 @@ export async function getExportState() {
       // The one absence the export cannot state for itself.
       why: absent(
         NOT_COMPUTED,
-        "No export has been generated. `assets/export/` is gitignored: it is " +
-          "produced by `map export` in the M.A.P. repository, not committed here.",
-        { remedy: "uv run map export --out <this folder>/assets/export" },
+        "No export has been generated. `ui/assets/export/` is gitignored: it " +
+          "is derived, and `map export` rebuilds it from the ledger and the runs.",
+        { remedy: "uv run map export" },
       ),
     };
   }

@@ -27,6 +27,13 @@ runs/*
 var/*
 !var/.gitkeep
 
+# --- the front end's export ---
+# `ui/` carries its own .gitignore with the same rule, so this is belt and braces —
+# and it is the belt: the root file is where someone looks before wondering why a
+# 5 MB directory keeps appearing in `git status`. Derived output of `map export`,
+# rebuilt from the ledger and the runs, and never the source of anything.
+ui/assets/export/
+
 # Local news corpus — untrusted third-party text, not ours to commit.
 # Anchored with a leading slash on purpose: a bare `news/` matches at ANY depth and
 # would silently swallow tests/fixtures/news/, which DoD criterion 6 depends on.

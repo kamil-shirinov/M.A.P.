@@ -58,6 +58,13 @@ EXPORT_VERSION = "1.2.0"
 # every other computed input.
 FILERS = Path("var/filers/item_202.jsonl")
 
+# Where the front end reads from. The default, not merely the usual argument: the
+# export is the ONLY channel between this repository's Python and its JavaScript,
+# and a default that lands anywhere else means a `map export` whose output no page
+# can see. Gitignored — it is derived, it is 5 MB, and it is rebuilt by this
+# command. Overridable with --out for a second copy or a diff against an old one.
+UI_EXPORT = Path("ui/assets/export")
+
 # Why the holdout has no scoring record, stated in the manifest rather than left
 # for a reader to discover as a missing file (ADR 0031).
 HOLDOUT_ABSENCE = {
@@ -119,7 +126,9 @@ def _require(path: Path, what: str, remedy: str, *, partial: bool) -> bool:
 
 @app.command()
 def export(
-    out: Path = typer.Option(..., "--out", help="Directory to write the export into."),
+    out: Path = typer.Option(
+        UI_EXPORT, "--out", help="Directory to write the export into (default: the front end's)."
+    ),
     frozen: Path = typer.Option(FROZEN, help="The frozen corpus."),
     ledger_path: Path = typer.Option(LEDGER, help="The corpus ledger."),
     runs_dir: Path = typer.Option(Path("runs"), help="Where run artifacts live."),
