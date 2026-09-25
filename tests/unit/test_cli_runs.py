@@ -9,11 +9,11 @@ that compares the two or that spans them.
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from mapf.cli.app import app
 from tests.unit.test_cli import _config
@@ -28,7 +28,7 @@ def _wire(monkeypatch: pytest.MonkeyPatch, snapshot: object | None = None) -> No
     monkeypatch.setattr(runs_module, "build_price_snapshot", lambda s, v: snapshot or _Snapshot())
 
 
-def _invoke(tmp_path: Path, runs: Path, *args: str) -> object:
+def _invoke(tmp_path: Path, runs: Path, *args: str) -> Result:
     return runner.invoke(
         app, ["runs", "--runs-dir", str(runs), *args, "--config", str(_config(tmp_path))]
     )
@@ -388,7 +388,10 @@ def test_a_close_is_shown_as_retrieved_with_its_snapshot_and_the_day_it_was_read
     assert outcome["snapshot"] == VINTAGE.isoformat()
     assert outcome["provider"] == "yfinance"
     assert outcome["adjustment"] == "split_adjusted"
-    assert outcome["retrieved_on"] == date.today().isoformat()
+    # UTC, because `map runs` stamps UTC. `date.today()` is the local date and
+    # the two disagree for one hour a night in BST, which is a test that passes
+    # 23 hours a day.
+    assert outcome["retrieved_on"] == datetime.now(UTC).date().isoformat()
 
 
 def test_a_run_outside_the_snapshot_keeps_its_row_and_names_the_reason(

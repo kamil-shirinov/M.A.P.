@@ -25,7 +25,7 @@ from typer.testing import CliRunner
 
 from mapf.cli.app import EXIT_DATA, app
 from mapf.core.hashing import document_id
-from mapf.core.models import Document, EarningsFiling
+from mapf.core.models import Document, EarningsFiling, UntrustedText
 from tests.unit.test_cli import _config, _NullDiv, _StubMarket, _StubProvider
 
 runner = CliRunner()
@@ -38,7 +38,7 @@ def _exhibit(body: str) -> Document:
     return Document(
         id=document_id(body.encode("utf-8")),
         source="https://www.sec.gov/Archives/exhibit.htm",
-        text=body,
+        text=UntrustedText(body),
         fetched_at=datetime(2026, 9, 8, tzinfo=UTC),
     )
 

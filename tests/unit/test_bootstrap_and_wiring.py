@@ -30,6 +30,7 @@ from mapf.core.hashing import new_run_id
 from mapf.core.models import Bar, Forecast, PriceWindow
 from mapf.core.ports import LLMResponse, ModelInfo, RenderedPrompt, SamplingParams
 from mapf.data.cache import ParquetPriceCache
+from mapf.data.filings import EdgarFilings
 from mapf.data.providers.dividends import NullDividendSource, YFinanceDividendSource
 from mapf.pipeline.trace import CountingTrace, JsonlTrace
 from mapf.providers.caching import CachingProvider
@@ -427,6 +428,10 @@ def test_the_earnings_calendar_is_built_from_settings_like_its_siblings(
         calendar = build_earnings_calendar(settings, client)
 
     filings = calendar._filings  # noqa: SLF001
+    # The calendar holds this as `object` on purpose — it duck-types the filings
+    # source — so narrowing here is the assertion that it was wired with the real
+    # one, not a workaround for the annotation.
+    assert isinstance(filings, EdgarFilings)
     assert filings._user_agent == settings.data.sec.user_agent  # noqa: SLF001
     assert filings._throttle._interval == pytest.approx(  # noqa: SLF001
         1.0 / settings.data.sec.requests_per_second

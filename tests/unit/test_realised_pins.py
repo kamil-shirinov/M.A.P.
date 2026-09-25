@@ -12,11 +12,9 @@ from mapf.corpus.pins import RealisedPins
 from mapf.eval.scorer import (
     RealisedDriftError,
     RealisedPin,
-    ScoringError,
-    WindowNotClosedError,
-    realised_bar,
     score_item,
 )
+from mapf.eval.window import ScoringError, WindowNotClosedError, realised_bar
 from tests.unit.test_scorer import HORIZON, START, _forecast, _window
 
 

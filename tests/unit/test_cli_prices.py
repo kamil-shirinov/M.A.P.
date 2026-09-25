@@ -15,7 +15,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 
 from mapf.cli.app import EXIT_DATA, app
 from mapf.core.errors import AllMarketDataProvidersFailedError
@@ -65,7 +65,7 @@ class _Failing:
         return "yfinance"
 
     def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
-        raise AllMarketDataProvidersFailedError({"yfinance": "timeout"})
+        raise AllMarketDataProvidersFailedError({"yfinance": TimeoutError("timeout")})
 
 
 def _wire(monkeypatch: pytest.MonkeyPatch, market: object) -> None:
@@ -74,7 +74,7 @@ def _wire(monkeypatch: pytest.MonkeyPatch, market: object) -> None:
     monkeypatch.setattr(prices_module, "build_market_data", lambda s: market)
 
 
-def _run(tmp_path: Path, *args: str) -> object:
+def _run(tmp_path: Path, *args: str) -> Result:
     return runner.invoke(app, ["prices", "AAPL", *args, "--config", str(_config(tmp_path))])
 
 

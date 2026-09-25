@@ -15,7 +15,15 @@ from uuid import uuid4
 
 import pytest
 
-from mapf.core.models import Bar, Forecast, PriceWindow, Scenario, ScenarioSet
+from mapf.core.models import (
+    Bar,
+    DividendWindow,
+    Forecast,
+    ModelVersions,
+    PriceWindow,
+    Scenario,
+    ScenarioSet,
+)
 from mapf.core.ports import SamplingParams
 from mapf.eval.journal import (
     SOURCES,
@@ -27,7 +35,6 @@ from mapf.eval.journal import (
 )
 from mapf.pipeline.manifest import (
     AgentRecord,
-    DividendWindow,
     PriceProvenance,
     RunManifest,
 )
@@ -79,7 +86,7 @@ def _write_run(
         horizon_days=horizon,
         spot_price=201.0,
         source_doc_ids=("sha256:" + "a" * 64,),
-        model_versions={"intake": "fp-i", "analyst": "fp-a", "structuralist": "fp-s"},
+        model_versions=ModelVersions(intake="fp-i", analyst="fp-a", structuralist="fp-s"),
         scenarios=_scenarios(),
     )
     (directory / "forecast.json").write_text(forecast.model_dump_json(), encoding="utf-8")

@@ -22,13 +22,12 @@ from mapf.eval.scorer import (
     EPOCH,
     BandScores,
     ScoredItem,
-    ScoringError,
     SpotDriftError,
-    WindowNotClosedError,
     realised_return,
     score_band,
     score_item,
 )
+from mapf.eval.window import ScoringError, WindowNotClosedError
 from tests.conftest import make_scenario_set
 
 HORIZON = 5

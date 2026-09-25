@@ -13,11 +13,13 @@ from __future__ import annotations
 import inspect
 import json
 import subprocess
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
-from typer.testing import CliRunner
+import typer
+from typer.testing import CliRunner, Result
 
 from mapf.cli.app import EXIT_DATA, app
 from mapf.cli.commands.export import UI_EXPORT, export
@@ -113,7 +115,7 @@ def _filers(tmp_path: Path) -> Path:
     return path
 
 
-def _export(tmp_path: Path, *args: str, out: Path | None = None) -> object:
+def _export(tmp_path: Path, *args: str, out: Path | None = None) -> Result:
     return runner.invoke(
         app,
         [
@@ -137,7 +139,9 @@ def _export(tmp_path: Path, *args: str, out: Path | None = None) -> object:
     )
 
 
-def _read(tmp_path: Path, name: str) -> object:
+def _read(tmp_path: Path, name: str) -> Any:
+    """`Any`, not `object`: the export holds dicts and lists at the top level and
+    every caller indexes the shape it is asserting about."""
     return json.loads((tmp_path / "export" / name).read_text(encoding="utf-8"))
 
 
@@ -435,7 +439,8 @@ def test_the_manifest_carries_each_sources_own_stamp_not_one_invented_date(
     # The pre-screen's own stamps, as the set they are: every row carries its
     # `fetched_on` and a resumed walk spans days.
     assert manifest["filers"] == {"rows": 2, "vintages": ["2026-09-09"]}
-    assert manifest["exported_at"] == date.today().isoformat()
+    # UTC, matching what the export stamps. See test_cli_runs for why.
+    assert manifest["exported_at"] == datetime.now(UTC).date().isoformat()
 
 
 def test_the_universe_is_eager_and_the_full_index_is_a_separate_file(
@@ -544,7 +549,7 @@ def test_a_config_failure_is_a_sentence_not_a_traceback(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # --check
 # ---------------------------------------------------------------------------
-def _check(tmp_path: Path, *args: str) -> object:
+def _check(tmp_path: Path, *args: str) -> Result:
     return runner.invoke(
         app,
         [
@@ -807,7 +812,7 @@ def test_more_names_than_fit_are_counted_rather_than_listed(
     from mapf.cli.commands import export as export_module
 
     printed: list[str] = []
-    monkeypatch.setattr(export_module.typer, "secho", lambda text, **_: printed.append(str(text)))
+    monkeypatch.setattr(typer, "secho", lambda text, **_: printed.append(str(text)))
     export_module._print_absence(
         {"what": "prices", "reason": "9 companies have no window", "items": list("ABCDEFGHI")}
     )
@@ -819,7 +824,7 @@ def test_an_absence_with_no_list_prints_one_line(monkeypatch: pytest.MonkeyPatch
     from mapf.cli.commands import export as export_module
 
     printed: list[str] = []
-    monkeypatch.setattr(export_module.typer, "secho", lambda text, **_: printed.append(str(text)))
+    monkeypatch.setattr(typer, "secho", lambda text, **_: printed.append(str(text)))
     export_module._print_absence({"what": "scores", "reason": "no scoring pass has been recorded"})
 
     assert len(printed) == 1
