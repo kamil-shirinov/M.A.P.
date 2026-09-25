@@ -510,6 +510,9 @@ describe("the holdout panel", { skip: !HAVE }, () => {
   });
 });
 
+/* NO EXPORT NEEDED. `ui/assets/export/` is generated and gitignored, so a fresh
+   clone has none — and since the front end merged into M.A.P., a fresh clone is
+   expected to pass both suites. These assertions read the checked-in files only. */
 describe("the page, its nav and its files", () => {
   it("adds results to the nav on every screen", async () => {
     installDom();
@@ -545,11 +548,28 @@ describe("the page, its nav and its files", () => {
     assert.equal(fmt.signed4(-1e-9), "0.0000");
   });
 
+  it("keeps the log score's orientation guard in the stylesheet", () => {
+    // The markup half of this is asserted against a rendered page below; the
+    // stylesheet half is a checked-in file and needs no export.
+    assert.match(file("assets/styles/results.css"), /\.res-rule-tag--guard[^}]*--uncal/);
+  });
+
+  it("jitters deterministically", async () => {
+    const { jitter } = await load("ui/results-direction.js");
+    assert.equal(jitter(7), jitter(7));
+    // 101 residues, rounded into the 75 integer rows the strip is tall.
+    assert.equal(new Set(Array.from({ length: 101 }, (_, i) => (i * 7919) % 101)).size, 101);
+    const spread = new Set(Array.from({ length: 101 }, (_, i) => Math.round(jitter(i))));
+    assert.ok(spread.size > 60, "a prime step through a prime modulus spreads");
+    for (let i = 0; i < 200; i += 1) assert.ok(jitter(i) >= 4 && jitter(i) <= 78);
+  });
+});
+
+describe("the rendered page", { skip: !HAVE }, () => {
   it("states the log score's orientation where it can be misread", () => {
     const text = ctx.roots.baselines.textContent;
     assert.match(text, /stored lower-is-better/);
     assert.match(text, /M\.A\.P\. worse →/);
-    assert.match(file("assets/styles/results.css"), /\.res-rule-tag--guard[^}]*--uncal/);
   });
 
   it("never uses 779 or 709 as a denominator, and names 779 only to refuse it", () => {
@@ -582,13 +602,4 @@ describe("the page, its nav and its files", () => {
     assert.ok(!ambigText.includes("−1.3786"), "the clean band's mean is not quoted under the ambiguous one");
   });
 
-  it("jitters deterministically", async () => {
-    const { jitter } = await load("ui/results-direction.js");
-    assert.equal(jitter(7), jitter(7));
-    // 101 residues, rounded into the 75 integer rows the strip is tall.
-    assert.equal(new Set(Array.from({ length: 101 }, (_, i) => (i * 7919) % 101)).size, 101);
-    const spread = new Set(Array.from({ length: 101 }, (_, i) => Math.round(jitter(i))));
-    assert.ok(spread.size > 60, "a prime step through a prime modulus spreads");
-    for (let i = 0; i < 200; i += 1) assert.ok(jitter(i) >= 4 && jitter(i) <= 78);
-  });
 });

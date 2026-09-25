@@ -228,8 +228,8 @@ clutter — a regeneration under changed conditions lands beside its predecessor
 **The holdout has no such record and cannot**, for the reason given above. The export
 states that as a fact in its manifest rather than leaving a missing file to be noticed.
 
-*Not built: the map-ui screens. The front end reads fixtures and is not wired to this
-export.*
+The front end is `ui/`, in this repository, and reads that export — four screens over
+the real files, with no fixture behind any figure on them.
 
 ### Phase 5 — the ablation, and what remains designed
 
@@ -752,10 +752,25 @@ uv run ruff check .
 uv run ruff format --check .
 uv run mypy
 uv run lint-imports          # architecture boundaries — see ADR 0004
+node --test ui/tests/*.test.mjs   # the front end; no package.json, no dependencies
 ```
 
 The test suite must pass with the inference server switched off. If it ever needs a live
 model, CI is broken.
+
+### Two suites, one repository
+
+`ui/` is the front end, merged in with its own history in 2026-09. It has **no build
+step and no dependencies** — ES modules served as files, and `node --test` against a
+DOM stub — so it needs nothing installed that the Python side does not already need.
+
+Its tests read `ui/assets/export/`, which is generated and gitignored, and **skip
+themselves when it is absent**. A fresh clone therefore passes both suites and exercises
+the front end on nothing; `uv run map export` is what makes those assertions real.
+
+The two halves meet at exactly one place, the export, and `docs/export-contract.md` is
+its contract. That is why they are one repository: a change to what the export emits and
+a change to the page reading it now land in the same commit or not at all.
 
 ### `refs/archive/*`, and what a history rewrite must not touch
 
