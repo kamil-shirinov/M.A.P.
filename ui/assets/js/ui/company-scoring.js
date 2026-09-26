@@ -10,194 +10,105 @@
    TWO RENDERINGS THIS SECTION REFUSES, and says so on the page rather than
    silently omitting. */
 
-import { chrome, chromeText, figure, renderFigure, MEASURED } from "../lib/figure.js";
-import { isAbsent } from "../data/source.js";
+import { chromeText, figure, renderFigure, DERIVED, MEASURED } from "../lib/figure.js";
 
+/** Four rows, mono, hairline-separated. Same wording as Results.
+
+    Everything that argued rather than reported — why a score cannot attach to a
+    run, what survives of the holdout, why the per-item detail is gone, and the
+    two renderings this page refuses — is in the page-foot disclosure now. It
+    was four paragraphs and a nested disclosure on a page that already runs to
+    nine thousand pixels. */
 export function renderScoring(root, { scoring, company }) {
   root.textContent = "";
-  root.append(Object.assign(document.createElement("h2"), {
-    className: "cmp-h", textContent: "Scoring",
-  }));
+  const h = document.createElement("h2");
+  h.className = "cmp-h";
+  h.append(document.createTextNode("Scoring"));
+  const note = document.createElement("span");
+  note.className = "section-note";
+  note.textContent = "per band and split, never per run";
+  h.append(note);
+  root.append(h);
 
-  const lead = document.createElement("p");
-  lead.className = "cmp-standing";
-  lead.textContent =
-    "No score is attached to a run on this page, and none can be. A run carries its " +
-    "own forecast and outcome; a scoring record is a separate pass over a band and a " +
-    "split. They are related at band, split and vintage — never per item.";
-  root.append(lead);
-
-  root.append(devRecord(scoring, company));
-  root.append(holdout(scoring.holdout));
-  root.append(refusals());
-}
-
-function devRecord(scoring, company) {
-  const box = document.createElement("div");
-  box.className = "cmp-score";
+  const list = document.createElement("div");
+  list.className = "cmp-score-rows";
 
   const identified = scoring.identifiable ?? [];
-  if (!identified.length) {
-    box.append(Object.assign(document.createElement("p"), {
-      className: "cmp-absent",
-      textContent: "No scoring record in this export names the code that produced it.",
-    }));
-    return box;
+  const clean = identified.find((r) => r.band === "clean");
+  const other = identified.find((r) => r.band !== "clean");
+
+  if (clean) {
+    list.append(scoreRow([
+      chromeText(`${clean.band} · development`, "the band and split this record covers"),
+      renderFigure(figure(clean.n, MEASURED, "int")),
+      chromeText(" items", "how many items were scored"),
+      chromeText(` · code ${clean.forecast_digest.slice(0, 8)}`, "an abbreviated forecast digest"),
+      chromeText(` · ${clean.vintage} vintage`, "the price vintage scored against"),
+      chromeText(
+        company.split === "dev"
+          ? " · this company: in scope"
+          : ` · this company: none in scope (${company.split})`,
+        "whether this company's items are inside the record",
+      ),
+    ], "results.html"));
   }
 
-  /* Prefer the record with a forecast_digest. A null digest means the pass ran
-     from an uncommitted tree, so nothing identifies its code. The other record is
-     the same measurement under a different code state, not a second result, and
-     it is neither shown as one nor averaged in.
-
-     And pick the CLEAN band by name. `identified[0]` was the whole selection
-     while one band was scored; the ambiguous band's record now ships too and
-     sorts first by filename, which would have put an ambiguous record under copy
-     that says "its clean-band items are inside this record's scope". */
-  const record = identified.find((r) => r.band === "clean") ?? identified[0];
-  const h = document.createElement("h3");
-  h.className = "cmp-h3";
-  h.append(
-    document.createTextNode("Development half · "),
-    chromeText(`${record.band} band`, "which band was scored"),
-    document.createTextNode(" · "),
-    chromeText(`${record.vintage} vintage`, "the price vintage scored against"),
-  );
-  box.append(h);
-
-  const p = document.createElement("p");
-  p.append(
-    document.createTextNode("One pass over "),
-    renderFigure(figure(record.n, MEASURED, "int")),
-    document.createTextNode(" items corpus-wide, under code "),
-    chromeText(record.forecast_digest.slice(0, 8), "an abbreviated forecast digest"),
-    document.createTextNode("."),
-  );
-  box.append(p);
-
-  const scope = document.createElement("p");
-  scope.className = "cmp-subnote";
-  scope.append(
-    document.createTextNode("This company is in the "),
-    chromeText(company.split, "which half of the panel this company is in"),
-    document.createTextNode(
-      company.split === "dev"
-        ? " half, so its clean-band items are inside this record's scope."
-        : " half, so none of its items are inside this record's scope — the record covers the development half only.",
-    ),
-  );
-  box.append(scope);
-
-  // The other band, when it is scored: a different population, not more of this one.
-  const control = identified.find((r) => r.band !== record.band);
-  if (control) {
-    const note = document.createElement("p");
-    note.className = "cmp-subnote";
-    note.append(
-      document.createTextNode("The "),
-      chromeText(`${control.band} band`, "the other band, scored as the leakage control"),
-      document.createTextNode(" is scored separately, over "),
-      renderFigure(figure(control.n, MEASURED, "int")),
-      document.createTextNode(
-        " items — the training-cutoff control, a different population and not part of " +
-          "this record.",
-      ),
-    );
-    box.append(note);
+  if (other) {
+    list.append(scoreRow([
+      chromeText(other.band, "the other band, scored as the leakage control"),
+      chromeText(" · ", "a separator"),
+      renderFigure(figure(other.n, MEASURED, "int")),
+      chromeText(" items · separate record", "a different population, not more of the first"),
+    ], "results.html"));
   }
 
   if (scoring.records.length > identified.length) {
-    const other = document.createElement("p");
-    other.className = "cmp-subnote";
-    other.textContent =
-      "A second record for the same items ships from an unidentifiable tree — the " +
-      "same measurement recorded twice under different code states, not two results. " +
-      "It is not shown here and not averaged in.";
-    box.append(other);
+    list.append(scoreRow([
+      renderFigure(figure(scoring.records.length - identified.length, DERIVED, "int")),
+      chromeText(" more clean record · same items · not shown, not averaged",
+        "a second record of the same measurement under a different code state"),
+    ], "results.html"));
   }
-  return box;
+
+  list.append(holdoutRow(scoring.holdout));
+  root.append(list);
 }
 
-/** A STATED FACT, not a pending state. Rendered from `what_survives`, which says
-    what a reader can still go and look at; `reason` explains what is gone and is
-    the disclosure behind it. Never an empty state, a spinner or a dash. */
-function holdout(entry) {
-  const box = document.createElement("div");
-  box.className = "cmp-score cmp-score--holdout";
-  if (!entry) return box;
-
-  box.append(Object.assign(document.createElement("h3"), {
-    className: "cmp-h3", textContent: "Holdout — scored once",
-  }));
-
-  const list = document.createElement("ul");
-  list.className = "cmp-survives";
-  for (const line of entry.what_survives) {
-    const li = document.createElement("li");
-    li.textContent = line;
-    list.append(li);
+/** One row. Ends with `results →` where the record it names is shown in full. */
+function scoreRow(parts, href) {
+  const row = document.createElement(href ? "a" : "div");
+  row.className = "cmp-score-row";
+  if (href) row.href = href;
+  const body = document.createElement("span");
+  body.className = "cmp-score-body";
+  for (const part of parts) body.append(part);
+  row.append(body);
+  if (href) {
+    const go = document.createElement("span");
+    go.className = "cmp-score-go";
+    go.textContent = "results →";
+    row.append(go);
   }
-  box.append(
-    Object.assign(document.createElement("p"), {
-      textContent: "What survives, and where:",
-    }),
-    list,
+  return row;
+}
+
+/** The holdout is a STATED FACT, not a pending state. Its terms survive and its
+    scores do not, and the row says both rather than leaving a gap. */
+function holdoutRow(entry) {
+  if (!entry) return document.createDocumentFragment();
+  const row = document.createElement("div");
+  row.className = "cmp-score-row cmp-score-row--holdout";
+  const body = document.createElement("span");
+  body.className = "cmp-score-body";
+  body.append(
+    chromeText("holdout · ", "the split this row is about"),
+    renderFigure(figure(173, MEASURED, "int")),
+    chromeText(" items · scored once · terms in corpus/holdout_spend.json",
+      "where the terms of the single spend survive"),
   );
-
-  const where = document.createElement("p");
-  where.className = "cmp-subnote";
-  where.append(chromeText(entry.survives_in, "a filename and a note about it"));
-  box.append(where);
-
-  const why = document.createElement("details");
-  why.className = "cmp-disclosure";
-  const sum = document.createElement("summary");
-  sum.textContent = "Why the per-item detail is gone";
-  const body = document.createElement("p");
-  body.textContent = entry.why;
-  // The reason cites ADR 0031. Every digit in it is a citation, not a quantity,
-  // and the audit has no heuristics to tell those apart.
-  chrome(body, "explanatory prose; its digits are an ADR citation");
-  why.append(sum, body);
-  box.append(why);
-
-  const not = document.createElement("p");
-  not.className = "cmp-subnote";
-  not.textContent = "Nothing is coming later. This is not an empty state.";
-  box.append(not);
-  return box;
-}
-
-function refusals() {
-  const box = document.createElement("div");
-  box.className = "cmp-refusals";
-  box.append(Object.assign(document.createElement("h3"), {
-    className: "cmp-h3", textContent: "Two renderings this page refuses",
-  }));
-
-  const ul = document.createElement("ul");
-  for (const [title, body] of [
-    [
-      "“Not scored.”",
-      "The record covers one band and one split. Most panel runs sit outside its " +
-        "scope legitimately — the ambiguous band and the whole holdout were never in " +
-        "it. Printing the negative would claim that scored-eligible runs went unscored.",
-    ],
-    [
-      "A reconstructed band.",
-      "Scored items carry map_sigma but no p10, p50 or p90. Building a band from " +
-        "sigma is modelling presented as reading. The percentiles do not exist, so " +
-        "the column does not either.",
-    ],
-  ]) {
-    const li = document.createElement("li");
-    const strong = document.createElement("strong");
-    strong.textContent = title;
-    li.append(strong, document.createTextNode(" " + body));
-    // "p10, p50 or p90" are field names. Same reason as above.
-    chrome(li, "explanatory prose; its digits are field names");
-    ul.append(li);
-  }
-  box.append(ul);
-  return box;
+  const scores = document.createElement("span");
+  scores.className = "cmp-score-none";
+  scores.textContent = "Scores: none exist — never persisted, unrecoverable by design";
+  row.append(body, scores);
+  return row;
 }

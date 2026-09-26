@@ -11,6 +11,7 @@
 
 import { chromeText, figure, renderFigure, MEASURED } from "../lib/figure.js";
 import { isAbsent } from "../data/source.js";
+import { draw } from "../lib/motion.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const W = 960;
@@ -33,8 +34,11 @@ export function renderSeries(root, { series, runs }) {
   }
 
   const rows = Object.values(runs.bySource).flatMap((r) => r);
-  root.append(plot(series, rows));
+  const drawn = [];
+  root.append(plot(series, rows, drawn));
   root.append(legend(rows));
+  // Now in the document, so the paths have a length.
+  for (const path of drawn) draw(path, { duration: 600 });
 }
 
 function header(series) {
@@ -65,7 +69,7 @@ function absence(why) {
   return p;
 }
 
-function plot(series, rows) {
+function plot(series, rows, drawn) {
   const bars = series.sessions;
   const closes = bars.map((b) => b[1]);
   const lo = Math.min(...closes);
@@ -83,16 +87,23 @@ function plot(series, rows) {
     "aria-label": `Closing prices for ${series.ticker} with a tick where each run opened`,
   });
 
-  svg.append(svgEl("path", {
+  const line = svgEl("path", {
     class: "cmp-line",
     d: bars.map((b, i) => `${i ? "L" : "M"}${x(i).toFixed(2)},${y(b[1]).toFixed(2)}`).join(" "),
-  }));
+  });
+  svg.append(line);
+  // Drawn after mounting: a detached path has no length. 600ms is the one
+  // exception to --dur-3 in the motion spec — this line is two years long and
+  // at 400ms it reads as a flicker rather than as a series being laid down.
+  drawn.push(line);
 
   for (const run of rows) {
     const ai = index.get(run.anchor_date);
     if (ai === undefined) continue;  // every anchor is on its series today; this is not assumed
     const ax = x(ai);
     const ay = y(bars[ai][1]);
+    // Markers arrive after the line has been laid down: they mark points ON it,
+    // and appearing first would make them look like the subject.
 
     const drifted = !isAbsent(run.anchor_drift);
     const openWindow = run.outcome_status === "window_open";

@@ -35,6 +35,9 @@ const REL_DETAIL = {
 };
 
 const COLUMNS = [
+  // The caret column. A row that expands should say so before it is clicked,
+  // and the header cell is deliberately blank: a label over a caret is noise.
+  ["", null],
   ["Anchored", "the trading session each run opened from"],
   ["Company", null],
   ["Run", "the first eight characters of each run's id"],
@@ -206,6 +209,49 @@ function groupBlock(group, ctx) {
   return wrap;
 }
 
+/** The journal's rows, for a host that is not the journal.
+
+    The company page shows the same eleven runs the journal shows, and before
+    this they were eleven cards with the same facts in a different shape — so a
+    reader comparing the two screens had to translate. Same component, same
+    columns, same legend; the caller hides the columns that are constant for it
+    (company, split) in CSS rather than by building a second row.
+
+    `ctx` needs `universe`, `openRows` and `onToggleRow`, exactly as the journal
+    builds them. */
+export function renderRowsInto(host, { rows, ctx, columns = COLUMNS, extra = null }) {
+  const header = el("div", "runs-colhead");
+  for (const [label, why] of columns) {
+    header.append(why ? chromeText(label, why) : el("span", null, label));
+  }
+  host.append(header);
+
+  let previousDate = null;
+  const entering = [];
+  for (const run of rows) {
+    const line = rowLine(run, ctx, run.anchor_date === previousDate);
+    entering.push(line);
+    host.append(line);
+    if (ctx.openRows.has(run.run_id)) {
+      const body = detail(run, ctx);
+      /* A host may know something about a run that the journal cannot. The
+         company page can resolve a repeat's panel run, because it holds every
+         run for the ticker; the journal holds every ticker and would have to
+         scan 779 rows to answer the same question. The hook keeps that
+         knowledge at the screen that has it, instead of pushing a company-shaped
+         branch into the shared row. */
+      const more = extra?.(run);
+      if (more) body.append(more);
+      host.append(body);
+    }
+    previousDate = run.anchor_date;
+  }
+  stagger(entering);
+  return host;
+}
+
+export { COLUMNS };
+
 function rowLine(run, ctx, ditto) {
   const row = el("button", "runs-row");
   row.type = "button";
@@ -213,6 +259,9 @@ function rowLine(run, ctx, ditto) {
   row.dataset.drift = String(drifted);
   row.dataset.open = String(ctx.openRows.has(run.run_id));
   row.setAttribute("aria-expanded", String(ctx.openRows.has(run.run_id)));
+
+  const caret = el("span", "row-x-caret runs-c-caret", "\u25b8");
+  row.append(caret);
 
   // The date is never omitted — a blank cell reads as missing data. A repeat
   // within the group prints in the rule colour instead.

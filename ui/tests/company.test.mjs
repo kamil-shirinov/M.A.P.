@@ -37,6 +37,10 @@ class Node {
       this.children.push(node);
     }
   }
+  /* The company page now renders the runs journal's row component, which reads
+     `lastChild` to style the trailing date in the outcome cell. */
+  get firstChild() { return this.children[0]; }
+  get lastChild() { return this.children.at(-1); }
   querySelector() { return null; }
   querySelectorAll() { return []; }
   closest(sel) {
@@ -94,7 +98,7 @@ function unmarkedNumbers(root) {
 
 const load = (m) => import(`../assets/js/${m}?${Math.random()}`);
 
-async function renderCompany(ticker) {
+async function renderCompany(ticker, { openRuns = true } = {}) {
   installDom();
   stubFetch();
   const source = await load("data/source.js");
@@ -114,10 +118,24 @@ async function renderCompany(ticker) {
   renderIdentity((roots.identity = mk()), { company, runs });
   renderSeries((roots.series = mk()), { series, runs });
   renderFilings((roots.filings = mk()), { company, runs });
-  renderRuns((roots.runs = mk()), { runs, company, open: new Set(), onToggle: () => {} });
+  /* The runs are journal rows now, and the detail a card printed inline lives in
+     the expanded body. These assertions are about that content, so the default
+     here is every row open. A test that wants the collapsed row passes false. */
+  const open = new Set(
+    openRuns ? Object.values(runs.bySource).flat().map((r) => r.run_id) : [],
+  );
+  renderRuns((roots.runs = mk()), { runs, company, open, onToggle: () => {} });
   renderScoring((roots.scoring = mk()), { scoring, company });
   renderFooter((roots.footer = mk()), state.manifest);
-  return { roots, company, runs, source };
+
+  /* The page's notes, as the foot disclosure renders them. Several assertions
+     below are about sentences that moved off the page and into it; they should
+     check the sentence still exists somewhere, not that it vanished. */
+  const { renderPageWhy } = await load("ui/page-why.js");
+  const { COMPANY_WHY } = await load("ui/company-why.js");
+  const whyRoot = mk();
+  renderPageWhy(whyRoot, { groups: COMPANY_WHY });
+  return { roots, company, runs, source, why: whyRoot.textContent };
 }
 
 describe("company page, against the real export", { skip: !HAVE }, () => {
@@ -158,7 +176,10 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     // A drifted run keeps its outcome; the marker is what stops the two from
     // looking identical.
     assert.match(text, /Closed at/);
-    assert.match(text, /Not part of any published score/);
+    /* The claim survives the card-to-row change, said once instead of twice. The
+       card had `describeDrift`'s "This outcome is not part of any published
+       score" AND a tail repeating it; the row keeps the first. */
+    assert.match(text, /not part of any published score/);
   });
 
   it("no run is both drifted and open, so that drift tail never renders", async () => {
@@ -175,13 +196,16 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
       .every((r) => source.isAbsent(r.anchor_drift)));
   });
 
-  it("refuses the two renderings, on the page not silently", async () => {
-    const { roots } = await renderCompany("ACHC");
-    const text = roots.scoring.textContent;
-    assert.match(text, /Not scored/);
-    assert.match(text, /would claim that scored-eligible runs went unscored/);
-    assert.match(text, /map_sigma but no p10, p50 or p90/);
-    assert.match(text, /modelling presented as reading/);
+  it("refuses the two renderings, in the disclosure rather than silently", async () => {
+    /* These were two cards under the scoring section. They are refusals, and the
+       shared system gives every screen's refusals one group in the page-foot
+       disclosure — so they are still stated, in the same words, in the place a
+       reader goes for what a screen will not draw. */
+    const { why } = await renderCompany("ACHC");
+    assert.match(why, /Not scored/);
+    assert.match(why, /would claim that scored-eligible runs went unscored/);
+    assert.match(why, /map_sigma but no p10, p50 or p90/);
+    assert.match(why, /modelling presented as reading/);
   });
 
   it("shows the clean-band record, and names the other band as a control", async () => {
@@ -192,14 +216,20 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     const { identifiable } = await source.listScoringRecords();
     const clean = identifiable.find((r) => r.band === "clean");
     const text = roots.scoring.textContent;
-    assert.match(text, new RegExp(`${clean.n} items corpus-wide`));
-    assert.match(text, /clean band/);
+
+    // Four mono rows now, in the same wording Results uses.
+    assert.match(text, new RegExp(`clean · development${"[^]*"}${clean.n} items`));
+    assert.match(text, new RegExp(`code ${clean.forecast_digest.slice(0, 8)}`));
+
     const control = identifiable.find((r) => r.band !== "clean");
     if (control) {
-      assert.match(text, /training-cutoff control/);
-      assert.match(text, new RegExp(String(control.n)));
-      assert.ok(!text.includes(`${control.n} items corpus-wide`), "the control is not the record");
+      assert.match(text, new RegExp(`${control.band}[^]*${control.n} items · separate record`));
+      // The control is a different population, never more of the first.
+      assert.ok(!new RegExp(`${control.n} items · code`).test(text), "the control is not the record");
     }
+    // The holdout row states both halves: its terms survive, its scores do not.
+    assert.match(text, /holdout · 173 items · scored once/);
+    assert.match(text, /none exist — never persisted, unrecoverable by design/);
   });
 
   it("never prints a per-run score", async () => {
@@ -210,15 +240,21 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
   });
 
   it("states exchange as not loaded rather than fetching symbols.json", async () => {
-    const { roots } = await renderCompany("ACHC");
+    const { roots, why } = await renderCompany("ACHC");
+    // The fact strip says WHICH it is; the reason is one of the page's notes.
     assert.match(roots.identity.textContent, /not loaded/);
-    assert.match(roots.identity.textContent, /does not fetch a megabyte to fill one field/);
+    assert.match(why, /does not fetch a megabyte to fill one field/);
   });
 
   it("names the page a record rather than a projection", async () => {
-    const { roots } = await renderCompany("ACHC");
-    assert.match(roots.identity.textContent, /record of forecasts already made/);
-    assert.match(roots.identity.textContent, /not a current projection/);
+    const { roots, why } = await renderCompany("ACHC");
+    /* This moved from a paragraph under the fact strip into the disclosure, and
+       the strip gained two facts that make the same point without a sentence:
+       CLOSED n of n, and LIVE FORECAST none in export. */
+    assert.match(roots.identity.textContent, /Live forecast/i);
+    assert.match(roots.identity.textContent, /none in export/);
+    assert.match(why, /record of forecasts already made/);
+    assert.match(why, /not a current projection/);
   });
 
   it("draws no y-axis ticks", async () => {
@@ -496,13 +532,22 @@ describe("a re-based run has no realised return, on any screen", { skip: !HAVE }
     const { roots, runs, source } = await renderCompany("AAPL");
     const bad = drifted(runs, source);
 
-    const outcomes = byClass(roots.runs, "cmp-outcome");
-    const rebased = outcomes.filter((p) => /No realised return is shown/.test(p.textContent));
-    assert.equal(rebased.length, bad.length, "every re-based run says why it has no figure");
-    for (const p of rebased) {
-      assert.ok(!/\d+\.\d+%/.test(p.textContent), `a realised percentage survived: ${p.textContent}`);
-      assert.match(p.textContent, /it would mix two price bases/);
+    /* The realised CELL of each re-based row. This is the assertion that matters:
+       a whole-page text search would pass on a page that printed both the ratio
+       and the percentage, which is exactly what the cards used to do. */
+    const rows = byClass(roots.runs, "runs-row").filter((r) => r.dataset.drift === "true");
+    assert.equal(rows.length, bad.length, "both re-based runs are rows");
+    for (const row of rows) {
+      const cell = byClass(row, "runs-c-real")[0];
+      assert.match(cell.textContent, /^×\d\.\d{6}$/, "the ratio, and only the ratio");
+      assert.ok(!/%/.test(cell.textContent), "no realised percentage");
     }
+
+    // And the expanded body says why, in the same words the journal uses.
+    const bodies = byClass(roots.runs, "runs-detail");
+    const rebased = bodies.filter((p) => /No realised return is shown/.test(p.textContent));
+    assert.equal(rebased.length, bad.length, "every re-based run says why it has no figure");
+    for (const p of rebased) assert.match(p.textContent, /it would mix two price bases/);
 
     /* The ratio is what exists, and it is still on the page. This page states it
        in prose — "the snapshot closes 305.26 ... against 302.98 recorded
@@ -515,8 +560,11 @@ describe("a re-based run has no realised return, on any screen", { skip: !HAVE }
 
     // And the runs that are NOT re-based still show theirs: the refusal is
     // scoped to the defect, not a blanket removal.
-    const clean = outcomes.filter((p) => /Realised/.test(p.textContent));
-    assert.ok(clean.length >= 5, "ordinary runs keep their realised return");
+    const ordinary = byClass(roots.runs, "runs-row")
+      .filter((r) => r.dataset.drift !== "true")
+      .map((r) => byClass(r, "runs-c-real")[0].textContent)
+      .filter((t) => /%/.test(t));
+    assert.ok(ordinary.length >= 5, "ordinary runs keep their realised return");
   });
 
   it("agrees with the runs journal, which is where the rule came from", () => {

@@ -108,12 +108,13 @@ function nextDay(iso) {
   return d.toISOString().slice(0, 10);
 }
 
+/** One mono legend line. What the two band words mean is a legend; that neither
+    is the good half is an argument, and arguments are in the disclosure. */
 function bandNote() {
   const p = document.createElement("p");
-  p.className = "cmp-note";
+  p.className = "cmp-legend";
   p.textContent =
-    "clean is after the models' training cutoff; ambiguous is before it and exists " +
-    "to measure leakage. Both are factual partitions and read neutral.";
+    "clean after the models' training cutoff · ambiguous before it; measures leakage";
   return p;
 }
 

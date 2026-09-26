@@ -1,18 +1,20 @@
-/* Section 5 — one card per run. Cards only; there is no table branch.
+/* Section 5 — the journal's rows, for one company.
 
-   Max runs for any company is 16, median 6, min 4, so a collapse threshold never
-   fires on this screen. The run ledger is a different screen with different
-   volume and gets its own table there.
+   THE SAME COMPONENT AS THE RUNS SCREEN, deliberately. These are the same runs
+   the journal lists; showing them as eleven cards meant a reader comparing the
+   two screens had to translate one shape into the other, and it let the two
+   drift — the cards printed a realised return on a re-based run for months
+   after the journal had stopped.
 
-   Each card pairs a run's scenarios with its own outcome. That is the only
-   honest pairing on the page: both come from the same row. A score does not
-   appear on a card, and cannot — see the scoring section.
+   Two columns are hidden rather than removed: company is constant here, and so
+   is split, which the HOLDOUT tag in the page title already says. They are
+   hidden in CSS so the row itself stays one thing.
 
    Rows arrive newest-anchor-first from the export and are NOT re-sorted. */
 
 import { chromeText, figure, renderFigure, MEASURED } from "../lib/figure.js";
 import { SOURCES, describeDrift, describeOutcome, isAbsent } from "../data/source.js";
-import { stagger } from "../lib/motion.js";
+import { COLUMNS, renderRowsInto } from "./runs-journal.js";
 
 const RELATION = {
   ledger_item: { label: "panel item", why: "The ledger maps this run to a frozen corpus item." },
@@ -24,7 +26,7 @@ const RELATION = {
   unchecked: { label: "not compared", why: "No frozen record or ledger reached this export." },
 };
 
-export function renderRuns(root, { runs, company, open, onToggle }) {
+export function renderRuns(root, { runs, company, open, onToggle, universe }) {
   root.textContent = "";
   root.append(Object.assign(document.createElement("h2"), {
     className: "cmp-h", textContent: "Runs for this company",
@@ -35,12 +37,45 @@ export function renderRuns(root, { runs, company, open, onToggle }) {
   const rows = [];
   for (const name of SOURCES) rows.push(...runs.bySource[name]);
 
-  const list = document.createElement("div");
-  list.className = "cmp-cards";
-  const entering = rows.map((run) => card(run, company, open, onToggle, rows));
-  entering.forEach((node) => list.append(node));
-  stagger(entering);
-  root.append(list);
+  const table = document.createElement("div");
+  table.className = "runs-table runs-table--company";
+  /* The universe map the row needs for names and splits. On this screen it is
+     one company, and the row reads it the same way it does on the journal. */
+  const one = universe ?? new Map([[company.ticker, { name: company.name, split: company.split }]]);
+  renderRowsInto(table, {
+    rows,
+    ctx: { universe: one, openRows: open, onToggleRow: onToggle },
+    columns: COLUMNS,
+    // The one thing this screen knows that the journal does not: which panel run
+    // a repeat is a repeat OF. It holds every run for the ticker; the journal
+    // would have to scan all 779 to answer it.
+    extra: (run) =>
+      run.corpus_relation === "repeat_of_exhibit" ? panelRunBlock(run, company, rows) : null,
+  });
+  root.append(table);
+
+  const legend = document.createElement("p");
+  legend.className = "cmp-runs-legend";
+  legend.append(
+    chromeText(
+      "outcomes yfinance, split-adjusted, " +
+        `${sourceStamp(rows)} snapshot, retrieved ${retrievedStamp(rows)}`,
+      "the price basis and the day the export read it, said once for the table",
+    ),
+  );
+  root.append(legend);
+}
+
+/** Said once under the table rather than in every row. Read from the rows, not
+    written into the copy: `retrieved_on` is the day the export ran and moves on
+    every export. */
+const sourceStamp = (rows) => stampOf(rows, (o) => o.snapshot) ?? "—";
+const retrievedStamp = (rows) => stampOf(rows, (o) => o.retrieved_on) ?? "—";
+function stampOf(rows, pick) {
+  const seen = new Set();
+  for (const run of rows) if (!isAbsent(run.outcome)) seen.add(pick(run.outcome));
+  // More than one value means the table cannot say it once, so it says none.
+  return seen.size === 1 ? [...seen][0] : null;
 }
 
 function card(run, company, open, onToggle, siblings) {

@@ -238,3 +238,63 @@
    one place that lists what does have a page. */
 .cmp-back { display: inline-block; margin-top: var(--sp-5); color: var(--accent); text-decoration: none; font-family: var(--font-mono); font-size: var(--step-0); }
 .cmp-back:hover { text-decoration: underline; }
+
+/* ---- 02 · the runs table -------------------------------------------- */
+/* The journal's rows, for one company. Two columns are hidden rather than
+   removed from the component: company is constant on this screen, and split is
+   said once by the HOLDOUT tag in the title. Hiding them keeps ONE row
+   component across both screens, which is the point — the cards drifted from
+   the journal and printed a realised return the journal refused. */
+.runs-table--company .runs-row,
+.runs-table--company .runs-colhead {
+  grid-template-columns:
+    1.5ch 10.5ch 9ch minmax(20ch, 1.9fr) 9ch 3.5ch 10ch 13ch 9.5ch;
+}
+/* Company (cell 3) and split (cell 6), counting the caret as the first. */
+.runs-table--company .runs-c-co,
+.runs-table--company .runs-c-split,
+.runs-table--company .runs-colhead > :nth-child(3),
+.runs-table--company .runs-colhead > :nth-child(6) { display: none; }
+
+.cmp-runs-legend {
+  margin-top: var(--sp-3);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3);
+}
+
+/* ---- 02 · head, legend and scoring rows ----------------------------- */
+.page-title-tick {
+  font-family: var(--font-mono); font-size: var(--step-2);
+  color: var(--ink-2); letter-spacing: .04em; margin-right: var(--sp-4);
+}
+.page-title-split { margin-left: var(--sp-4); vertical-align: middle; }
+
+.cmp-facts dt { font-family: var(--font-mono); font-size: var(--step--1);
+  text-transform: uppercase; letter-spacing: .32em; color: var(--ink-3); }
+.cmp-facts dd { font-family: var(--font-mono); color: var(--ink-2); }
+
+.cmp-legend {
+  margin-top: var(--sp-3);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3);
+}
+
+/* Four rows, hairline-separated, each ending where the record is shown whole. */
+.cmp-score-rows { display: grid; }
+.cmp-score-row {
+  display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap;
+  padding: var(--sp-3) var(--sp-2);
+  border-top: 1px solid var(--rule);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2);
+  text-decoration: none;
+}
+.cmp-score-rows > :first-child { border-top: 0; }
+a.cmp-score-row { color: var(--ink-2); }
+a.cmp-score-row:hover { background: var(--surface); box-shadow: inset 2px 0 0 var(--rule-2); text-decoration: none; }
+.cmp-score-body { flex: 1 1 auto; min-width: 0; }
+.cmp-score-go { color: var(--ink-3); white-space: nowrap; }
+a.cmp-score-row:hover .cmp-score-go { color: var(--accent); }
+/* A solid top hairline, not a dashed box: a dashed stroke means quoted and
+   cannot also mean "there is nothing behind this". */
+.cmp-score-none {
+  flex: 1 0 100%; margin-top: var(--sp-2); padding-top: var(--sp-2);
+  border-top: 1px solid var(--rule); color: var(--ink-3);
+}

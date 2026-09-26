@@ -165,7 +165,7 @@ body > .masthead,
 .runs-row, .runs-colhead {
   display: grid;
   grid-template-columns:
-    10.5ch minmax(14ch, 1.5fr) 9ch minmax(20ch, 1.9fr) 7.5ch 9ch 3.5ch 10ch 13ch 9.5ch;
+    1.5ch 10.5ch minmax(14ch, 1.5fr) 9ch minmax(20ch, 1.9fr) 7.5ch 9ch 3.5ch 10ch 13ch 9.5ch;
   gap: var(--sp-3);
   align-items: baseline;
   padding: var(--sp-2) var(--sp-3);
@@ -231,3 +231,7 @@ body > .masthead,
 .runs-legend .swatch { display: inline-block; width: 2ch; height: 2px; background: var(--down); }
 .runs-state { border: 1px dashed var(--rule-2); border-radius: var(--radius); padding: var(--sp-4); font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; max-width: 88ch; }
 .runs-state pre { margin: var(--sp-3) 0 0; font-family: var(--font-mono); color: var(--ink-num); white-space: pre-wrap; }
+
+/* The caret turns on open, like every other expandable row in the system. */
+.runs-c-caret { color: var(--ink-3); font-family: var(--font-mono); }
+.runs-row[data-open="true"] .runs-c-caret { transform: rotate(90deg); }

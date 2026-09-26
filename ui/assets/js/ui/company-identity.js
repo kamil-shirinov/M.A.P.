@@ -4,8 +4,8 @@
    marked chrome. `provenance-audit` has no heuristics, so an unmarked count is a
    violation on the next paint, not a style nit. */
 
-import { chromeText, renderFigure, figure, MEASURED } from "../lib/figure.js";
-import { isAbsent } from "../data/source.js";
+import { chromeText, renderFigure, figure, DERIVED, MEASURED } from "../lib/figure.js";
+import { SOURCES, isAbsent } from "../data/source.js";
 
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
@@ -20,18 +20,8 @@ export function renderIdentity(root, { company, runs }) {
      company name with its ticker beside it, and printing both made the top of
      the page read as two headers stacked. What stays here is what the title
      cannot carry — the split badge, the CIK, the exchange and the counts. */
-  const head = el("div", "cmp-identity");
-
-  // No per-split class: the two halves are a factual partition and carry no
-  // colour. `data-split` stays as a hook for anything that needs to select on it
-  // without implying one half is the notable one.
-  const badge = el("span", "cmp-badge", company.split);
-  badge.dataset.split = company.split;
-  badge.dataset.chrome = "which half of the panel this company is in";
-  head.append(badge);
-
-  root.append(head);
-
+  /* The split badge moved into the page title, beside the name, where it reads
+     as a property of the company rather than as the first row of a table. */
   const facts = el("dl", "cmp-facts");
   addFact(facts, "CIK", chromeText(String(company.cik), "an SEC filer id, not a quantity"));
   // Absent, not unknown. The exchange is in symbols.json, and the page does not
@@ -43,14 +33,38 @@ export function renderIdentity(root, { company, runs }) {
      and 16 runs in all, the difference being 4 repeats. ACGL: 5 and 5. */
   addFact(facts, "Panel runs", renderFigure(figure(panelRuns(company), MEASURED, "int")));
   addFact(facts, "Runs on this page", renderFigure(figure(countRuns(runs), MEASURED, "int")));
-  root.append(facts);
 
-  root.append(standing(company, runs));
-  root.append(exchangeNote());
+  /* TWO NEW FACTS, both about what is NOT here.
+
+     `Closed` answers the question the table raises and does not summarise: of
+     the runs on this page, how many have an outcome at all. Derived, because the
+     page counts it.
+
+     `Live forecast` is a stated absence. This export is a log of runs that have
+     already happened; nothing in it is a current view, and a page that says
+     nothing invites the reader to assume the newest row is one. */
+  const closed = countRuns(runs) - openRuns(runs);
+  addFact(facts, "Closed", closedFact(closed, countRuns(runs)));
+  addFact(facts, "Live forecast", el("em", "cmp-absent", "none in export"));
+  root.append(facts);
   // NO PRE-SCREEN LINE. `item_202_in_recent` answers "does this company file
   // earnings at all" — a search-screen question, asked before you reach a company.
   // On a page already showing six runs it tells a reader nothing they cannot see.
 }
+
+/** "9 of 11", both derived here: the page counted the rows it is showing. */
+function closedFact(closed, total) {
+  const span = el("span");
+  span.append(
+    renderFigure(figure(closed, DERIVED, "int")),
+    chromeText(" of ", "a ratio of counts"),
+    renderFigure(figure(total, DERIVED, "int")),
+  );
+  return span;
+}
+
+const openRuns = (runs) =>
+  SOURCES.reduce((n, name) => n + runs.bySource[name].filter((r) => isAbsent(r.outcome)).length, 0);
 
 /** Runs the ledger maps to this company's filings — what the search screen
     counts, and what `corpus.json` holds. Excludes repeats and anything outside
@@ -67,35 +81,6 @@ function countRuns(runs) {
   return Object.values(runs.bySource).reduce((n, rows) => n + rows.length, 0);
 }
 
-function standing(company, runs) {
-  const rows = Object.values(runs.bySource).flatMap((r) => r);
-  const closed = rows.filter((r) => r.outcome_status === "closed").length;
-
-  const p = el("p", "cmp-standing");
-  p.append(
-    document.createTextNode(
-      "This is a record of forecasts already made for this company, not a current " +
-        "projection. The export holds no live forecast. Of the ",
-    ),
-    renderFigure(figure(rows.length, MEASURED, "int")),
-    document.createTextNode(" runs on this page, "),
-    renderFigure(figure(closed, MEASURED, "int")),
-    document.createTextNode(" have closed."),
-  );
-  return p;
-}
-
-function exchangeNote() {
-  const p = el("p", "cmp-note");
-  p.append(
-    chromeText("Exchange sits in symbols.json", "a filename"),
-    document.createTextNode(
-      ", loaded lazily on the first search keystroke. It is absent here rather " +
-        "than unknown: the page does not fetch a megabyte to fill one field.",
-    ),
-  );
-  return p;
-}
 
 function addFact(dl, label, valueNode) {
   const pair = document.createElement("div");
