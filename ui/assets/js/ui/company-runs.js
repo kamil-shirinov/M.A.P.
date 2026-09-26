@@ -243,18 +243,33 @@ function outcomeBlock(run) {
   p.className = "cmp-outcome";
   p.dataset.status = run.outcome_status;
   appendParts(p, describeOutcome(run));
-  if (!isAbsent(run.outcome)) {
-    p.append(
-      document.createTextNode(" Realised "),
-      renderFigure(run.outcome.realised_log_return),
-      // NOT "(log)". The stored quantity is a log return; `fmt.logpct` applies
-      // expm1 before printing, so the number on screen is the simple return that
-      // log return equals. The label described the value in the field rather
-      // than the one in front of the reader, which is the same error in the
-      // other direction from sharing one helper between the two conventions.
-      document.createTextNode(" — a log return, shown as the simple return it equals."),
-    );
+  if (isAbsent(run.outcome)) return p;
+
+  /* NO REALISED RETURN ON A RE-BASED RUN. The close is split-adjusted and the
+     spot the run recorded is not, so the quotient is a number with two price
+     bases in it. On AAPL's two 2026-08-13 runs it printed 2.7% — 311.30 over
+     302.98 — which is neither the return the forecast was scored against nor
+     any return that happened.
+
+     The journal has always refused it and this page did not, so the same run
+     read 2.7% on one screen and ×1.007509 on the other. The journal is right:
+     what exists is the ratio, and it is in the re-based block below. */
+  if (!isAbsent(run.anchor_drift)) {
+    p.append(document.createTextNode(
+      " No realised return is shown: it would mix two price bases."));
+    return p;
   }
+
+  p.append(
+    document.createTextNode(" Realised "),
+    renderFigure(run.outcome.realised_log_return),
+    // NOT "(log)". The stored quantity is a log return; `fmt.logpct` applies
+    // expm1 before printing, so the number on screen is the simple return that
+    // log return equals. The label described the value in the field rather
+    // than the one in front of the reader, which is the same error in the
+    // other direction from sharing one helper between the two conventions.
+    document.createTextNode(" — a log return, shown as the simple return it equals."),
+  );
   return p;
 }
 

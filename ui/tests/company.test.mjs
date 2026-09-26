@@ -453,3 +453,81 @@ describe("the four screen defects", { skip: !HAVE }, () => {
     assert.match(empty, /justify-content: center/);
   });
 });
+
+describe("a re-based run has no realised return, on any screen", { skip: !HAVE }, () => {
+  /* A re-based run is one whose pinned snapshot disagrees with the spot the run
+     recorded, because the provider applied a corporate action between them. Its
+     outcome close is split-adjusted and its anchor spot is not, so dividing one
+     by the other produces a number with two price bases in it.
+
+     On AAPL's two 2026-08-13 runs that quotient is 2.7% — 311.30 over 302.98.
+     It is not the return the forecast was scored against and it is not a return
+     that happened to anybody. The runs journal always refused it; the company
+     page printed it, so the same run read 2.7% on one screen and x1.007509 on
+     the other. This pins BOTH screens, because the defect was the disagreement
+     as much as the number. */
+
+  /* This file walks trees by text rather than by class, so it has no byClass.
+     One is needed here: the assertion is about one element's content, and a
+     whole-page text search would pass on a page that printed both the refusal
+     and the number. */
+  function* walk(node) {
+    yield node;
+    for (const child of node.children ?? []) if (child.nodeType !== 3) yield* walk(child);
+  }
+  const byClass = (root, cls) => [...walk(root)].filter((n) => n._cls?.has(cls));
+
+  const drifted = (runs, source) =>
+    Object.values(runs.bySource).flat().filter((r) => !source.isAbsent(r.anchor_drift));
+
+  it("finds the runs this is about, so the test cannot pass by finding none", async () => {
+    const { runs, source } = await renderCompany("AAPL");
+    const bad = drifted(runs, source);
+    assert.equal(bad.length, 2, "AAPL carries the two 2026-08-13 re-based runs");
+    for (const run of bad) {
+      // The quotient the page used to print, so the assertions below have a
+      // concrete string to refuse rather than "no percentage anywhere".
+      assert.ok(!source.isAbsent(run.outcome), "both are closed, which is why it printed");
+      assert.equal(run.anchor_drift.ratio.value.toFixed(6), "1.007509");
+    }
+  });
+
+  it("shows the ratio and no realised figure on the company page", async () => {
+    const { roots, runs, source } = await renderCompany("AAPL");
+    const bad = drifted(runs, source);
+
+    const outcomes = byClass(roots.runs, "cmp-outcome");
+    const rebased = outcomes.filter((p) => /No realised return is shown/.test(p.textContent));
+    assert.equal(rebased.length, bad.length, "every re-based run says why it has no figure");
+    for (const p of rebased) {
+      assert.ok(!/\d+\.\d+%/.test(p.textContent), `a realised percentage survived: ${p.textContent}`);
+      assert.match(p.textContent, /it would mix two price bases/);
+    }
+
+    /* The ratio is what exists, and it is still on the page. This page states it
+       in prose — "the snapshot closes 305.26 ... against 302.98 recorded
+       (1.007509)" — where the journal's column shows ×1.007509. Both are the
+       same measured value; the assertion is on the number, not on its wrapper,
+       so it survives the row rewrite in spec 02. */
+    const text = roots.runs.textContent;
+    assert.match(text, /1\.007509/, "the ratio is shown in the re-based block");
+    assert.match(text, /305\.26 at this anchor against 302\.98 recorded/, "both bases are named");
+
+    // And the runs that are NOT re-based still show theirs: the refusal is
+    // scoped to the defect, not a blanket removal.
+    const clean = outcomes.filter((p) => /Realised/.test(p.textContent));
+    assert.ok(clean.length >= 5, "ordinary runs keep their realised return");
+  });
+
+  it("agrees with the runs journal, which is where the rule came from", () => {
+    // Both screens reach the same conclusion from the same field, in the same
+    // words, so a reader moving between them sees one fact rather than two.
+    const card = readFileSync(new URL("../assets/js/ui/company-runs.js", import.meta.url), "utf8");
+    const journal = readFileSync(new URL("../assets/js/ui/runs-journal.js", import.meta.url), "utf8");
+    for (const src of [card, journal]) {
+      assert.match(src, /No realised return is shown/, "the refusal is stated on screen, not silent");
+    }
+    // The journal refuses it in the row as well as in the expanded detail.
+    assert.match(journal, /No realised figure on a re-based row/);
+  });
+});
