@@ -10,15 +10,8 @@
    citations, sample sizes and thresholds, not measurements this page computed;
    marking them as figures would claim a provenance they do not have. */
 
-import { chrome } from "../lib/figure.js";
 import { fmt } from "../lib/format.js";
 
-const el = (tag, className, text) => {
-  const n = document.createElement(tag);
-  if (className) n.className = className;
-  if (text !== undefined) n.textContent = text;
-  return n;
-};
 
 /* `body` is filled at render time for the two blocks that quote the export's own
    words back, so the export stays the source of its own reason. */
@@ -81,50 +74,46 @@ function live(title, { stats, band }) {
 
 const LIVE = new Set(["The log score is stored lower-is-better", "Tail counts name their sample"]);
 
-export function renderDisclosure(root, { holdoutReason, stats, band }) {
-  root.textContent = "";
-  const d = el("details", "srch-why cmp-disclosure res-why");
-  const s = el("summary");
-  s.append(
-    el("span", "srch-why-caret", "▸"),
-    el("span", "srch-why-title", "How to read these"),
-    el("span", "srch-note", "ten things the charts above cannot say in a chart"),
-  );
-  d.append(s);
+/** The notes this screen contributes to the page-foot disclosure.
 
-  const body = el("div", "srch-why-body res-why-body");
-  for (const [title, text] of BLOCKS) {
-    const card = el("div", "srch-res res-why-card");
-    card.append(el("h3", "cmp-h3", title));
-    if (title === "The holdout") {
-      /* The export's own reason, verbatim, followed by the one sentence from
-         Findings #57 that belongs to it. The sentence is prose and stays prose:
-         the holdout's baseline comparison was never persisted, so stating it as
-         a figure would invent a measurement. */
-      card.append(
-        prose(holdoutReason ?? "The export records no holdout absence."),
-        prose(
-          "Findings #57: the holdout's own baseline comparison survives only as a sentence. The " +
-          "per-item scores that backed it were printed once and never written down, so the " +
-          "comparison cannot be re-derived, re-plotted or checked — it is quoted here and nowhere " +
-          "rendered as a number.",
-        ),
-      );
-    } else if (LIVE.has(title)) {
-      card.append(prose(live(title, { stats, band })));
-    } else {
-      card.append(prose(text));
-    }
-    body.append(card);
+    Same ten blocks, in page order, now as groups for the shared component
+    instead of a grid of cards this screen drew for itself. The two band-specific
+    blocks are still written at render time from the record on screen — see
+    `live()` — and the holdout block still quotes the export's own reason before
+    the Findings #57 sentence.
+
+    "Must not" becomes the "Refused" group: the shared system gives refusals
+    their own heading, and these were the only notes on the page that stated what
+    it will not draw rather than how to read what it did. */
+export function whyGroups({ holdoutReason, stats, band } = {}) {
+  const groups = BLOCKS.map(([title, text]) => ({
+    title,
+    notes: [LIVE.has(title) ? live(title, { stats, band }) : text],
+  }));
+
+  const holdout = groups.find((g) => g.title === "The holdout");
+  if (holdout) {
+    holdout.notes = [
+      holdoutReason ?? "The export records no holdout absence.",
+      "Findings #57: the holdout's own baseline comparison survives only as a sentence. The " +
+        "per-item scores that backed it were printed once and never written down, so the " +
+        "comparison cannot be re-derived, re-plotted or checked — it is quoted here and nowhere " +
+        "rendered as a number.",
+    ];
   }
-  d.append(body);
-  root.append(d);
-  return d;
-}
 
-function prose(text) {
-  const p = el("p", "cmp-note", text);
-  return chrome(p, "explanatory prose; its digits are citations, sample sizes and thresholds");
-}
+  groups.push({
+    title: "Refused",
+    kind: "refused",
+    notes: [
+      "Dividing 175 by 779. Items are not runs, and the journal is not this screen's denominator.",
+      "Printing a holdout score. None exists; the panel states that rather than leaving a gap.",
+      "Recomputing an interval. Every one on this screen is parsed from the record's own sentence.",
+      "Attaching a score to a run or a run_id. There is no key that joins them.",
+      "Sorting or orienting the log score as higher-is-better.",
+      "Showing Brier as three comparisons, or averaging the two clean records.",
+    ],
+  });
 
-export { BLOCKS };
+  return groups;
+}

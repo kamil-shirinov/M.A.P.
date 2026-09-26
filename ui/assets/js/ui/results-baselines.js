@@ -182,12 +182,19 @@ function plot(point, interval, domain, verdict) {
   // Drawn only when the record states one. A bar the page invented would be
   // indistinguishable from a bar the bootstrap produced.
   if (interval) {
-    s.append(svg("line", { x1: x(interval.lo), y1: mid, x2: x(interval.hi), y2: mid, class: `res-forest-ci res-forest-ci--${verdict}` }));
+    const bar = svg("line", { x1: x(interval.lo), y1: mid, x2: x(interval.hi), y2: mid, class: `res-forest-ci enter-span res-forest-ci--${verdict}` });
+    /* Extends outward FROM the point, which is the reading: the estimate is
+       there and the interval is how far it could be. Scaling from the left edge
+       would animate it as a bar growing, which is a different claim. */
+    bar.style.transformBox = "view-box";
+    bar.style.transformOrigin = `${x(point)}px ${mid}px`;
+    bar.style.animationDelay = "var(--dur-1)";
+    s.append(bar);
     for (const end of [interval.lo, interval.hi]) {
       s.append(svg("line", { x1: x(end), y1: mid - 5, x2: x(end), y2: mid + 5, class: `res-forest-cap res-forest-cap--${verdict}` }));
     }
   }
-  s.append(svg("circle", { cx: x(point), cy: mid, r: 4.5, class: `res-forest-dot res-forest-dot--${verdict}` }));
+  s.append(svg("circle", { cx: x(point), cy: mid, r: 4.5, class: `res-forest-dot enter-point res-forest-dot--${verdict}` }));
   host.append(s);
   return host;
 }

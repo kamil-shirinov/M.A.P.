@@ -14,6 +14,11 @@ export function renderMastheadVintage(root, manifest) {
   );
 }
 
+/** One quiet mono line, the way the door's bottom line reads.
+
+    The sentence that used to sit under these stamps now lives in the page-foot
+    disclosure (`STAMPS_NOTE`). It is a note about how to read the stamps, and it
+    was being printed on every screen whether or not anyone was asking. */
 export function renderFooter(root, manifest) {
   root.textContent = "";
   const stamps = document.createElement("div");
@@ -27,14 +32,22 @@ export function renderFooter(root, manifest) {
     // reference in this project.
     ["code", manifest.code.commit.slice(0, 7)],
   ]) {
-    stamps.append(chromeText(`${label} ${value}`, `the ${label} vintage stamp`));
+    stamps.append(stamp(label, value, `the ${label} vintage stamp`));
   }
   root.append(stamps);
+}
 
-  const note = document.createElement("p");
-  note.className = "cmp-note";
-  note.textContent =
-    "Four independent stamps, not one export vintage. Each source dates itself; " +
-    "the symbol index is a month older than the prices.";
-  root.append(note);
+/** Label quiet, value bright, both inside one chrome wrapper so the audit sees
+    the digits marked wherever they fall. */
+export function stamp(label, value, why) {
+  const wrap = chromeText("", why);
+  wrap.className = "cmp-stamp";
+  const name = document.createElement("span");
+  name.className = "cmp-stamp-label";
+  name.textContent = `${label} `;
+  const shown = document.createElement("span");
+  shown.className = "cmp-stamp-value";
+  shown.textContent = String(value);
+  wrap.append(name, shown);
+  return wrap;
 }

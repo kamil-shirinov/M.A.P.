@@ -20,10 +20,11 @@
 
 import * as source from "./data/source.js";
 import { mountBox, renderResults } from "./ui/search-box.js";
-import { renderFunnel, renderWhy } from "./ui/search-funnel.js";
+import { renderFunnel, whyGroups } from "./ui/search-funnel.js";
+import { renderPageWhy } from "./ui/page-why.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
-import { mountRosette } from "./ui/rosette.js";
+import { mountPageRosette } from "./ui/rosette.js";
 import { createModeController, mountDoor, mountMastheadNav } from "./ui/front-door.js";
 
 const $ = (id) => document.getElementById(id);
@@ -167,7 +168,7 @@ function paint() {
 
 async function boot() {
   // The ground carries no data, so it does not wait for any.
-  mountRosette($("ground"));
+  mountPageRosette($("ground"));
 
   const [exportState, companies] = await Promise.all([
     source.getExportState(),
@@ -198,7 +199,7 @@ async function boot() {
 
   renderMastheadVintage($("masthead-vintage"), exportState.manifest);
   renderFooter($("footer"), exportState.manifest);
-  renderWhy($("why"));
+  renderPageWhy($("why"), { groups: whyGroups() });
 
   mountMastheadNav($("masthead-nav"), { current: "search" });
   box = mountBox($("box"), { onQuery });

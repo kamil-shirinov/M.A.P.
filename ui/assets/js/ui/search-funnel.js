@@ -188,70 +188,43 @@ const REFUSALS = [
   ],
 ];
 
-export function renderWhy(host) {
-  host.textContent = "";
-  const d = el("details", "srch-why cmp-disclosure");
-  const s = el("summary");
-  s.append(
-    el("span", "srch-why-caret", "▸"),
-    el("span", "srch-why-title", "Why a symbol resolves the way it does"),
-    el("span", "srch-note", "three outcomes, two refusals, and how to read the three counts"),
-  );
-  d.append(s);
+/** The notes this screen contributes to the page-foot disclosure.
 
-  const body = el("div", "srch-why-body");
-  for (const r of RESOLUTIONS) {
-    const card = el("div", "srch-res");
-    const head = el("div", "srch-res-head");
-    head.append(el("h3", "cmp-h3", r.title), chromeText(r.meta, r.metaWhy));
-    card.append(head);
-    r.paras.forEach((p) =>
-      card.append(prose(el("p", "cmp-note", p), "explanatory prose; its digits are citations and quoted counts")),
-    );
-    body.append(card);
-  }
+    The three resolution outcomes keep their own groups and their quoted rates;
+    the two refusals become the "Refused" group, where the word carries the claim
+    and the colour only reinforces it; and the paragraph about reading the three
+    counts becomes the last section group, before the stamps.
 
-  const ref = el("div", "cmp-refusals srch-res");
-  ref.append(el("div", "srch-res-kicker", "Two things this box will not say"));
-  const ul = el("ul");
-  for (const [head, text] of REFUSALS) {
-    const li = el("li");
-    li.append(el("strong", null, head + " "), document.createTextNode(text));
-    prose(li, "explanatory prose; its digits are quoted counts and a file size");
-    ul.append(li);
-  }
-  ref.append(ul);
-  body.append(ref);
-
-  /* Moved off the page: both paragraphs are good and both sat under a visual
-     that already makes the point. */
-  const counts = el("div", "srch-res srch-res--counts");
-  counts.append(el("div", "srch-res-kicker", "Reading the three counts"));
-  const p1 = el("p", "cmp-note");
-  p1.append(
-    el("strong", null, "51.1% of tickers, 54.1% of filers. "),
-    document.createTextNode(
-      "The two rates are not one figure reported twice. A single filer can carry many tickers: " +
-        "Connecticut Light & Power files under one CIK and appears in the index thirteen times, as " +
-        "preferred lines. Counting tickers weights those thirteen; counting filers counts them once. " +
-        "The search box counts tickers, because a ticker is what gets typed into it.",
-    ),
-  );
-  const p2 = el("p", "cmp-note");
-  p2.append(
-    el("strong", null, "The middle number is the expensive one. "),
-    document.createTextNode(
-      "The corpus count is read at boot from a 7.5 KB file. The index count is known the moment " +
-        "the index lands. The readable count needs filers.json at 1.2 MB, which this page opens only " +
-        "when a hit falls outside the corpus — and even then it answers one ticker at a time, so the " +
-        "total is quoted from the export contract rather than counted here.",
-    ),
-  );
-  prose(p1, "explanatory prose; the rates are quoted from the export contract");
-  prose(p2, "explanatory prose; the sizes and counts are quoted from the export contract");
-  counts.append(p1, p2);
-  body.append(counts);
-
-  d.append(body);
-  host.append(d);
+    Content is unchanged from the card layout this replaces. What changed is that
+    it is now one disclosure on every screen rather than a different one per
+    screen with a different name. */
+export function whyGroups() {
+  return [
+    ...RESOLUTIONS.map((r) => ({
+      title: r.title,
+      meta: r.meta,
+      metaWhy: r.metaWhy,
+      notes: r.paras,
+    })),
+    {
+      title: "Refused",
+      kind: "refused",
+      notes: REFUSALS.map(([head, text]) => `${head} ${text}`),
+    },
+    {
+      title: "Reading the three counts",
+      notes: [
+        "51.1% of tickers, 54.1% of filers. The two rates are not one figure reported twice. A " +
+          "single filer can carry many tickers: Connecticut Light & Power files under one CIK and " +
+          "appears in the index thirteen times, as preferred lines. Counting tickers weights those " +
+          "thirteen; counting filers counts them once. The search box counts tickers, because a " +
+          "ticker is what gets typed into it.",
+        "The middle number is the expensive one. The corpus count is read at boot from a 7.5 KB " +
+          "file. The index count is known the moment the index lands. The readable count needs " +
+          "filers.json at 1.2 MB, which this page opens only when a hit falls outside the corpus — " +
+          "and even then it answers one ticker at a time, so the total is quoted from the export " +
+          "contract rather than counted here.",
+      ],
+    },
+  ];
 }

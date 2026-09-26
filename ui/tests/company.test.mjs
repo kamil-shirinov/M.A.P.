@@ -7,7 +7,7 @@
    most easily breaks. */
 
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { before, describe, it } from "node:test";
 
 const EXPORT = new URL("../assets/export/", import.meta.url);
@@ -245,19 +245,36 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
 describe("colour discipline", { skip: !HAVE }, () => {
   const css = readFileSync(new URL("../assets/styles/company.css", import.meta.url), "utf8");
 
-  it("reserves amber for something that did not complete", () => {
-    // The missing panel run is a terminal failure: attempted, settled, no
-    // forecast. So is a filing held but never run. Both earn amber.
-    const amberRules = css
-      .split("}")
-      .filter((block) => /var\(--uncal/.test(block))
-      .map((block) => block.split("{")[0].trim());
-    for (const selector of amberRules) {
-      assert.match(
-        selector,
-        /cmp-panel-missing|cmp-unrun/,
-        `amber on ${selector} -- it is reserved for work that did not complete`,
-      );
+  it("reserves amber for a number that is not a settled measurement", () => {
+    /* ACROSS EVERY STYLESHEET, not just this one. Scoped to company.css this
+       assertion passed while amber quietly acquired four meanings elsewhere: a
+       provenance chip on search, an in-flight fetch beside it, and an
+       instruction about which way to read an axis on results. None of those is
+       a claim about a value, and a colour that means four things is decoration.
+
+       What amber means now is one thing said two ways: the uncalibrated state
+       (a forecast whose horizon is outside what was validated) and work that was
+       attempted and did not complete (the missing panel run, a filing held but
+       never run). Both are "this number is not settled". */
+    const ALLOWED = /cmp-panel-missing|cmp-unrun|data-calibration="uncalibrated"|data-tone="uncal"/;
+    const sheets = readdirSync(new URL("../assets/styles/", import.meta.url))
+      .filter((f) => f.endsWith(".css") && f !== "tokens.css");
+    assert.ok(sheets.length >= 6, "every stylesheet is read, not just this page's");
+
+    for (const name of sheets) {
+      const sheet = readFileSync(new URL(`../assets/styles/${name}`, import.meta.url), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "");
+      const amberRules = sheet
+        .split("}")
+        .filter((block) => /var\(--uncal/.test(block))
+        .map((block) => block.split("{")[0].trim());
+      for (const selector of amberRules) {
+        assert.match(
+          selector,
+          ALLOWED,
+          `amber on ${selector} in ${name} -- it means "not a settled measurement"`,
+        );
+      }
     }
   });
 
@@ -313,11 +330,24 @@ describe("layout invariants", { skip: !HAVE }, () => {
     assert.match(css, /\.masthead-vintage \{ margin-left: auto/);
   });
 
-  it("gives section headers more presence than body text", () => {
-    const header = css.match(/\.cmp-h \{[^}]*\}/)[0];
-    assert.match(header, /font-size: var\(--step-2\)/);
-    assert.doesNotMatch(header, /--step--1/, "a section header must not be caption-sized");
-    assert.match(header, /border-top/);
+  it("gives section headers a voice of their own, and a rule above them", () => {
+    /* This used to demand --step-2 and forbid --step--1: a section head earned
+       presence by being bigger than the body. The shared pass gets it a
+       different way — mono, uppercase and tracked to .32em, which is the door's
+       tagline voice — so the head is SMALLER than the body and still unmistakably
+       a head. The rule above it, which was always half the answer, survives.
+
+       The voice lives in system.css and the box stays in company.css, so the
+       four screens cannot drift apart on what a section head looks like. */
+    const system = readFileSync(new URL("../assets/styles/system.css", import.meta.url), "utf8");
+    const voice = system.match(/\.cmp-h,[\s\S]*?\{[^}]*\}/)[0];
+    assert.match(voice, /font-family: var\(--font-mono\)/);
+    assert.match(voice, /text-transform: uppercase/);
+    assert.match(voice, /letter-spacing: \.32em/);
+
+    const box = css.match(/\.cmp-h \{[^}]*\}/)[0];
+    assert.match(box, /border-top/, "a section still announces itself with a rule");
+    assert.doesNotMatch(box, /font-size/, "the size belongs to the shared voice, not to this page");
   });
 });
 

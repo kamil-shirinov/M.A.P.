@@ -12,9 +12,11 @@
    difference between "this page computed it" and "the bootstrap did, and its
    seed is not in the export" is the whole provenance claim.
 
-   AMBER APPEARS ONCE. `--uncal` tags the log-score block, where the orientation
-   is the trap: the score is stored lower-is-better and any reading that inverts
-   it inverts the project's headline result. Nothing else on this page is amber. */
+   NO AMBER. The log-score block still carries "stored lower-is-better", and
+   that tag is still the guard against inverting the project's headline result —
+   but the guard is the SENTENCE, not the colour. Amber means one thing across
+   this app (a number that is not a settled measurement) and an instruction about
+   how to read an axis is not that. The tag is boxed and bright instead. */
 
 .res-page,
 body > .masthead,
@@ -114,7 +116,10 @@ body > .masthead,
 .res-rule-tag--plain { color: var(--ink-3); }
 /* The guard. The log score is stored as a negative log density and reading it
    the other way up inverts the result, so the tag is amber and boxed. */
-.res-rule-tag--guard { color: var(--uncal); background: var(--uncal-soft); border: 1px solid var(--uncal); border-radius: var(--radius); padding: 1px var(--sp-3); }
+.res-rule-tag--guard {
+  color: var(--ink-num); border: 1px solid var(--rule-2);
+  border-radius: var(--radius); padding: 1px var(--sp-3);
+}
 
 .res-axis-row { display: flex; justify-content: space-between; margin: var(--sp-4) 0 var(--sp-2); font-size: var(--step--1); }
 .res-axis-better { color: var(--up); }

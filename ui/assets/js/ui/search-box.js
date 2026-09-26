@@ -21,6 +21,7 @@ import { DERIVED, chrome, chromeText, figure, renderFigure } from "../lib/figure
    provenance-stamped instead. */
 const prose = (node, why) => chrome(node, why);
 import { isAbsent } from "../data/source.js";
+import { stagger } from "../lib/motion.js";
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -68,14 +69,17 @@ function exchangeNode(exchange) {
 
 export function mountBox(host, { onQuery }) {
   host.textContent = "";
+  /* No section head here any more. "Find a company" is the page title now, in
+     serif above this block, and printing it twice made the screen look like it
+     had two of them. The note and the index chip stay: they are what this
+     section says that the title does not. */
   const head = el("div", "srch-head");
-  const h2 = el("h2", "cmp-h", "Find a company");
   const note = prose(
     el("span", "srch-note", "every listed symbol is searchable; 120 have a page"),
     "explanatory note; 120 is the corpus size, stated in the export contract",
   );
   const chip = el("span", "srch-chip");
-  head.append(h2, note, chip);
+  head.append(note, chip);
 
   const box = el("div", "srch-box");
   const slash = el("span", "srch-slash", "/");
@@ -233,7 +237,9 @@ export function renderResults(host, { phase, query, groups, matched }) {
     n.append(count(rows.length), chromeText(rows.length === 1 ? " match" : " matches", "matches in this group"));
     head.append(h3, n, el("span", "srch-note", def.note));
     wrap.append(head);
-    rows.slice(0, PER_GROUP).forEach((row) => wrap.append(def.row(row)));
+    const entering = rows.slice(0, PER_GROUP).map((row) => def.row(row));
+    entering.forEach((node) => wrap.append(node));
+    stagger(entering);
     if (rows.length > PER_GROUP) {
       const more = el("div", "srch-more");
       more.append(

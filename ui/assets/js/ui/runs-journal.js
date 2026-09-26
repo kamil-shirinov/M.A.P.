@@ -19,6 +19,7 @@ import { chromeText, derive, renderFigure } from "../lib/figure.js";
 import { describeCorpusRelation, describeDrift, describeOutcome, isAbsent } from "../data/source.js";
 import { fmt } from "../lib/format.js";
 import { RELATIONS } from "./runs-filters.js";
+import { stagger } from "../lib/motion.js";
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -189,11 +190,19 @@ function groupBlock(group, ctx) {
 
   // Only expanded groups render rows: the largest is 191.
   let previousDate = null;
+  const entering = [];
   for (const run of group.rows) {
-    wrap.append(rowLine(run, ctx, run.anchor_date === previousDate));
+    const line = rowLine(run, ctx, run.anchor_date === previousDate);
+    entering.push(line);
+    wrap.append(line);
     if (ctx.openRows.has(run.run_id)) wrap.append(detail(run, ctx));
     previousDate = run.anchor_date;
   }
+  /* The entrance plays once per render of a group, and a group renders when it
+     is first opened. It deliberately does NOT replay on a filter change: the
+     rows that survive a filter were already on screen, and re-animating them
+     says something arrived when nothing did. */
+  stagger(entering);
   return wrap;
 }
 

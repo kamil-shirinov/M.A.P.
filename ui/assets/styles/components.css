@@ -5,7 +5,6 @@
 body { line-height: 1.4; letter-spacing: 0; }
 .shell { max-width: 1280px; padding: var(--sp-5) var(--sp-5) var(--sp-7); }
 .masthead { padding-bottom: var(--sp-3); margin-bottom: var(--sp-4); }
-.masthead h1 { font-size: var(--step-1); letter-spacing: .14em; }
 .panel { border-radius: var(--radius); }
 .panel > header { padding: var(--sp-3) var(--sp-4); }
 .panel > header h2 { font-size: var(--step--1); letter-spacing: .12em; }

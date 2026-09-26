@@ -75,7 +75,7 @@ function strip(items) {
       cx: x(item.map_probability_up),
       cy: PAD.t + jitter(i),
       r: 2.6,
-      class: right ? "res-dot res-dot--right" : "res-dot res-dot--wrong",
+      class: `res-dot enter-dot res-dot--${right ? "right" : "wrong"}`,
     }));
   }
 

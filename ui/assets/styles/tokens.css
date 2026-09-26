@@ -34,6 +34,15 @@
 
   --radius: 2px;
 
+  /* Motion. Three durations and one curve, so nothing has to invent its own.
+     --dur-1 hover, caret, nav rule · --dur-2 row entrance · --dur-3 chart
+     entrance. The curve is ease-out with no overshoot: this is a record of
+     measurements and nothing on it should bounce. */
+  --dur-1: 150ms;
+  --dur-2: 250ms;
+  --dur-3: 400ms;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+
   /* ---- dark, the default ---- */
   --paper:   #0a0c10;   /* page */
   --surface: #12151c;   /* card */

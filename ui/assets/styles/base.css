@@ -17,17 +17,10 @@ a { color: var(--accent); text-underline-offset: 2px; }
   padding: var(--sp-5) var(--sp-5) var(--sp-7);
 }
 
-.masthead {
-  display: flex; align-items: baseline; gap: var(--sp-3);
-  padding-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--rule);
-  margin-bottom: var(--sp-5);
-}
-.masthead h1 {
-  font-size: var(--step-1); font-weight: 600; letter-spacing: .08em;
-  text-transform: uppercase;
-}
-.masthead .tag { color: var(--ink-3); font-size: var(--step--1); }
+/* The masthead — the bar, the crest and the tagline — is set in system.css,
+   which is the shared voice for all four screens. `.tag` is now the tag
+   component (COUNTED, HOLDOUT, REPEAT); the masthead's line is
+   `.masthead-tagline`. */
 .masthead .spacer { margin-left: auto; }
 
 .layout { display: grid; gap: var(--sp-5); grid-template-columns: 1fr; }

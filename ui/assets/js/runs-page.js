@@ -22,7 +22,8 @@
 
 import * as source from "./data/source.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
-import { mountRosette } from "./ui/rosette.js";
+import { mountPageRosette } from "./ui/rosette.js";
+import { renderPageWhy } from "./ui/page-why.js";
 import { mountMastheadNav } from "./ui/front-door.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { renderDrift, renderIdentity, renderPopulations, renderUnrun } from "./ui/runs-header.js";
@@ -30,6 +31,51 @@ import { describeFilters, matches, quarterLabel, renderChart, renderFilters } fr
 import { renderJournal } from "./ui/runs-journal.js";
 
 const $ = (id) => document.getElementById(id);
+
+/* The notes this screen used to print beside its numbers. They are the three
+   readings that go wrong on this page if nobody says otherwise, plus what the
+   journal is not. Section names match the sections above, in page order. */
+const WHY = [
+  {
+    title: "What a row is",
+    notes: [
+      "Every row is a run: one execution that read one document and wrote one forecast. Repeats " +
+        "are rows, because they ran. The four files are four populations and the export never " +
+        "concatenates them; the total above is added on this page, where the addition can be seen.",
+      "ledger.items_settled is 709 and is deliberately absent from this screen. It counts corpus " +
+        "items — 701 completed plus 8 that failed terminally — and eight of those never produced a " +
+        "run, so using it as a total here would count things that did not happen.",
+    ],
+  },
+  {
+    title: "The filings with no run",
+    notes: [
+      "Nothing ran on them, so they cannot be rows. Each appears on its company page with an empty " +
+        "run list, which is where a reader can see what was held and what was attempted.",
+    ],
+  },
+  {
+    title: "Drift",
+    notes: [
+      "The export carries the ratio and nothing else — no event, no size, no name. “A 1.012 split” " +
+        "is not in these files: it is 1 ÷ 0.988142, and a split is one of several corporate actions " +
+        "with that shape. The screen shows the measured ratio and, beside it, the derived inverse.",
+      "freeze_version null means unrecorded, not “no freeze”: 68 runs predate the field.",
+    ],
+  },
+  {
+    title: "Refused",
+    kind: "refused",
+    notes: [
+      "A score column. Scoring records key an item on ticker and as_of, never on run_id, so there " +
+        "is no join and no per-run score exists at any price.",
+      "Deriving a filing date from an anchor date. The anchor equals the filing date on 66 runs and " +
+        "filing + 1 on 635; the ledger's own date is carried instead.",
+      "Reading this journal as every forecast ever made. The four-arm ablation's 786 runs live " +
+        "outside the export and are not here.",
+    ],
+  },
+];
 
 /* Below this many matching runs, every group opens: a collapse that hides
    forty rows behind seven clicks is friction without a payoff. */
@@ -192,7 +238,7 @@ function set(patch) {
 }
 
 async function boot() {
-  mountRosette($("ground"));
+  mountPageRosette($("ground"));
   mountMastheadNav($("masthead-nav"), { current: "runs" });
 
   // -- stage 1: the manifest
@@ -210,6 +256,7 @@ async function boot() {
   }
   renderMastheadVintage($("masthead-vintage"), state.manifest);
   renderFooter($("footer"), state.manifest);
+  renderPageWhy($("why"), { groups: WHY });
   paint();
 
   // -- stage 2: names, splits, and the filings that never ran

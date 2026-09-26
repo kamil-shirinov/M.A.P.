@@ -7,6 +7,7 @@
 
 import { chromeText } from "../lib/figure.js";
 import { isAbsent } from "../data/source.js";
+import { stagger } from "../lib/motion.js";
 
 const COLUMNS = ["Filed", "Band", "Accession", "Panel run"];
 
@@ -32,7 +33,9 @@ export function renderFilings(root, { company, runs }) {
   table.append(thead);
 
   const tbody = document.createElement("tbody");
-  for (const filing of company.filings) tbody.append(filingRow(filing, repeats));
+  const entering = company.filings.map((filing) => filingRow(filing, repeats));
+  entering.forEach((row) => tbody.append(row));
+  stagger(entering);
   table.append(tbody);
   root.append(table);
   root.append(bandNote());

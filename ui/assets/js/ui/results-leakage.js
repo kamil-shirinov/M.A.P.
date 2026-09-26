@@ -22,6 +22,7 @@
 import { DERIVED, chromeText, figure, renderFigure } from "../lib/figure.js";
 import { BASELINES } from "./results-baselines.js";
 import { fmt } from "../lib/format.js";
+import { draw } from "../lib/motion.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const W = 560, H = 230;
@@ -73,8 +74,11 @@ export function renderLeakage(root, { clean, ambiguous, pending }) {
     return card;
   }
 
-  card.append(slope(clean, ambiguous), verdict(clean, ambiguous));
+  const drawn = [];
+  card.append(slope(clean, ambiguous, drawn), verdict(clean, ambiguous));
   root.append(card);
+  // Now that it is in the document the paths have a length to draw along.
+  for (const line of drawn) draw(line);
   return card;
 }
 
@@ -90,7 +94,7 @@ function series(clean, ambiguous) {
   ];
 }
 
-function slope(clean, ambiguous) {
+function slope(clean, ambiguous, drawn) {
   const lines = series(clean, ambiguous);
   const values = lines.flatMap((l) => [l.left, l.right]);
   const min = Math.min(...values), max = Math.max(...values);
@@ -110,7 +114,10 @@ function slope(clean, ambiguous) {
   // crossed over by a grey one.
   for (const l of [...lines].sort((a, b) => Number(a.lead) - Number(b.lead))) {
     const cls = l.lead ? "res-slope-line res-slope-line--lead" : "res-slope-line";
-    s.append(svg("line", { x1: xL, y1: y(l.left), x2: xR, y2: y(l.right), class: cls }));
+    const line = svg("line", { x1: xL, y1: y(l.left), x2: xR, y2: y(l.right), class: cls });
+    s.append(line);
+    // Drawn after the chart is in the document: a detached path has no length.
+    drawn.push(line);
     for (const [x, v] of [[xL, l.left], [xR, l.right]]) {
       s.append(svg("circle", { cx: x, cy: y(v), r: l.lead ? 4.5 : 3, class: `${cls}-dot` }));
     }

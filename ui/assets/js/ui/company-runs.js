@@ -12,6 +12,7 @@
 
 import { chromeText, figure, renderFigure, MEASURED } from "../lib/figure.js";
 import { SOURCES, describeDrift, describeOutcome, isAbsent } from "../data/source.js";
+import { stagger } from "../lib/motion.js";
 
 const RELATION = {
   ledger_item: { label: "panel item", why: "The ledger maps this run to a frozen corpus item." },
@@ -36,7 +37,9 @@ export function renderRuns(root, { runs, company, open, onToggle }) {
 
   const list = document.createElement("div");
   list.className = "cmp-cards";
-  for (const run of rows) list.append(card(run, company, open, onToggle, rows));
+  const entering = rows.map((run) => card(run, company, open, onToggle, rows));
+  entering.forEach((node) => list.append(node));
+  stagger(entering);
   root.append(list);
 }
 

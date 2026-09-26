@@ -122,7 +122,8 @@ async function build({ band = "clean" } = {}) {
   const leakage = await load("ui/results-leakage.js");
   const direction = await load("ui/results-direction.js");
   const holdoutUi = await load("ui/results-holdout.js");
-  const { renderDisclosure } = await load("ui/results-disclosure.js");
+  const { whyGroups } = await load("ui/results-disclosure.js");
+  const { renderPageWhy } = await load("ui/page-why.js");
 
   const here = loaded.get(band);
   const both = [...loaded.values()].map((e) => ({ stats: e.stats, summaries: e.record.summaries }));
@@ -149,7 +150,9 @@ async function build({ band = "clean" } = {}) {
   });
   direction.renderDirection(roots.direction, { stats: here.stats, items: here.record.items, pending: "…" });
   holdoutUi.renderHoldout(roots.holdout, { holdout, pending: "…" });
-  renderDisclosure(roots.disclosure, { holdoutReason: records.holdout?.why ?? null, stats: here.stats, band });
+  renderPageWhy(roots.disclosure, {
+    groups: whyGroups({ holdoutReason: records.holdout?.why ?? null, stats: here.stats, band }),
+  });
 
   return { roots, source, records, loaded, holdout, domains, band, mods: { baselines, leakage, direction, holdoutUi } };
 }
@@ -548,10 +551,16 @@ describe("the page, its nav and its files", () => {
     assert.equal(fmt.signed4(-1e-9), "0.0000");
   });
 
-  it("keeps the log score's orientation guard in the stylesheet", () => {
-    // The markup half of this is asserted against a rendered page below; the
-    // stylesheet half is a checked-in file and needs no export.
-    assert.match(file("assets/styles/results.css"), /\.res-rule-tag--guard[^}]*--uncal/);
+  it("keeps the log score's orientation guard, and keeps it out of amber", () => {
+    /* The guard is the SENTENCE "stored lower-is-better", not a colour. It used
+       to be amber, which put a fourth meaning on a token that should carry one;
+       amber now means "not a settled measurement" everywhere and an instruction
+       about reading an axis is not that. The tag is still boxed and still the
+       brightest ink on the block, so it is still the thing the eye lands on. */
+    const guard = file("assets/styles/results.css").match(/\.res-rule-tag--guard \{[^}]*\}/)[0];
+    assert.doesNotMatch(guard, /--uncal/, "the orientation guard is not an alarm state");
+    assert.match(guard, /--ink-num/, "it is still the brightest thing in the block");
+    assert.match(guard, /border/, "and still boxed, so it reads as a tag");
   });
 
   it("jitters deterministically", async () => {

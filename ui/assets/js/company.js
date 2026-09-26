@@ -24,6 +24,8 @@ import { renderFilings } from "./ui/company-filings.js";
 import { renderRuns } from "./ui/company-runs.js";
 import { renderScoring } from "./ui/company-scoring.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
+import { mountPageRosette } from "./ui/rosette.js";
+import { renderPageWhy } from "./ui/page-why.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { mountMastheadNav } from "./ui/front-door.js";
 
@@ -104,6 +106,8 @@ async function paint() {
   });
   renderScoring($("scoring"), { scoring, company });
   renderFooter($("footer"), state.manifest);
+  renderTitle(company);
+  renderPageWhy($("why"), { groups: WHY });
 
   applyPageProvenance();
   enforce();
@@ -170,6 +174,67 @@ function renderUnknownCompany(ticker, absence, manifest) {
   enforce();
 }
 
+/** The title IS the company name, with the ticker in mono beside it. The ticker
+    is a symbol rather than a quantity, and its digits — BRK-B, FWONK — are part
+    of the symbol, so it is marked chrome. */
+function renderTitle(company) {
+  const host = $("page-title");
+  if (!host) return;
+  host.textContent = "";
+  const name = document.createElement("span");
+  name.textContent = typeof company.name === "string" ? company.name : company.ticker;
+  const aside = document.createElement("span");
+  aside.className = "page-title-aside";
+  aside.dataset.chrome = "a ticker symbol, not a quantity";
+  aside.textContent = company.ticker;
+  host.append(name, aside);
+}
+
+/* The notes this screen used to print beside its numbers. */
+const WHY = [
+  {
+    title: "Filings and runs",
+    notes: [
+      "A filing with an empty run list is one the corpus holds that nothing ran — 8 of 709. It is " +
+        "shown rather than dropped: a page listing only filings with runs would show 701 and " +
+        "misstate the record it is drawing from.",
+      "The filing date is carried from the ledger and never derived from the anchor date. They " +
+        "coincide on 66 runs corpus-wide and differ by one day on 635.",
+    ],
+  },
+  {
+    title: "Outcomes",
+    notes: [
+      "An open window has no outcome — absent, not zero — and is marked by a dash rather than by " +
+        "colour. Nothing is wrong, nothing was refused, and it resolves by itself.",
+      "retrieved_on moves on every export: it is the day the export read the close, not a property " +
+        "of the run. It is read from the row rather than written into the copy.",
+    ],
+  },
+  {
+    title: "Scoring",
+    notes: [
+      "No score is attached to a run here, and none can be. A run carries its own forecast and " +
+        "outcome; a scoring record is a separate pass over a band and a split. They are related at " +
+        "band, split and vintage and at nothing finer.",
+      "A scored item's as_of is the forecast's own date and a run's anchor_date is the trading " +
+        "session it opened from. Those coincide for 161 of the 175 clean items; the other 14 are " +
+        "Saturdays and Good Friday.",
+    ],
+  },
+  {
+    title: "Refused",
+    kind: "refused",
+    notes: [
+      "“Not scored.” The record covers one band and one split, and most panel runs sit outside its " +
+        "scope legitimately. Printing the negative would claim that scored-eligible runs went unscored.",
+      "A reconstructed band. Scored items carry map_sigma but no p10, p50 or p90. Building a band " +
+        "from sigma is modelling presented as reading.",
+    ],
+  },
+];
+
 // A company page is a detail page: neither section is "here".
 mountMastheadNav($("masthead-nav"), { current: null });
+mountPageRosette($("ground"));
 paint();

@@ -9,22 +9,40 @@
 <link rel="stylesheet" href="assets/styles/components.css">
 <link rel="stylesheet" href="assets/styles/company.css">
 <link rel="stylesheet" href="assets/styles/front-door.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  /* Arms the entrance styles BEFORE first paint, and only when motion is
+     welcome. Without this the page renders at its final values, which is the
+     correct fallback rather than a degraded one. See assets/js/lib/motion.js. */
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
 </head>
 <body>
+  <div class="ground" id="ground" data-scope="page"></div>
+
   <header class="masthead">
     <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
-    <span class="tag">Market&rsquo;s Agentic Projections &mdash; local inference, scored forecasts</span>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
     <div id="masthead-nav"></div>
     <div class="masthead-vintage" id="masthead-vintage"></div>
   </header>
 
   <main class="company" id="company">
+    <!-- Filled from the export: the title IS the company name. -->
+    <h2 class="page-title" id="page-title"></h2>
     <section id="identity"  class="cmp-section"></section>
     <section id="series"    class="cmp-section"></section>
     <section id="filings"   class="cmp-section"></section>
     <section id="runs"      class="cmp-section"></section>
     <section id="scoring"   class="cmp-section"></section>
   </main>
+
+  <!-- Exactly one per screen, directly above the footer. -->
+  <section id="why"></section>
 
   <footer class="cmp-footer" id="footer"></footer>
 

@@ -10,6 +10,17 @@
 <link rel="stylesheet" href="assets/styles/company.css">
 <link rel="stylesheet" href="assets/styles/search.css">
 <link rel="stylesheet" href="assets/styles/front-door.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  /* Arms the entrance styles BEFORE first paint, and only when motion is
+     welcome. Without this the page renders at its final values, which is the
+     correct fallback rather than a degraded one. See assets/js/lib/motion.js. */
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
 </head>
 <body data-mode="door">
   <div class="ground" id="ground"></div>
@@ -26,7 +37,7 @@
 
   <header class="masthead">
     <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
-    <span class="tag">Market&rsquo;s Agentic Projections &mdash; local inference, scored forecasts</span>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
     <!-- The masthead is hidden at the door, so this nav appears only once the box
          has something in it. The door itself stays nav-free. -->
     <div id="masthead-nav"></div>
@@ -38,6 +49,7 @@
        below it. An earlier layout put the resolutions and the funnel commentary
        above the rows and the page read as an essay about search. -->
   <main class="search-page" id="search-page">
+    <h2 class="page-title" id="page-title">Find a company</h2>
     <section id="box"       class="srch-section"></section>
     <section id="results"   class="srch-section" aria-live="polite"></section>
     <section id="funnel"    class="srch-section"></section>

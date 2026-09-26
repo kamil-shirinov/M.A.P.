@@ -44,7 +44,7 @@ const count = (n) => renderFigure(figure(n, DERIVED, "int"));
     warns against reading one as the other, and a screen's name is where that
     starts. */
 export function mountMastheadNav(host, { current }) {
-  const nav = el("nav", "masthead-nav");
+  const nav = el("nav", "nav");
   const items = [
     { key: "search", label: "find a company", href: "index.html" },
     { key: "runs", label: "runs", href: "runs.html" },
@@ -53,16 +53,16 @@ export function mountMastheadNav(host, { current }) {
     // themselves — several of which the screen deliberately does not show.
     { key: "results", label: "results", href: "results.html" },
   ];
+  /* Every item is a link, including the current one. The current screen is
+     marked with `aria-current`, which the stylesheet draws as a rule rather than
+     a colour, so it reads as current in greyscale. It was a <span> before: that
+     removed the one place a reader can click to reload a screen they are already
+     on, and gave the marked item different hit behaviour from its neighbours. */
   for (const item of items) {
-    if (item.key === current) {
-      const here = el("span", "masthead-nav-here", item.label);
-      here.setAttribute("aria-current", "page");
-      nav.append(here);
-    } else {
-      const a = el("a", null, item.label);
-      a.href = item.href;
-      nav.append(a);
-    }
+    const a = el("a", null, item.label);
+    a.href = item.href;
+    if (item.key === current) a.setAttribute("aria-current", "page");
+    nav.append(a);
   }
   host.append(nav);
   return nav;

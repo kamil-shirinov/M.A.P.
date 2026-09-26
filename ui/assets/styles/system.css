@@ -1,0 +1,347 @@
+/* The shared system — search, company, runs and results.
+
+   The door is the reference and does not change. These four screens borrow its
+   voice: the serif crest, the tracked mono tagline, the rosette behind the top
+   of the page, and one quiet line of stamps at the bottom.
+
+   THE RULE THIS FILE KEEPS. Every mark must still mean the same thing in
+   greyscale and when cropped out of context, so the meaning lives in the word or
+   the stroke and colour only reinforces it:
+
+     tags        carry their meaning in the word (COUNTED, HOLDOUT, REPEAT)
+     provenance  is a stroke — plain, dotted, dashed — and never a tag
+     direction   is carried by the axis labels, not by red and green
+     re-based    is carried by the printed ratio, not by the left mark
+
+   AMBER MEANS ONE THING: this number is not a settled measurement. That is the
+   uncalibrated state (components.css) and work that was attempted and did not
+   complete (company.css). It is NOT a provenance, not a progress state, and not
+   an instruction to read an axis carefully — those lost it, because a colour
+   that means four things is decoration. tests/company.test.mjs enforces it
+   across every stylesheet.
+
+   No new colours. Every value here is a token.
+
+   LOAD ORDER: after components.css, before the per-screen sheets, so a screen
+   can still override. Rules that must beat front-door.css carry an attribute
+   selector rather than relying on order. */
+
+/* ---- 1 · provenance marks ------------------------------------------- */
+/* Strokes, so they survive greyscale and a crop. `measured` is deliberately
+   undecorated: it is the common case and the absence of a mark is the mark. */
+[data-prov="derived"] { text-decoration: underline dotted 1px; text-underline-offset: .25em; }
+[data-prov="quoted"]  { text-decoration: underline dashed 1px; text-underline-offset: .25em; }
+
+/* ---- 2 · masthead ---------------------------------------------------- */
+/* One row: crest · tagline · nav, stamps right. The crest is the door's crest at
+   a smaller size — same face, same tracking, same colour — so moving between the
+   door and a screen does not feel like moving between two products. */
+.masthead {
+  display: flex; align-items: baseline; gap: var(--sp-5);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--sp-5);
+}
+.masthead h1 {
+  font-family: var(--font-serif); font-size: var(--step-2); font-weight: 400;
+  letter-spacing: .13em; text-transform: none; color: var(--ink-num);
+}
+.masthead h1 a { color: inherit; text-decoration: none; }
+
+.masthead-tagline {
+  font-family: var(--font-mono); font-size: .68rem; letter-spacing: .32em;
+  text-transform: uppercase; color: var(--ink-3); white-space: nowrap;
+}
+/* The tagline is the first thing to go: it is the only element here that is
+   decoration rather than information. */
+@media (max-width: 960px) { .masthead-tagline { display: none; } }
+
+.masthead-vintage { margin-left: auto; }
+
+/* ---- 3 · nav --------------------------------------------------------- */
+/* The indicator is a rule, not a colour: the current screen reads as current in
+   greyscale. It is drawn with scaleX rather than by toggling a border so that
+   hovering moves nothing. */
+.nav {
+  display: flex; gap: var(--sp-6);
+  font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: .04em;
+}
+.nav a {
+  position: relative; color: var(--ink-3); text-decoration: none;
+  padding-block: var(--sp-2);
+  transition: color var(--dur-1) var(--ease);
+}
+.nav a::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: var(--rule-2); transform: scaleX(0);
+  transition: transform var(--dur-1) var(--ease);
+}
+.nav a:hover { color: var(--ink); }
+.nav a:hover::after { transform: scaleX(1); }
+.nav a[aria-current="page"] { color: var(--ink-num); }
+.nav a[aria-current="page"]::after { transform: scaleX(1); background: var(--ink-2); }
+
+/* ---- 4 · three voices ------------------------------------------------ */
+/* serif  the crest, and one page title per screen. Nowhere else.
+   mono   every number, id, digest, file name, stamp, nav item, tag, section head
+   sans   short labels, and the prose inside the page-foot disclosure */
+.page-title {
+  font-family: var(--font-serif); font-size: var(--step-4); font-weight: 400;
+  letter-spacing: .02em; color: var(--ink-num); line-height: 1.1;
+}
+/* A ticker, a count or a date may sit beside the title. Mono, and quiet. */
+.page-title-aside {
+  font-family: var(--font-mono); font-size: var(--step-1);
+  letter-spacing: .04em; color: var(--ink-3);
+}
+.page-head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+
+/* Section heads take the door tagline's voice. Smaller than the body, and
+   legible as a head because of the tracking and the rule above them rather than
+   because of weight. */
+.cmp-h,
+.runs-card > header h2,
+.res-card > header h2,
+.section-h {
+  font-family: var(--font-mono); font-size: var(--step--1); font-weight: 400;
+  text-transform: uppercase; letter-spacing: .32em; color: var(--ink-2);
+}
+/* A count or short label after the head, on the same baseline and untracked —
+   tracking a number makes it harder to read, not more important. */
+.section-note,
+.cmp-h .note,
+.runs-card > header .runs-note,
+.res-card > header .res-note {
+  font-family: var(--font-mono); font-size: var(--step--1);
+  letter-spacing: 0; text-transform: none; color: var(--ink-3);
+}
+
+/* ---- 5 · surfaces ---------------------------------------------------- */
+/* Section cards lose their fill and border. A card is a box drawn around
+   content that was already grouped by a heading and a rule; on a page of twenty
+   of them the boxes become the texture. The rule above the head does the work.
+
+   --sunken survives in exactly three places: the search input, the body of an
+   expanded row, and the disclosure body. Each is a thing you opened. */
+.res-card,
+.runs-card {
+  background: none; border: 0; border-radius: 0; padding: 0;
+  border-top: 1px solid var(--rule);
+  padding-top: var(--sp-8);
+}
+.res-card > header,
+.runs-card > header { margin-bottom: var(--sp-4); }
+
+/* A section that follows another inside the same column does not need its own
+   rule when the parent grid already separates them. */
+.res-card--flush { border-top: 0; padding-top: 0; }
+
+/* Row lists: one hairline between rows, and no per-row boxes. The left bars that
+   survive are the ones that carry a fact — corpus membership, a re-based row. */
+.rows > * + * { border-top: 1px solid var(--rule); }
+
+/* ---- 6 · the rosette behind the page --------------------------------- */
+/* The door's figure, quieter, only at the top, and never moving. Absolute rather
+   than fixed so the page scrolls over it; masked so nothing sits behind a table
+   or a chart, where it would read as a printing fault.
+
+   The attribute selector beats front-door.css's `.ground` without depending on
+   which file loads last. */
+/* `index.html` is both the door and the search screen, so its ground cannot be
+   scoped in the markup: it is the door's figure in door mode and this one in
+   open mode. `body[data-mode="open"] .ground` is specific enough to beat
+   front-door.css's base `.ground` whichever file loads last, and NOT specific
+   enough to beat its `body[data-mode="door"] .ground`, which is exactly right. */
+body[data-mode="open"] .ground,
+.ground[data-scope="page"] {
+  position: absolute;
+  left: 50%;
+  top: var(--rosette-top, 12rem);
+  width: min(1120px, 100vw);
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  /* The weight is carried by the SVG's own group opacity, set where the figure
+     is built, so there is ONE number rather than two multiplied together. The
+     door's ground also dims itself here, so this has to undo that. */
+  opacity: 1;
+  z-index: 0;
+  pointer-events: none;
+  transition: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 0 30%, transparent 70%);
+  mask-image: linear-gradient(to bottom, #000 0 30%, transparent 70%);
+}
+/* Content scrolls OVER it, so every page region needs to be above 0. */
+body[data-mode="open"] .ground ~ *,
+.ground[data-scope="page"] ~ * { position: relative; z-index: 1; }
+
+/* ---- 7 · footer ------------------------------------------------------ */
+/* One line, like the door's. The sentence that used to sit under it — "Four
+   independent stamps, not one export vintage" — is a note about how to read the
+   stamps, so it lives in the disclosure with the other notes. */
+.cmp-footer { padding-block: var(--sp-6) var(--sp-7); }
+.cmp-stamps {
+  display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-4);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3);
+}
+.cmp-stamp-label { color: var(--ink-3); }
+.cmp-stamp-value { color: var(--ink-2); }
+
+/* ---- 7b · the one disclosure ----------------------------------------- */
+/* Exactly one per screen, directly above the footer, closed by default. Every
+   sentence a section wanted to print beside its numbers lives here instead,
+   grouped by the section it came from and in page order. */
+.page-why {
+  max-width: var(--measure-prose);
+  border-top: 1px solid var(--rule);
+  margin-top: var(--sp-8);
+}
+.page-why > summary {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-4) 0; cursor: pointer; list-style: none;
+}
+.page-why > summary::-webkit-details-marker { display: none; }
+.page-why-caret {
+  font-family: var(--font-mono); color: var(--ink-3);
+  display: inline-block; transition: transform var(--dur-1) var(--ease);
+}
+.page-why[open] .page-why-caret { transform: rotate(90deg); }
+.page-why-title {
+  font-family: var(--font-mono); font-size: var(--step--1); font-weight: 400;
+  text-transform: uppercase; letter-spacing: .32em; color: var(--ink-2);
+}
+.page-why-count {
+  font-family: var(--font-mono); font-size: var(--step--1);
+  color: var(--ink-3); margin-left: auto;
+}
+.page-why-body {
+  background: var(--sunken);
+  padding: var(--sp-5);
+  display: grid; gap: var(--sp-6);
+}
+.page-why-group { display: grid; gap: var(--sp-3); }
+.page-why-head { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; }
+.page-why-meta { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
+.page-why-group h3 {
+  font-family: var(--font-mono); font-size: var(--step--1); font-weight: 400;
+  text-transform: uppercase; letter-spacing: .32em; color: var(--ink-3);
+}
+.page-why-group p {
+  font-family: var(--font-sans); font-size: var(--step--1);
+  color: var(--ink-2); line-height: 1.55; max-width: var(--measure-prose);
+}
+/* Refusals get their own group. The word "Refused" carries it; the colour on the
+   heading only reinforces. */
+.page-why-group[data-kind="refused"] h3 { color: var(--down); }
+
+/* ---- 8 · tags -------------------------------------------------------- */
+/* One tag, for every tag. The word is the meaning; a tone is optional emphasis
+   and never the only carrier. Provenance is never a tag (§1). */
+.tag {
+  font-family: var(--font-mono); font-size: var(--step--1);
+  text-transform: uppercase; letter-spacing: .08em;
+  border: 1px solid var(--rule-2); border-radius: var(--radius);
+  padding: .05rem var(--sp-2); color: var(--ink-2); white-space: nowrap;
+}
+.tag[data-tone="accent"] { color: var(--accent); border-color: var(--accent); }
+.tag[data-tone="down"]   { color: var(--down); border-color: var(--down); }
+/* `uncal` is available and means what amber means everywhere: not a settled
+   measurement. It is not applied by any shared component. */
+.tag[data-tone="uncal"]  { color: var(--uncal); border-color: var(--uncal); background: var(--uncal-soft); }
+
+/* The masthead tagline is not a tag. base.css styled it with `.tag`, which now
+   belongs to the component above; the markup uses `.masthead-tagline`. */
+
+/* ---- 8b · expandable rows -------------------------------------------- */
+.row-x > summary,
+.row-x > button {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  width: 100%; text-align: left; background: none; border: 0; padding: var(--sp-3) var(--sp-2);
+  list-style: none;
+}
+.row-x > summary::-webkit-details-marker { display: none; }
+.row-x-caret {
+  font-family: var(--font-mono); color: var(--ink-3); flex: 0 0 auto;
+  display: inline-block; transition: transform var(--dur-1) var(--ease);
+}
+.row-x[open] > summary .row-x-caret,
+.row-x > button[aria-expanded="true"] .row-x-caret { transform: rotate(90deg); }
+.row-x-body {
+  margin-left: var(--sp-6);
+  background: var(--sunken);
+  border-left: 1px solid var(--rule-2);
+  padding: var(--sp-3) var(--sp-4);
+}
+
+/* ---- 9 · links and interactive rows ---------------------------------- */
+a { color: var(--accent); text-decoration: none; transition: color var(--dur-1) var(--ease); }
+a:hover { color: var(--ink-num); text-decoration: underline 1px; text-underline-offset: .25em; }
+:focus-visible { outline: 1px solid var(--accent); outline-offset: 2px; }
+
+/* The hover is an inset shadow, not a border, so nothing shifts under the
+   pointer — and a row's own meaningful left bar stays visible under it. */
+.row[data-href],
+.row-x > summary,
+.row-x > button {
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.row[data-href]:hover,
+.row-x > summary:hover,
+.row-x > button:hover {
+  background: var(--surface);
+  box-shadow: inset 2px 0 0 var(--rule-2);
+}
+
+/* ---- 10 · motion ----------------------------------------------------- */
+/* ENTRANCES ARE OPT-IN AND JS-GATED. `data-enter` is set by an inline script in
+   the head, and only when reduced motion is not requested. Without JavaScript,
+   with JS that failed, or with reduced motion, none of these rules match at all
+   and every element is at its final value from the first frame.
+
+   That is the whole safety argument: the hidden start state does not exist in
+   the stylesheet's default. It is reached only by adding an attribute, and
+   anything that can stop the attribute being added also stops the hiding. */
+@keyframes enter-rise { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes enter-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes enter-bar  { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes enter-span { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes enter-draw { from { stroke-dashoffset: var(--draw-length, 0); } to { stroke-dashoffset: 0; } }
+
+/* Wrapped in `no-preference`, which is the third guard and the one that holds
+   when the setting is changed AFTER the page loaded. The other two — no script,
+   or a script that declines to arm — both happen once at boot and cannot react.
+   Inside this query the hiding rules do not exist at all, so a stagger delay has
+   nothing to delay and no element can be caught mid-entrance and left hidden. */
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-enter] .enter-row  { animation: enter-rise var(--dur-2) var(--ease) both; }
+  :root[data-enter] .enter-dot  { animation: enter-fade var(--dur-2) var(--ease) both; }
+  :root[data-enter] .enter-bar  { animation: enter-bar var(--dur-3) var(--ease) both; transform-origin: bottom; }
+  :root[data-enter] .enter-span { animation: enter-span var(--dur-3) var(--ease) both; }
+  :root[data-enter] .enter-point { animation: enter-fade var(--dur-1) var(--ease) both; }
+  :root[data-enter] .enter-draw {
+    stroke-dasharray: var(--draw-length, 0);
+    animation: enter-draw var(--draw-dur, var(--dur-3)) var(--ease) both;
+  }
+}
+
+/* Reduced motion: a global brake, covering the screen transitions too. It also
+   neutralises the entrances above, although the inline script should already
+   have declined to arm them — two independent guards, because this one is the
+   only one that still works if the script is wrong. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+    /* NOT in CD's block, and load-bearing. `animation: ... both` applies its
+       FROM state during the delay, so a row staggered to 380ms with the duration
+       crushed to .01ms is still invisible for 380ms. Shortening a duration does
+       not shorten a delay; both have to go. */
+    animation-delay: 0ms !important;
+    transition-delay: 0ms !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) { animation: none !important; }
+}

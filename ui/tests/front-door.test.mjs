@@ -302,15 +302,28 @@ describe("front-door.css and the two documents", () => {
     assert.match(rulesFor(css, ".ground")[0], /z-index: -1;/);
   });
 
-  it("sets the masthead nav on tokens, untracked, like the vintages beside it", () => {
-    for (const sel of [".masthead-nav", ".masthead-nav-here", ".masthead-nav-soon", ".masthead-nav a"]) {
-      for (const decls of rulesFor(css, sel)) {
+  it("sets the nav on tokens, and marks the current screen with a rule", () => {
+    /* The nav moved to system.css as `.nav` when the four screens took the
+       door's voice. Two of the old assertions survive the move and one does not:
+       spacing is still tokens, and the shared voice is now deliberately tracked,
+       because tracking is what makes a mono line at --step--1 read as
+       navigation rather than as a stamp. */
+    const system = read("assets/styles/system.css");
+    assert.equal(rulesFor(css, ".masthead-nav").length, 0, "the old class is gone, not merely unused");
+
+    for (const sel of [".nav", ".nav a"]) {
+      for (const decls of rulesFor(system, sel)) {
         // Spacing only: a 1px hairline is the shipped border everywhere, and has no token.
         assert.doesNotMatch(decls, /(gap|padding|margin)[\w-]*:[^;]*\d+px/, `${sel} spaces in pixels`);
-        assert.doesNotMatch(decls, /letter-spacing/, `${sel} is tracked`);
       }
     }
-    assert.match(rulesFor(css, ".masthead-nav")[0], /gap: var\(--sp-4\);/);
+    assert.match(rulesFor(system, ".nav")[0], /gap: var\(--sp-6\);/);
+
+    /* The invariant that matters: the current screen is marked by a RULE, so it
+       is still marked in greyscale and in a screenshot with the colour stripped.
+       Colour on top of it is reinforcement. */
+    const current = rulesFor(system, '.nav a[aria-current="page"]::after')[0];
+    assert.match(current, /transform: scaleX\(1\)/, "the indicator is drawn, not coloured in");
   });
 
   it("keeps the masthead crest on the left edge the sections start on", () => {

@@ -16,14 +16,11 @@ const el = (tag, cls, text) => {
 
 export function renderIdentity(root, { company, runs }) {
   root.textContent = "";
-  root.append(el("h2", "cmp-h", "Company"));
-
+  /* No "Company" head and no repeated ticker: the page title above IS the
+     company name with its ticker beside it, and printing both made the top of
+     the page read as two headers stacked. What stays here is what the title
+     cannot carry — the split badge, the CIK, the exchange and the counts. */
   const head = el("div", "cmp-identity");
-
-  const tick = el("span", "cmp-ticker");
-  tick.dataset.chrome = "a ticker symbol, not a quantity";
-  tick.textContent = company.ticker;
-  head.append(tick);
 
   // No per-split class: the two halves are a factual partition and carry no
   // colour. `data-split` stays as a hook for anything that needs to select on it
@@ -33,7 +30,6 @@ export function renderIdentity(root, { company, runs }) {
   badge.dataset.chrome = "which half of the panel this company is in";
   head.append(badge);
 
-  head.append(el("span", "cmp-name", company.name ?? "name not exported"));
   root.append(head);
 
   const facts = el("dl", "cmp-facts");

@@ -27,7 +27,7 @@
 import * as source from "./data/source.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { fmt } from "./lib/format.js";
-import { mountRosette } from "./ui/rosette.js";
+import { mountPageRosette } from "./ui/rosette.js";
 import { mountMastheadNav } from "./ui/front-door.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { renderIdentity } from "./ui/results-identity.js";
@@ -36,7 +36,8 @@ import { domainFor, renderBaselines } from "./ui/results-baselines.js";
 import { renderLeakage } from "./ui/results-leakage.js";
 import { renderDirection } from "./ui/results-direction.js";
 import { renderHoldout } from "./ui/results-holdout.js";
-import { renderDisclosure } from "./ui/results-disclosure.js";
+import { whyGroups } from "./ui/results-disclosure.js";
+import { renderPageWhy } from "./ui/page-why.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -106,10 +107,12 @@ function paint() {
     pending: waiting,
   });
   renderHoldout($("holdout"), { holdout: state.holdout, pending: "Reading the holdout's terms…" });
-  renderDisclosure($("disclosure"), {
-    holdoutReason: state.records?.holdout?.why ?? null,
-    stats: here?.stats ?? null,
-    band: state.band,
+  renderPageWhy($("disclosure"), {
+    groups: whyGroups({
+      holdoutReason: state.records?.holdout?.why ?? null,
+      stats: here?.stats ?? null,
+      band: state.band,
+    }),
   });
   if (state.manifest) renderResultsFooter(here?.record ?? null);
 
@@ -168,7 +171,7 @@ async function take(band, meta) {
 }
 
 async function boot() {
-  mountRosette($("ground"));
+  mountPageRosette($("ground"));
   mountMastheadNav($("masthead-nav"), { current: "results" });
 
   const params = new URLSearchParams(location.search);

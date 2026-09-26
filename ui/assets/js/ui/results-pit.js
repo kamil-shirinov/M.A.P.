@@ -76,7 +76,12 @@ function chart(stats) {
 
   for (const [i, count] of counts.entries()) {
     const left = x(i) + (plotW / counts.length - barW) / 2;
-    s.append(svg("rect", { x: left, y: y(count), width: barW, height: Math.max(y(0) - y(count), 0.5), class: "res-bar" }));
+    const rect = svg("rect", { x: left, y: y(count), width: barW, height: Math.max(y(0) - y(count), 0.5), class: "res-bar enter-bar" });
+    // transform-box so scaleY is about the bar's own baseline, not the SVG's.
+    rect.style.transformBox = "fill-box";
+    rect.style.transformOrigin = "bottom";
+    if (i) rect.style.animationDelay = `${i * 20}ms`;
+    s.append(rect);
     s.append(tick(left + barW / 2, y(count) - 5, String(count)));
   }
 

@@ -44,12 +44,13 @@
 /* SECTION HEADERS CARRY THE PAGE. At 11px grey uppercase they weighed the same
    as a caption, and on a page this long a reader had nothing to navigate by.
    Larger, brighter, and preceded by a rule, so a section reads as a section. */
+/* The VOICE — mono, tracked, uppercase, --ink-2 — is set once in system.css and
+   shared by all four screens. What stays here is the box: the rule above a
+   section and the space around it, which is how a section reads as a section. */
 .cmp-h {
-  font-size: var(--step-2); text-transform: uppercase; letter-spacing: .1em;
-  color: var(--ink); font-weight: 600;
   margin: 0 0 var(--sp-5); padding-top: var(--sp-5);
-  border-top: 1px solid var(--rule-2);
-  display: flex; align-items: baseline;
+  border-top: 1px solid var(--rule);
+  display: flex; align-items: baseline; gap: var(--sp-4);
 }
 /* The first section needs no rule above it; the masthead already provides one. */
 .cmp-section:first-of-type .cmp-h { border-top: 0; padding-top: 0; }
@@ -218,7 +219,6 @@
 
 /* ---- footer and empty state -------------------------------------- */
 .cmp-footer { padding-block: var(--sp-5); border-top: 1px solid var(--rule); }
-.cmp-stamps { display: flex; gap: var(--sp-5); flex-wrap: wrap; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); }
 /* A page whose subject does not exist has one thing to say, so it says it in the
    middle of the field rather than in a narrow column pinned to the top of a tall
    empty one. min-height leaves room for the masthead and footer. */

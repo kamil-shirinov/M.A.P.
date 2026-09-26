@@ -11,13 +11,24 @@
 <link rel="stylesheet" href="assets/styles/search.css">
 <link rel="stylesheet" href="assets/styles/front-door.css">
 <link rel="stylesheet" href="assets/styles/results.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  /* Arms the entrance styles BEFORE first paint, and only when motion is
+     welcome. Without this the page renders at its final values, which is the
+     correct fallback rather than a degraded one. See assets/js/lib/motion.js. */
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
 </head>
 <body>
-  <div class="ground" id="ground"></div>
+  <div class="ground" id="ground" data-scope="page"></div>
 
   <header class="masthead">
     <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
-    <span class="tag">Market&rsquo;s Agentic Projections &mdash; local inference, scored forecasts</span>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
     <div id="masthead-nav"></div>
     <div class="masthead-vintage" id="masthead-vintage"></div>
   </header>
@@ -27,6 +38,7 @@
        never leaves the middle. Everything that needs a sentence sits in the one
        disclosure at the bottom. -->
   <main class="res-page" id="results-page">
+    <h2 class="page-title" id="page-title">Results</h2>
     <section id="identity"></section>
 
     <!-- Row 1: the measurement itself. The forest plot is the tall panel — six

@@ -155,25 +155,13 @@ body[data-mode="door"] .ground { transform: translate(-50%, -50%) scale(1.08); o
   text-transform: none;
 }
 /* On the masthead's own metrics. The vintage stamps it sits beside are mono at
-   --step--1, untracked, with --sp-4 between items; the nav matches them, so the
-   masthead has one rhythm. What separates it from the tag is one step of the
-   same scale up, --sp-6, the gutter: at the shared --sp-4 the tag ran straight
-   on into the first link. */
-.masthead-nav {
-  display: flex;
-  align-items: baseline;
-  gap: var(--sp-4);
-  margin-left: var(--sp-6);
-  font-family: var(--font-mono);
-  font-size: var(--step--1);
-}
-.masthead-nav a { color: var(--ink-3); }
+   --step--1, untracked. The nav itself now lives in system.css as `.nav`, in
+   the shared voice, with its current-screen indicator drawn as a rule rather
+   than a coloured border. */
 /* The door's run count links to the runs screen and looks like what it already
    was: the accent arrives on hover, not as a third colour in a three-item strip. */
 .door-strip .door-runs { color: inherit; text-decoration: none; }
 .door-strip .door-runs:hover .fig { color: var(--accent); }
-.masthead-nav a:hover { color: var(--ink-num); text-decoration: none; }
-.masthead-nav-here { color: var(--ink-num); border-bottom: 1px solid var(--accent); padding-bottom: var(--sp-1); }
 
 @media (prefers-reduced-motion: reduce) {
   [data-band] { animation: none; }
