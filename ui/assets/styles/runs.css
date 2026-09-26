@@ -235,3 +235,34 @@ body > .masthead,
 /* The caret turns on open, like every other expandable row in the system. */
 .runs-c-caret { color: var(--ink-3); font-family: var(--font-mono); }
 .runs-row[data-open="true"] .runs-c-caret { transform: rotate(90deg); }
+
+/* ---- 03 · the screen spec ------------------------------------------- */
+/* A stated absence reads as a boundary, not as context: the label, then what is
+   not here. Same shape as the journal's "no score column". */
+.runs-absent-k {
+  font-family: var(--font-mono); font-size: var(--step--1);
+  text-transform: uppercase; letter-spacing: .32em; color: var(--ink-3);
+  margin-right: var(--sp-4);
+}
+.runs-scope { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2); border-left: 0; padding-left: 0; }
+
+.runs-sum { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); margin-top: var(--sp-4); }
+.runs-sum-why { color: var(--ink-3); margin-left: var(--sp-4); }
+
+.runs-noscore {
+  display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3);
+  margin-bottom: var(--sp-4);
+}
+.runs-noscore-go { margin-left: auto; }
+
+.runs-chart-legend { display: flex; align-items: center; gap: var(--sp-5); }
+.runs-chart-legend-dot { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.runs-chart-legend-dot .runs-bar-dot {
+  display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--down);
+}
+
+/* The population cells lose their boxes: four paths and four counts in a strip. */
+.runs-pop { background: none; border: 0; padding: 0 var(--sp-4) 0 0; }
+.runs-pop[data-empty="true"] { border: 0; }

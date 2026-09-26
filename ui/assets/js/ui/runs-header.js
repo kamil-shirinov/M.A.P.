@@ -32,14 +32,10 @@ const card = (root, title, note) => {
   return { box, head };
 };
 
-const WHAT = {
-  corpus: "Runs whose document came from the frozen corpus itself.",
-  edgar: "Runs whose document was fetched from EDGAR.",
-  news: "Runs whose document was a news item.",
-  unknown:
-    "Every run in this export. Not a claim about where the documents came from: " +
-    "the field was added after these runs were made.",
-};
+/* The per-cell sentences moved to the page-foot disclosure. A cell is a path, a
+   count, a size and whether it was read; what each source MEANS is a note, and
+   four of them stacked beside four numbers made the strip read as prose. */
+const WHAT = { corpus: "", edgar: "", news: "", unknown: "" };
 
 /** Section 2. The count, what it is counted across, and the one scope line. */
 export function renderIdentity(root, { rows, counts, universe }) {
@@ -53,6 +49,8 @@ export function renderIdentity(root, { rows, counts, universe }) {
   totalNode.title = "Summed on this page across the four document-source files";
 
   const left = document.createElement("div");
+  /* One mono fact line, not a headline number plus a sentence. The page title
+     above says what this screen is; this says how much of it there is. */
   const line = el("div", "runs-total");
   line.append(totalNode, el("span", "runs-total-word", "runs"));
   left.append(line);
@@ -80,12 +78,17 @@ export function renderIdentity(root, { rows, counts, universe }) {
   /* The middle column. Two columns pinned a definition list to the right edge of
      a 1600px card and left the middle empty; this sentence belongs somewhere a
      reader looks first, and it fills the hole rather than sitting under it. */
+  /* A STATED ABSENCE, in the form the rest of the app uses for one: the label
+     "not here", then what is not here. As a paragraph it read as context; as an
+     absence it reads as a boundary, which is what it is. */
   const scope = el("div", "runs-scope");
-  scope.append(chromeText(
-    "The journal this export carries, not every forecast ever made: the four-arm " +
-      "ablation's 786 runs live outside the export and are not here.",
-    "786 is quoted from the project's own record of the ablation, not counted from these files",
-  ));
+  scope.append(
+    el("span", "runs-absent-k", "not here"),
+    chromeText(
+      "786 runs of the four-arm ablation, outside the export",
+      "786 is quoted from the project's own record of the ablation, not counted from these files",
+    ),
+  );
 
   const defs = el("dl", "runs-defs");
   const def = (k, node) => { defs.append(el("dt", null, k)); const dd = el("dd"); dd.append(node); defs.append(dd); };
@@ -118,8 +121,7 @@ export function renderIdentity(root, { rows, counts, universe }) {
 
 /** Section 3. One cell per file, and the arithmetic that adds them. */
 export function renderPopulations(root, { manifest, journal, counts }) {
-  const { box, head } = card(root, "Four populations, kept apart",
-    "one file per document source — the export never concatenates them");
+  const { box, head } = card(root, "Four populations, kept apart");
 
   const check = el("span", "runs-note runs-note--right runs-check");
   if (!journal) {
@@ -150,22 +152,24 @@ export function renderPopulations(root, { manifest, journal, counts }) {
       "whether this file has been read yet",
     ));
     cell.append(state);
-    cell.append(el("p", "runs-pop-what", WHAT[name]));
+    if (WHAT[name]) cell.append(el("p", "runs-pop-what", WHAT[name]));
     grid.append(cell);
   }
   box.append(grid);
 
+  /* The arithmetic, shown. The export writes one count per file and no total,
+     so the sum is the page's and it is DERIVED — the dotted mark says so. The
+     paragraph that used to sit beside it is in the disclosure. */
   const foot = el("div", "runs-pops-foot");
-  foot.append(el("p", "runs-inset",
-    "Empty by fact, not by failure. All three files were read and each holds []. " +
-    "A run's document source is recorded when it is made, and every run in this export " +
-    "predates that field, so no run can be filed here. The count is zero, not unknown."));
-  const sum = el("p", "runs-inset");
-  sum.append(chromeText(
-    `The total above is added on this page, in sight: ${SOURCES.map((s) => counts[s]).join(" + ")} = ` +
-      `${SOURCES.reduce((n, s) => n + counts[s], 0)}. The export writes one count per file and no total.`,
-    "the page's own arithmetic over the four manifest counts",
-  ));
+  const sum = el("p", "runs-sum");
+  const per = SOURCES.map((s) => figure(counts[s], MEASURED, "int"));
+  per.forEach((f, i) => {
+    if (i) sum.append(chromeText(" + ", "an arithmetic operator"));
+    sum.append(renderFigure(f));
+  });
+  sum.append(chromeText(" = ", "an arithmetic operator"));
+  sum.append(renderFigure(derive(per.reduce((n, f) => n + f.value, 0), "int", ...per)));
+  sum.append(el("span", "runs-sum-why", "summed here · the export writes no total"));
   foot.append(sum);
   box.append(foot);
 }
@@ -176,11 +180,6 @@ export function renderUnrun(root, { filings }) {
   const count = el("span", "runs-note runs-note--right");
   count.append(renderFigure(derive(filings.length, "int")), chromeText(" of the corpus's filings", "filings the corpus holds that no run read"));
   head.append(count);
-
-  box.append(el("p", "runs-inset",
-    "Not rows, because nothing ran. The corpus settled these filings as terminal failures. " +
-    "They are counted by the corpus ledger, which counts items; this screen counts runs, and " +
-    "does not print the ledger's total. Each filing is on its company page with an empty run list."));
 
   const cells = el("div", "runs-cells");
   for (const f of filings) {
@@ -202,12 +201,6 @@ export function renderDrift(root, { rows, total, selected, onSelect }) {
   const count = el("span", "runs-note runs-note--right");
   count.append(renderFigure(derive(drifted.length, "int")), chromeText(" of ", "of the journal"), renderFigure(derive(total, "int")), chromeText(" runs", "runs in the journal"));
   head.append(count);
-
-  box.append(el("p", "runs-inset",
-    "The snapshot's anchor is not the price these runs used. A corporate action was applied " +
-    "to the series after the forecast was written. Their rows carry a red rule and the ratio, " +
-    "and no realised return is shown: it would divide a split-adjusted close by an unadjusted " +
-    "spot. Their outcomes stay out of every figure that aggregates outcomes."));
 
   /* Grouped on TICKER. The ratio is computed per run from that run's own float32
      spot, so nine rows carry seven distinct values for two corporate actions;
@@ -236,9 +229,8 @@ export function renderDrift(root, { rows, total, selected, onSelect }) {
     acts.append(b);
   }
   box.append(acts);
-  box.append(el("p", "runs-note",
-    "The raw ratios differ in the ninth place, so rows group on ticker and the ratio shows to six. " +
-    "Selecting one sets the ticker filter below."));
+  // "Selecting one sets the ticker filter" is gone: the buttons are buttons and
+  // the hover says so. Why the grouping is on ticker is in the disclosure.
 }
 
 function tally(values) {

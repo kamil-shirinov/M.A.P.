@@ -164,7 +164,8 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     for (const node of hits) {
       const text = node._text;
       assert.ok(
-        /there is no score column/i.test(text) || /^Score$/.test(text) || /Cannot be computed for a run/.test(text) ||
+        /no score column/i.test(text) || /^Score$/.test(text) || /Cannot be computed for a run/.test(text) ||
+          /scores are per band and split/.test(text) || /^results →$/.test(text) ||
           /Scoring records key|Scoring is shown whole|Scoring keys on ticker/.test(text),
         `an element mentions a score: ${text.slice(0, 60)}`,
       );

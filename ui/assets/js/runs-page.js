@@ -48,10 +48,24 @@ const WHY = [
     ],
   },
   {
+    title: "Four populations",
+    notes: [
+      "One file per document source, and the export never concatenates them. corpus holds runs " +
+        "whose document came from the frozen corpus itself; edgar, runs whose document was " +
+        "fetched from EDGAR; news, runs whose document was a news item.",
+      "unknown holds every run in this export. That is not a claim about where the documents " +
+        "came from: the field was added after these runs were made.",
+      "The three empty files are empty by fact, not by failure. All three were read and each " +
+        "holds []. A run's document source is recorded when it is made, and every run here " +
+        "predates the field, so no run can be filed under one. The count is zero, not unknown.",
+    ],
+  },
+  {
     title: "The filings with no run",
     notes: [
-      "Nothing ran on them, so they cannot be rows. Each appears on its company page with an empty " +
-        "run list, which is where a reader can see what was held and what was attempted.",
+      "Nothing ran on them, so they cannot be rows. The corpus settled these filings as terminal " +
+        "failures. They are counted by the corpus ledger, which counts items; this screen counts " +
+        "runs. Each filing is on its company page with an empty run list.",
     ],
   },
   {
@@ -61,6 +75,26 @@ const WHY = [
         "is not in these files: it is 1 ÷ 0.988142, and a split is one of several corporate actions " +
         "with that shape. The screen shows the measured ratio and, beside it, the derived inverse.",
       "freeze_version null means unrecorded, not “no freeze”: 68 runs predate the field.",
+      "The snapshot's anchor is not the price these runs used: a corporate action was applied to " +
+        "the series after the forecast was written. Their rows carry a red rule and the ratio, and " +
+        "their outcomes stay out of every figure that aggregates outcomes.",
+      "The raw ratios differ in the ninth place, so rows group on ticker and the ratio shows to " +
+        "six places. Selecting one sets the ticker filter below.",
+    ],
+  },
+  {
+    title: "The journal",
+    notes: [
+      "There is no score column and there cannot be one. Scoring records key their items on " +
+        "ticker and as_of, never run_id, so nothing joins a score to a row. Each row pairs a run's " +
+        "scenarios with its own outcome and nothing else.",
+      "No filter: the counts on each control are what that choice would show, given the others. " +
+        "An option showing zero is kept and disabled rather than hidden, because a missing option " +
+        "and an option with nothing behind it are different facts.",
+      "Runs are grouped by quarter, newest first. Twenty months span 3 runs to 97 — earnings " +
+        "season is the shape — so uniform grouping would produce both a stub and a wall.",
+      "Relation is the run's relation to the frozen corpus. Outcome has four states in the " +
+        "contract, of which two occur. Freeze is the frozen corpus version the run executed under.",
     ],
   },
   {

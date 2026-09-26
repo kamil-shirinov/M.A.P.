@@ -65,7 +65,10 @@ export function renderJournal(root, ctx) {
   const box = el("div", "runs-card");
   const head = document.createElement("header");
   head.append(el("h2", null, "Journal"));
-  head.append(el("span", "runs-note", "every file in source order; only unknown has rows · newest first, as written"));
+  // "every file in source order; only unknown has rows" is what the population
+  // strip above already shows. What survives is the ordering, which nothing else
+  // states.
+  head.append(el("span", "runs-note", "newest first, as written"));
   const showing = el("span", "runs-note runs-note--right");
   if (ctx.rows.length) {
     showing.append(chromeText("showing ", "how many rows the filters show"),
@@ -76,11 +79,19 @@ export function renderJournal(root, ctx) {
   head.append(showing);
   box.append(head);
 
-  box.append(el("p", "runs-inset",
-    "There is no score column, and there cannot be one. Scoring records key their items on " +
-    "ticker and as_of, never run_id, so nothing joins a score to a row. Each row pairs a run's " +
-    "scenarios with its own outcome and nothing else. Scoring is shown whole on company pages, " +
-    "related at band, split and vintage."));
+  /* One line, as a stated absence with somewhere to go. The reason there can
+     BE no score column — that records key on ticker and as_of, never run_id —
+     is in the disclosure. */
+  const noScore = el("p", "runs-noscore");
+  noScore.append(
+    el("span", "runs-absent-k", "no score column"),
+    el("span", null, "scores are per band and split"),
+  );
+  const go = el("a", "runs-noscore-go");
+  go.href = "results.html";
+  go.textContent = "results →";
+  noScore.append(go);
+  box.append(noScore);
 
   const filters = el("div");
   const chart = el("div");
@@ -166,12 +177,12 @@ function groupBlock(group, ctx) {
 
   const marks = el("span", "runs-group-marks");
   if (group.open) {
-    const m = el("span", "runs-mark runs-mark--open");
+    const m = el("span", "runs-mark runs-mark--open tag");
     m.append(renderFigure(derive(group.open, "int")), chromeText(" window open", "runs whose horizon has not elapsed"));
     marks.append(m);
   }
   if (group.drift) {
-    const m = el("span", "runs-mark runs-mark--drift");
+    const m = el("span", "runs-mark runs-mark--drift tag");
     m.append(renderFigure(derive(group.drift, "int")), chromeText(" re-based", "runs whose price series was re-based since the run"));
     marks.append(m);
   }
@@ -289,7 +300,7 @@ function rowLine(run, ctx, ditto) {
   row.append(id);
 
   const rel = el("span", "runs-c-rel");
-  const tag = el("span", "runs-tag", RELATIONS.find(([v]) => v === run.corpus_relation)?.[1] ?? run.corpus_relation);
+  const tag = el("span", "runs-tag tag", RELATIONS.find(([v]) => v === run.corpus_relation)?.[1] ?? run.corpus_relation);
   tag.dataset.rel = run.corpus_relation;
   rel.append(tag);
   if (run.corpus_relation === "ledger_item" && !isAbsent(run.ledger_item)) {

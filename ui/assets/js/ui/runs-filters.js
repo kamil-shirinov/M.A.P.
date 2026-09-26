@@ -149,9 +149,9 @@ export function renderFilters(root, { rows, filtered, filters, query, universe, 
     dd.append(el("span", "runs-note", note));
   });
 
-  axis("Relation", "relation", RELATIONS, "relation to the frozen corpus");
-  axis("Outcome", "outcome", OUTCOMES, "four states in the contract, two occur");
-  axis("Freeze", "freeze", freezeOptions(rows), "the frozen corpus the run executed under");
+  axis("Relation", "relation", RELATIONS);
+  axis("Outcome", "outcome", OUTCOMES);
+  axis("Freeze", "freeze", freezeOptions(rows));
   root.append(dl);
 
   // ---- the summary, and the only way to clear everything at once ----
@@ -166,10 +166,10 @@ export function renderFilters(root, { rows, filtered, filters, query, universe, 
     clear.href = "#";
     clear.addEventListener("click", (e) => { e.preventDefault(); on.clear(); });
     p.append(clear);
-  } else {
-    p.append(document.createTextNode(
-      "No filter. Counts on each control are what that choice would show, given the others."));
   }
+  // "No filter. Counts on each control are what that choice would show, given
+  // the others." — a rule about how the counts behave, so it is in the
+  // disclosure. An unfiltered page now says nothing, which is correct.
   root.append(p);
 }
 
@@ -195,10 +195,17 @@ export function renderChart(root, { rows, filtered, filtering, onPick }) {
   const months = [...all.keys()].sort();
   const max = Math.max(...all.values());
 
-  const note = el("p", "runs-note",
-    filtering
-      ? "bar height is every run that month; blue is the share that matches · red dot marks a re-based run"
-      : "earnings season is the shape · red dot marks a month holding a re-based run · select a bar to open its group");
+  /* A legend, not a caption. "earnings season is the shape" is a reading of the
+     chart and belongs in the disclosure; "select a bar to open its group" is an
+     affordance the bar's own hover states. What is left is what the marks mean,
+     which no amount of looking would tell you. */
+  const note = el("p", "runs-note runs-chart-legend");
+  if (filtering) {
+    note.append(el("span", null, "bar height is every run that month; blue is the share that matches"));
+  }
+  const dot = el("span", "runs-chart-legend-dot");
+  dot.append(el("i", "runs-bar-dot"), el("span", null, "re-based"));
+  note.append(dot);
   root.append(note);
 
   const chart = el("div", "runs-chart");
@@ -206,8 +213,10 @@ export function renderChart(root, { rows, filtered, filtering, onPick }) {
     const total = all.get(month);
     const matched = hit.get(month) ?? 0;
     const quarterStart = i === 0 || Number(month.slice(5, 7)) % 3 === 1;
-    const b = el("button", "runs-bar");
+    const b = el("button", "runs-bar enter-bar");
     b.type = "button";
+    // Left to right, 20ms apart. Twenty bars, so the whole sweep is 400ms.
+    if (i) b.style.animationDelay = `${i * 20}ms`;
     b.dataset.matched = String(filtering && matched > 0);
     b.dataset.quarter = String(quarterStart);
     b.disabled = matched === 0;
