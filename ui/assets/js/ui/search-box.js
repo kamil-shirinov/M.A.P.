@@ -21,7 +21,6 @@ import { DERIVED, chrome, chromeText, figure, renderFigure } from "../lib/figure
    provenance-stamped instead. */
 const prose = (node, why) => chrome(node, why);
 import { isAbsent } from "../data/source.js";
-import { stagger } from "../lib/motion.js";
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -45,8 +44,9 @@ const STATUS = {
   fetching:
     "Loading the symbol index. Corpus hits below are already resolved; everything else waits " +
     "for the file, and until it lands nothing can be called absent.",
-  ready:
-    "Index loaded. Matched on ticker prefix, then on company name.",
+  // Nothing: the chip already says the index is open, and how matching works is
+  // a rule, which lives in the disclosure.
+  ready: "",
 };
 
 /** A name from `listCorpusCompanies` may be an absence, not a string: a null in
@@ -73,13 +73,13 @@ export function mountBox(host, { onQuery }) {
      serif above this block, and printing it twice made the screen look like it
      had two of them. The note and the index chip stay: they are what this
      section says that the title does not. */
+  /* No head text at all now. The page title says "Find a company" and the
+     funnel below says both counts — "every listed symbol is searchable; 120
+     have a page" was a third place saying the same two numbers. What is left is
+     the index chip, which reports a state nothing else can. */
   const head = el("div", "srch-head");
-  const note = prose(
-    el("span", "srch-note", "every listed symbol is searchable; 120 have a page"),
-    "explanatory note; 120 is the corpus size, stated in the export contract",
-  );
-  const chip = el("span", "srch-chip");
-  head.append(note, chip);
+  const chip = el("span", "srch-chip tag");
+  head.append(chip);
 
   const box = el("div", "srch-box");
   const slash = el("span", "srch-slash", "/");
@@ -93,9 +93,10 @@ export function mountBox(host, { onQuery }) {
   const right = el("span", "srch-box-right");
   box.append(slash, input, right);
 
-  // Only STATUS.cold carries a digit ("the 120 corpus companies"), but the
-  // element is marked once rather than per phase: a later wording change to any
-  // of the three must not turn into a violation on a phase nobody re-tested.
+  /* STATUS survives for the two phases that report something the chip cannot:
+     what the box can still answer while the index is in flight. The `ready`
+     line said only "Matched on ticker prefix, then on company name", which is a
+     rule rather than a state, and it is in the disclosure now. */
   const status = prose(
     el("p", "srch-status"),
     "explanatory status text; 120 is the corpus size",
@@ -107,21 +108,21 @@ export function mountBox(host, { onQuery }) {
   return {
     input,
     focus: () => input.focus(),
-    update({ phase, searchable }) {
+    update({ phase, matched }) {
       const [label, why] = PHASE_CHIP[phase];
       chip.textContent = "";
       chip.dataset.phase = phase;
       chip.append(chromeText(label, why));
 
+      /* The live match total, not the index size. 10,398 is said once, in the
+         funnel; repeating it beside the box made the box look like it was
+         reporting on the file rather than on what was typed. `matched` is null
+         before anything is typed, and the counter stays empty rather than
+         printing a zero nobody asked about. */
       right.textContent = "";
-      right.append(
-        phase === "ready"
-          ? chromeText("searchable: ", "what the box can match against right now")
-          : chromeText("in memory: ", "what the box can match against right now"),
-      );
-      right.append(searchable === null ? chromeText("index not read", "the index size is not known until the file is open") : count(searchable));
-
-      status.textContent = STATUS[phase];
+      if (matched !== null && matched !== undefined) {
+        right.append(count(matched), chromeText(matched === 1 ? " matched" : " matched", "matches for what is typed"));
+      }
     },
   };
 }
@@ -229,17 +230,20 @@ export function renderResults(host, { phase, query, groups, matched }) {
     shown += rows.length;
     const wrap = el("div", "srch-group");
     const head = el("div", "srch-group-head");
-    const h3 = el("h3", "cmp-h3", def.title);
+    const h3 = el("h3", "cmp-h3 section-h", def.title);
     h3.dataset.group = def.key;
     // "No earnings 8-K in the recent block" carries a form designation.
     prose(h3, "a group heading; its digits are an SEC form designation");
-    const n = el("span", "srch-group-count");
+    const n = el("span", "srch-group-count section-note");
     n.append(count(rows.length), chromeText(rows.length === 1 ? " match" : " matches", "matches in this group"));
-    head.append(h3, n, el("span", "srch-note", def.note));
+    // No sublabel. "runs, outcomes and a page" described what a corpus row
+    // gives you, which the row's own counts and arrow already say.
+    head.append(h3, n);
     wrap.append(head);
-    const entering = rows.slice(0, PER_GROUP).map((row) => def.row(row));
-    entering.forEach((node) => wrap.append(node));
-    stagger(entering);
+    /* NO ENTRANCE HERE, deliberately. These rows are rebuilt on every keystroke,
+       so an entrance would replay four times while someone types "AAPL" — the
+       one place on the app where motion would be constant rather than once. */
+    rows.slice(0, PER_GROUP).forEach((row) => wrap.append(def.row(row)));
     if (rows.length > PER_GROUP) {
       const more = el("div", "srch-more");
       more.append(
@@ -255,16 +259,11 @@ export function renderResults(host, { phase, query, groups, matched }) {
   /* The one sentence the results screen earns, because it states a cut the rows
      cannot: what was left out, and that the order is not a ranking. */
   if (shown) {
+    /* One mono line. The matched total moved to the box, beside what was typed,
+       and the sentence about the order not being a ranking is a rule rather than
+       a report — it is in the disclosure. */
     const note = el("p", "srch-cut");
-    note.append(
-      chromeText("Showing at most " + PER_GROUP + " rows per group of ", "the per-group cut"),
-      count(matched),
-      chromeText(" matched. ", "total matches for this term"),
-      document.createTextNode(
-        "The export is not ranked: an exact ticker comes first, then alphabetical order, " +
-          "because nothing in these files states which symbol you meant.",
-      ),
-    );
+    note.append(chromeText(`at most ${PER_GROUP} per group`, "the per-group cut"));
     host.append(note);
     return;
   }

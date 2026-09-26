@@ -44,13 +44,18 @@ function stage({ n, quoted, what, share, file, when, width, tone, prov, provWhy 
   const src = el("div", "srch-stage-src");
   src.append(chromeText(file, "the file this count comes from, and its size"), el("div", "srch-stage-when", when));
 
-  const chip = el("span", "srch-prov");
+  // The shared tag component. QUOTED keeps the dashed border it was given when
+  // amber was narrowed: a provenance is a stroke, and the dash is the same dash
+  // the quoted mark uses on a number.
+  const chip = el("span", "srch-prov tag");
   chip.dataset.prov = prov;
   chip.append(chromeText(prov, provWhy));
 
   const bar = el("div", "srch-bar");
   const fill = el("i");
   fill.style.width = width;
+  fill.classList.add("enter-span");
+  fill.style.transformOrigin = "left";
   bar.append(fill);
 
   row.append(big, mid, src, chip);
@@ -59,6 +64,10 @@ function stage({ n, quoted, what, share, file, when, width, tone, prov, provWhy 
   return wrap;
 }
 
+/** One mono line between two bars. The full sentence — why those tickers drop
+    out, and whether a later run could change it — is in the disclosure, word for
+    word. A bordered block for a half-sentence made the drop look like a warning
+    about the funnel rather than a step in it. */
 function drop(nText, why) {
   const d = el("div", "srch-drop");
   d.append(chromeText(nText, "the difference between two stages of the funnel"), document.createTextNode(" " + why));
@@ -73,7 +82,6 @@ export function renderFunnel(host, { symbolCount }) {
       el("h2", "cmp-h", "From every listed symbol to the frozen 120"),
       "a section heading; 120 is the corpus size",
     ),
-    el("span", "srch-note", "three numbers, three sources, three moments"),
   );
   host.append(head);
 
@@ -83,16 +91,19 @@ export function renderFunnel(host, { symbolCount }) {
       quoted: "index not read",
       provWhy: "the index size is not known until symbols.json is open",
       what: "symbols in the index",
-      share: "every listed symbol, including preferred lines, ADRs and dual classes",
+      // The sentence about preferred lines, ADRs and dual classes is in the
+      // disclosure: it explains why the number is larger than a count of
+      // companies, which is a note rather than a reading of the bar.
+      share: "",
       file: "symbols.json · 864 KB",
-      when: "on the first keystroke",
+      when: "on first keystroke",
       width: "100%",
       tone: "top",
       prov: symbolCount === null ? "not read" : "counted",
     }),
   );
   host.append(
-    drop("−5,089", "tickers whose filer has no Item 2.02 in its recent block. Nothing for M.A.P. to read, and no run would change that."),
+    drop("−5,089", "no Item 2.02 in the recent block"),
   );
   host.append(
     stage({
@@ -100,16 +111,16 @@ export function renderFunnel(host, { symbolCount }) {
       quoted: "5,309",
       provWhy: "from the export contract's funnel; no file in this export states it",
       what: "on a filer that publishes earnings 8-Ks",
-      share: "51.1% of symbols · 4,325 of 7,998 filers, which is 54.1%",
+      share: "51.1% of symbols · 4,325 of 7,998 filers · 54.1%",
       file: "filers.json · 1.2 MB",
-      when: "opened only when a hit falls outside the corpus",
+      when: "on first outside hit",
       width: "51.1%",
       tone: "mid",
       prov: "quoted",
     }),
   );
   host.append(
-    drop("−5,189", "tickers that publish the document and have not been read. Readable, outside the freeze, and not queued for anything."),
+    drop("−5,189", "publish it, not read"),
   );
   host.append(
     stage({
@@ -200,6 +211,26 @@ const REFUSALS = [
     screen with a different name. */
 export function whyGroups() {
   return [
+    {
+      title: "Find a company",
+      notes: [
+        "Matched on ticker prefix, then on company name. A term that is a whole ticker resolves " +
+          "to that ticker first.",
+        "The export is not ranked: an exact ticker comes first, then alphabetical order, because " +
+          "nothing in these files states which symbol you meant.",
+        "At most 24 outside-corpus hits are screened per term. The pre-screen answers one filer " +
+          "at a time and a broad term can match hundreds, so the screen is capped and the cap is " +
+          "stated rather than hidden behind a spinner.",
+      ],
+    },
+    {
+      title: "Exchange",
+      notes: [
+        "Not loaded, rather than unknown. A corpus row's exchange lives in symbols.json, and " +
+          "opening 864 KB to label a row is the eager cost the export splits the two files to " +
+          "avoid. The row says which it is.",
+      ],
+    },
     ...RESOLUTIONS.map((r) => ({
       title: r.title,
       meta: r.meta,
@@ -210,6 +241,18 @@ export function whyGroups() {
       title: "Refused",
       kind: "refused",
       notes: REFUSALS.map(([head, text]) => `${head} ${text}`),
+    },
+    {
+      title: "From every listed symbol",
+      notes: [
+        "10,398 is every listed symbol, including preferred lines, ADRs and dual classes. It is " +
+          "not a count of companies, which is why it is larger than any count of companies you " +
+          "will see elsewhere.",
+        "−5,089: tickers whose filer has no Item 2.02 in its recent block. Nothing for M.A.P. to " +
+          "read, and no run would change that.",
+        "−5,189: tickers that publish the document and have not been read. Readable, outside the " +
+          "freeze, and not queued for anything.",
+      ],
     },
     {
       title: "Reading the three counts",

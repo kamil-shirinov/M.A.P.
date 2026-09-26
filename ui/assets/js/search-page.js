@@ -147,7 +147,9 @@ async function onQuery(value) {
 }
 
 function paint() {
-  box.update({ phase: state.phase, searchable: state.phase === "ready" ? state.symbolCount : state.corpus.length });
+  // The counter beside the box reports the query, not the file: `matched` is
+  // null until something is typed, so an empty box shows no count at all.
+  box.update({ phase: state.phase, matched: state.query.trim() ? state.matched : null });
   renderResults($("results"), {
     phase: state.phase,
     query: state.query,

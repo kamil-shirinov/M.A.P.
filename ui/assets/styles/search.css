@@ -55,8 +55,10 @@ body > .masthead,
 .srch-group { margin-bottom: var(--sp-6); }
 .srch-group-head { display: flex; align-items: baseline; gap: var(--sp-3); margin-bottom: var(--sp-3); }
 .srch-group-count { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
-.cmp-h3[data-group="corpus"] { color: var(--accent); }
-.cmp-h3[data-group="none"], .cmp-h3[data-group="unfiled"] { color: var(--ink-2); }
+/* Group heads take the shared section voice, like every other head on the four
+   screens. The corpus group used to be blue, which made membership look like a
+   property of the HEADING rather than of the row: the 2px accent edge on the row
+   itself is where that fact belongs, and it is still there. */
 
 .srch-row {
   display: flex; align-items: baseline; gap: var(--sp-4);
@@ -148,3 +150,36 @@ body > .masthead,
 .cmp-refusals.srch-res { border-left-color: var(--down); }
 .cmp-refusals.srch-res .srch-res-kicker { color: var(--down); }
 .srch-res--counts .cmp-note strong { color: var(--ink); }
+
+/* ---- 01 · the shared pass ------------------------------------------- */
+/* Rows are separated by a hairline rather than boxed. Twenty boxes stacked read
+   as texture; one rule between each reads as a list. The corpus row keeps its
+   2px accent edge, which is the one left mark here that carries a fact. */
+.srch-row {
+  background: none; border: 0; border-radius: 0;
+  border-top: 1px solid var(--rule);
+}
+.srch-group .srch-row:first-of-type { border-top: 0; }
+.srch-row--corpus { box-shadow: inset 2px 0 0 var(--accent); }
+/* Only the corpus row navigates, so only it gets the hover. */
+.srch-row--corpus:hover { background: var(--surface); }
+.srch-row:not(.srch-row--corpus) { cursor: default; }
+
+/* The group head takes the shared section voice; the count sits beside it. */
+.srch-group-head { display: flex; align-items: baseline; gap: var(--sp-4); margin-bottom: var(--sp-3); }
+
+/* The stage card loses its block, like every other card on the four screens. */
+.srch-stage-wrap { background: none; border: 0; }
+.srch-drop {
+  border: 0; border-left: 0; padding-left: 0; margin: var(--sp-3) 0;
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3);
+}
+/* An empty share line must not leave a gap where a line used to be. */
+.srch-stage-share:empty { display: none; }
+
+.srch-cut {
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3);
+  margin-top: var(--sp-4);
+}
+/* The status line is empty in the ready phase and must take no space. */
+.srch-status:empty { display: none; }
