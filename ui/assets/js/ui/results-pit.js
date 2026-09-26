@@ -108,9 +108,12 @@ function figures(stats) {
     const dt = el("dt");
     const l = chromeText(label, "the name of the statistic; any digits in it are a threshold");
     l.className = "res-fig-label";
-    const n = chromeText(note, "the definition the statistic was computed under");
-    n.className = "res-fig-note";
-    dt.append(l, n);
+    dt.append(l);
+    if (note) {
+      const n = chromeText(note, "the definition the statistic was computed under");
+      n.className = "res-fig-note";
+      dt.append(n);
+    }
     const dd = el("dd");
     dd.append(node);
     grid.append(dt, dd);
@@ -134,11 +137,23 @@ function figures(stats) {
     } else {
       dd.append(chromeText("…", "the record is still being read"));
     }
-    row(`|z| > ${threshold}`, "z = Φ⁻¹(PIT), the definition the record was published under", dd);
+    // The definition is said once, under both rows. Under each of them it read
+    // as two different z's that happened to share a name.
+    row(`|z| > ${threshold}`, "", dd);
   }
   /* Stated, not silently absorbed into a smaller denominator: if some items had
      no finite z, the tail counts above are over fewer items than the record
      holds and the difference is the reader's to see. */
+  /* One line for both tail rows. z is not obvious and not the only defensible
+     choice — realised ÷ sigma gives 13 rather than 11 on this record — so the
+     definition ships with the counts. */
+  const zdef = el("dt", "res-figs-foot");
+  zdef.append(chromeText(
+    "z = Φ⁻¹(PIT), the definition the record was published under",
+    "the definition both tail counts were computed under",
+  ));
+  grid.append(zdef, el("dd"));
+
   if (stats?.zUndefined) {
     const dt = el("dt");
     const l = chromeText("not standardisable", "why some items are outside the tail counts");

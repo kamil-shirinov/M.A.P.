@@ -26,7 +26,10 @@ body > .masthead,
 .res-page > section,
 .res-page > div { margin-bottom: var(--sp-5); }
 
-#identity, #disclosure, #legend, .res-status { max-width: var(--measure-prose); }
+/* The head holds the same grid the charts do, so it takes the frame. Capped at
+   the prose measure it stopped short of the plots and the page had two right
+   edges. Prose still caps itself, inside. */
+#disclosure, #legend, .res-status { max-width: var(--measure-prose); }
 
 .res-card {
   background: var(--surface); border: 1px solid var(--rule);
@@ -46,11 +49,13 @@ body > .masthead,
 .res-page .res-terms-quoted [data-chrome]:first-child { border-bottom: 1px dashed var(--rule-2); }
 
 .res-legend { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-5); font-size: var(--step--1); color: var(--ink-3); margin: 0; }
-.res-legend dt { color: var(--ink-2); }
+/* The key is plain text; the SAMPLE beside it carries the mark, drawn by the
+   same [data-prov] rules the figures use. Styling the sample separately would
+   let the legend go out of step with what it describes — which is the one
+   failure a legend must not have. */
+.res-legend dt { color: var(--ink-2); display: inline-flex; align-items: baseline; gap: var(--sp-2); }
 .res-legend dd { margin: 0 var(--sp-5) 0 0; }
-.res-legend-key--derived { border-bottom: 1px dotted var(--rule-2); }
-.res-legend-key--quoted { border-bottom: 1px dashed var(--rule-2); }
-.res-legend-key--measured { color: var(--ink-num); }
+.res-legend-sample { font-family: var(--font-mono); color: var(--ink-num); }
 
 /* ---- identity ------------------------------------------------------- */
 .res-identity { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-6); flex-wrap: wrap; }
@@ -69,17 +74,30 @@ body > .masthead,
 /* Reserved even when empty: a band with no twin must not shift the block. */
 .res-twin { min-height: 1.55em; }
 
-.res-bands { display: inline-flex; border: 1px solid var(--rule-2); border-radius: var(--radius); overflow: hidden; }
+/* The nav's treatment: mono caps, the active option in --ink-num over a 1px
+   rule. A filled pill made the band switch the brightest object on a screen of
+   measurements, and the fill was the only thing marking which was active — so
+   in greyscale the two options read the same. The rule survives greyscale. */
+.res-bands { display: inline-flex; gap: var(--sp-5); }
 .res-band {
+  position: relative;
   display: flex; align-items: baseline; gap: var(--sp-3);
-  background: transparent; border: 0; border-right: 1px solid var(--rule-2);
-  padding: var(--sp-3) var(--sp-4); cursor: pointer;
-  font: inherit; font-size: var(--step--1); color: var(--ink-3);
+  background: none; border: 0; padding: var(--sp-2) 0;
+  cursor: pointer;
+  font: inherit; font-family: var(--font-mono); font-size: var(--step--1);
+  color: var(--ink-3);
+  transition: color var(--dur-1) var(--ease);
 }
-.res-band:last-child { border-right: 0; }
-.res-band:hover { color: var(--ink); background: var(--sunken); }
-.res-band[data-on="true"] { background: var(--accent-soft); color: var(--ink-num); }
-.res-band-name { letter-spacing: .06em; text-transform: uppercase; }
+.res-band::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: var(--rule-2); transform: scaleX(0);
+  transition: transform var(--dur-1) var(--ease);
+}
+.res-band:hover { color: var(--ink); }
+.res-band:hover::after { transform: scaleX(1); }
+.res-band[data-on="true"] { color: var(--ink-num); }
+.res-band[data-on="true"]::after { transform: scaleX(1); background: var(--ink-2); }
+.res-band-name { letter-spacing: .08em; text-transform: uppercase; }
 
 /* ---- rows ----------------------------------------------------------- */
 /* Row 1 wraps rather than squeezing: below about 116ch the forest plot's three
@@ -125,18 +143,19 @@ body > .masthead,
 .res-axis-better { color: var(--up); }
 .res-axis-worse { color: var(--down); }
 
-.res-row { display: grid; grid-template-columns: minmax(16ch, auto) minmax(180px, 1fr) auto; gap: var(--sp-3) var(--sp-4); align-items: center; padding: var(--sp-3) 0; }
+.res-row > summary {
+  display: grid; grid-template-columns: 1.5ch minmax(16ch, auto) minmax(180px, 1fr) auto;
+  gap: var(--sp-3) var(--sp-4); align-items: center; padding: var(--sp-3) var(--sp-2);
+}
 .res-row + .res-row { border-top: 1px solid var(--rule); }
+.res-row .row-x-body { margin-left: calc(1.5ch + var(--sp-4)); }
 .res-row-name { font-size: var(--step--1); color: var(--ink-2); }
 .res-row-means { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); text-align: right; white-space: nowrap; }
 .res-row-delta { margin-left: var(--sp-4); }
 .res-delta--worse { color: var(--down); }
 .res-delta--better { color: var(--up); }
 .res-delta--neither { color: var(--ink-2); }
-.res-row-said {
-  grid-column: 1 / -1; font-family: var(--font-mono); font-size: var(--step--1);
-  color: var(--ink-3); line-height: 1.5;
-}
+.res-row-said { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); line-height: 1.5; }
 
 .res-forest { width: 100%; height: auto; display: block; overflow: visible; }
 .res-forest-axis { stroke: var(--rule); stroke-width: 1; }
@@ -190,9 +209,11 @@ body > .masthead,
 .res-holdout > header [data-chrome] { font-size: var(--step--1); color: var(--ink-3); }
 .res-holdout-head { display: flex; align-items: baseline; gap: var(--sp-3); margin: 0; }
 .res-holdout-big { font-size: var(--step-3); font-weight: 600; }
+/* A hairline, not a fill. Every other panel on the screen lost its surface in
+   the shared pass and this one was the last filled box left. */
 .res-holdout-form {
-  margin: var(--sp-4) 0; background: var(--sunken); border: 1px solid var(--rule);
-  border-left: 2px solid var(--rule-2); border-radius: var(--radius); padding: var(--sp-4);
+  margin: var(--sp-4) 0; background: none; border: 0;
+  border-top: 1px solid var(--rule); padding: var(--sp-4) 0 0;
 }
 .res-kicker { font-size: var(--step--1); text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); margin-bottom: var(--sp-3); }
 .res-holdout-formula { font-family: var(--font-mono); color: var(--ink-num); }
@@ -205,10 +226,13 @@ body > .masthead,
 .res-terms-aside { color: var(--ink-3); }
 
 /* Dashed all round: there is nothing behind it and there never will be. */
+/* A SOLID top hairline, not a dashed box. A dashed stroke means quoted
+   everywhere else on this screen — the parsed intervals, the published figure —
+   and it cannot also mean "there is nothing behind this". */
 .res-no-scores {
   margin-top: var(--sp-4); display: flex; gap: var(--sp-4); align-items: baseline;
-  border: 1px dashed var(--rule-2); border-radius: var(--radius);
-  padding: var(--sp-3) var(--sp-4); font-size: var(--step--1); color: var(--ink-3);
+  border: 0; border-top: 1px solid var(--rule);
+  padding: var(--sp-3) 0 0; font-size: var(--step--1); color: var(--ink-3);
 }
 .res-absent { font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; margin: 0; }
 

@@ -142,12 +142,24 @@ function row(rule, baseline, stats, parsed, domain) {
   const point = figure(mapMean - baseMean, DERIVED, rule.delta);
   const verdict = parsed?.verdict ?? "neither";
 
-  const line = el("div", "res-row");
+  /* An expandable row, per the shared system §8. The record's sentence is the
+     authority for the verdict and it is long — six of them stacked was most of
+     this panel's height, and a reader comparing two rows had to scroll past a
+     paragraph to reach the next one. Closed by default, and several can be open
+     at once.
+
+     WHAT THE CLOSED ROW MUST STILL CARRY, without the sentence and in
+     greyscale: whether the interval crosses zero. It is the dashed bar against
+     the zero rule, which is visible whether or not the row is open and whether
+     or not the colour survives. */
+  const line = el("details", "res-row row-x");
   line.dataset.verdict = verdict;
   line.dataset.baseline = baseline;
 
-  line.append(el("div", "res-row-name", baseline.replace(/_/g, " ")));
-  line.append(plot(point.value, parsed?.interval, domain, verdict));
+  const summary = document.createElement("summary");
+  summary.append(el("span", "row-x-caret", "\u25b8"));
+  summary.append(el("div", "res-row-name", baseline.replace(/_/g, " ")));
+  summary.append(plot(point.value, parsed?.interval, domain, verdict));
 
   const means = el("div", "res-row-means");
   const deltaCell = el("span", "res-row-delta");
@@ -158,14 +170,17 @@ function row(rule, baseline, stats, parsed, domain) {
     renderFigure(figure(baseMean, DERIVED, rule.places)),
     deltaCell,
   );
-  line.append(means);
+  summary.append(means);
+  line.append(summary);
 
   /* The record's own sentence, verbatim and full width. It is already written
      and already hedged; rewording it to fit a column is how "indistinguishable,
      and this is not evidence of no difference" becomes "no difference". */
+  const body = el("div", "row-x-body");
   const said = chromeText(parsed?.line ?? "No summary line for this baseline in the record.", "the record's own summary sentence, verbatim");
   said.className = "res-row-said";
-  line.append(said);
+  body.append(said);
+  line.append(body);
   return line;
 }
 

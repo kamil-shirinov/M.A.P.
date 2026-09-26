@@ -340,8 +340,12 @@ describe("the tail counts, and which z they use", { skip: !HAVE }, () => {
     const shown = byClass(ctx.roots.pit, "res-tail").map((n) => n.textContent);
     assert.equal(shown.length, 2);
     for (const line of shown) assert.match(line, /of 175/, "a bare count reads as a contradiction");
-    const labels = byClass(ctx.roots.pit, "res-fig-note").map((n) => n.textContent);
-    assert.ok(labels.some((l) => /Φ⁻¹\(PIT\)/.test(l)), "the definition is on the page, not only in the code");
+    /* The definition is stated ONCE, under both rows, rather than repeated under
+       each — where it read as two different z's that happened to share a name.
+       It is still on the page: that is the assertion, not where it sits. */
+    assert.match(ctx.roots.pit.textContent, /z = Φ⁻¹\(PIT\)/, "the definition is on the page");
+    const repeats = ctx.roots.pit.textContent.match(/z = Φ⁻¹\(PIT\)/g) ?? [];
+    assert.equal(repeats.length, 1, "and said once");
   });
 
   it("refuses a PIT outside the open interval rather than inventing a z", async () => {

@@ -155,7 +155,16 @@ function renderLegend() {
   ]) {
     const dt = document.createElement("dt");
     dt.className = `res-legend-key res-legend-key--${key}`;
-    dt.textContent = key;
+    /* A SAMPLE of the stroke, not a swatch of colour. The three marks are
+       plain, dotted and dashed underlines; a legend that named them without
+       showing one is a legend a reader has to take on trust. The sample carries
+       the real `data-prov`, so it is drawn by the same rule the figures are. */
+    const sample = document.createElement("span");
+    sample.className = "res-legend-sample";
+    sample.dataset.prov = key;
+    sample.dataset.chrome = "a sample of the mark this word names";
+    sample.textContent = "0.000";
+    dt.append(sample, document.createTextNode(` ${key}`));
     const dd = document.createElement("dd");
     dd.textContent = what;
     dl.append(dt, dd);
