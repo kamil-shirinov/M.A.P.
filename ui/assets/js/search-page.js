@@ -61,12 +61,9 @@ function orderFor(term) {
 /** Corpus matches come from the 7.5 KB file in memory, so they resolve in every
     phase — including before the index has been requested. */
 function corpusMatches(term) {
-  return state.corpus
-    .filter((row) => {
-      const name = source.isAbsent(row.name) ? "" : row.name;
-      return row.ticker.startsWith(term) || name.toUpperCase().includes(term);
-    })
-    .sort(orderFor(term));
+  // The boundary's rule, not a second copy of it: two copies would let the two
+  // lists disagree about what matched, which is what the count reconciles.
+  return state.corpus.filter((row) => source.matchesTerm(row, term)).sort(orderFor(term));
 }
 
 async function group(term) {
@@ -82,7 +79,7 @@ async function group(term) {
   if (state.phase !== "ready") return { groups, matched: corpus.length, screened: corpus.length };
 
   const held = new Set(state.corpus.map((r) => r.ticker));
-  const { rows, matched } = await source.searchSymbols(term, { limit: Infinity });
+  const { rows } = await source.searchSymbols(term, { limit: Infinity });
   const outside = rows.filter((r) => !held.has(r.ticker)).sort(orderFor(term));
   const slice = outside.slice(0, SCREEN_CAP);
 
@@ -95,9 +92,10 @@ async function group(term) {
     else groups.none.push(entry);
   });
 
+  // The union of the two lists, keyed on ticker. See `countMatches`.
   return {
     groups,
-    matched: (matched ?? rows.length) + corpus.length - 0,
+    matched: source.countMatches(rows, corpus),
     screened: corpus.length + slice.length,
   };
 }

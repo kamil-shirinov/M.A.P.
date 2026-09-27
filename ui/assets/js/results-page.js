@@ -79,7 +79,7 @@ function paint() {
   const waiting = `Reading the ${state.band} record — ${fmt.kb(sizeOf(meta))}…`;
 
   if (meta) {
-    renderIdentity($("identity"), {
+    renderIdentity($("res-identity"), {
       meta,
       record: here?.record ?? null,
       stats: here?.stats ?? null,

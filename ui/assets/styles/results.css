@@ -30,6 +30,10 @@ body > .masthead,
    the prose measure it stopped short of the plots and the page had two right
    edges. Prose still caps itself, inside. */
 #disclosure, #legend, .res-status { max-width: var(--measure-prose); }
+/* NOT `#identity`. company.css caps that id at the prose measure, and this page
+   loads company.css — the same collision that once made the runs header narrow
+   and was fixed there by renaming to `#runs-identity`. The head holds the same
+   grid the charts do and has to reach the same right edge. */
 
 .res-card {
   background: var(--surface); border: 1px solid var(--rule);

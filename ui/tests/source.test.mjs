@@ -269,6 +269,58 @@ describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () =>
     assert.equal(all.rows.length, matched);
   });
 
+  it("counts a term that matches one corpus company as one", async () => {
+    /* THE DEFECT THIS PINS. The index holds every listed symbol, including the
+       120 the corpus froze, so a corpus company is a hit in BOTH lists. The
+       screen added the two totals: AAPL matched one company and reported 2,
+       TSLA the same, and TSL matched four and reported 5 — always one too many
+       per corpus company.
+
+       Neither the style probe nor the provenance audit can see this. The number
+       was marked, derived and correctly rendered; it just disagreed with the
+       rows underneath it. Only counting the same thing a second way catches it. */
+    stubFetch();
+    const s = await load();
+    const corpus = (await s.listCorpusCompanies()).rows;
+
+    for (const [term, expected] of [["AAPL", 1], ["TSLA", 1], ["TSL", 4]]) {
+      const { rows } = await s.searchSymbols(term, { limit: Infinity });
+      const hits = corpus.filter((row) => s.matchesTerm(row, term));
+      assert.equal(hits.length, 1, `${term} matches exactly one corpus company`);
+
+      const counted = s.countMatches(rows, hits);
+      assert.equal(counted, expected, `${term} reports ${expected}`);
+      // And it is never more than the rows a reader can count on the screen.
+      assert.equal(counted, new Set([...rows, ...hits].map((r) => r.ticker)).size);
+      // The old arithmetic, pinned as wrong so the fix cannot be undone quietly.
+      assert.equal(rows.length + hits.length, expected + 1, `${term} summed to one too many`);
+    }
+  });
+
+  it("counts a corpus company the index does not hold", async () => {
+    /* All 120 corpus companies are in this export's index, which is a property
+       of the export rather than a guarantee — one frozen before the index was
+       last synced would be in the corpus and not the index. Subtracting the
+       corpus count from the index count would lose it; a set does not. */
+    const s = await load();
+    const index = [{ ticker: "AAA", name: "A" }, { ticker: "AAB", name: "B" }];
+    const corpusOnly = [{ ticker: "ZZZ", name: "Frozen before the sync" }];
+    assert.equal(s.countMatches(index, corpusOnly), 3);
+    assert.equal(s.countMatches(index, [{ ticker: "AAA", name: "A" }]), 2, "an overlap counts once");
+    assert.equal(s.countMatches([], []), 0);
+  });
+
+  it("applies one matching rule to both lists", async () => {
+    const s = await load();
+    assert.equal(s.matchesTerm({ ticker: "AAPL", name: "Apple Inc." }, "AAP"), true, "ticker prefix");
+    assert.equal(s.matchesTerm({ ticker: "MSFT", name: "Apple Inc." }, "APPLE"), true, "name anywhere");
+    assert.equal(s.matchesTerm({ ticker: "MSFT", name: "Microsoft" }, "AAPL"), false);
+    // A name may be an absence, not a string: universe.json carries null when
+    // the symbol index was not exported.
+    assert.equal(s.matchesTerm({ ticker: "AAPL", name: s.absent("not-computed", "no index") }, "AAP"), true);
+    assert.equal(s.matchesTerm({ ticker: "MSFT", name: s.absent("not-computed", "no index") }, "APPLE"), false);
+  });
+
   it("knows the index size even for an empty query", async () => {
     stubFetch();
     const s = await load();

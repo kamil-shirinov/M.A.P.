@@ -105,10 +105,10 @@ const PAGES = [
      in it, because the first row in a group deliberately has no rule above it.
      On "AAPL" the corpus group holds one row and the check read its own special
      case as a failure. */
-  { url: "index.html", type: "A", checks: ["shell", "search"] },
-  { url: "company.html?ticker=AAPL", checks: ["shell", "journalRows"] },
+  { url: "index.html", type: "A", checks: ["shell", "search", "oneRing"] },
+  { url: "company.html?ticker=AAPL", checks: ["shell", "journalRows", "table"] },
   { url: "runs.html", checks: ["shell", "journalRows", "cardSurface"] },
-  { url: "results.html", checks: ["shell", "cardSurface", "expandRows"] },
+  { url: "results.html", checks: ["shell", "cardSurface", "expandRows", "headWidth"] },
 ];
 
 /** Run inside the page. Returns raw readings; the assertions are outside, so a
@@ -146,6 +146,57 @@ function readPage() {
      its middle. Three zero lines at three x is not a forest plot. */
   const plotLefts = [...document.querySelectorAll(".res-plot")]
     .map((el) => Math.round(el.getBoundingClientRect().left));
+
+  const left = (sel) => {
+    const el = document.querySelector(sel);
+    return el ? Math.round(el.getBoundingClientRect().left) : null;
+  };
+  const right = (sel) => {
+    const el = document.querySelector(sel);
+    return el ? Math.round(el.getBoundingClientRect().right) : null;
+  };
+
+  /* The disclosure sits in the page frame like every other section. On two
+     screens it was a sibling of <main> rather than a child, so it never got the
+     gutter and its caret sat on the screen edge. */
+  const gutter = {
+    why: left(".page-why"),
+    section: left("main > section, main > div"),
+  };
+
+  /* The results head holds the same grid the charts do. It was `id="identity"`,
+     which company.css caps at the prose measure — the same collision that once
+     made the runs header narrow — so it stopped 236px short of the plots. */
+  const frame = { head: right("#res-identity .res-identity"), grid: right(".res-row-1") };
+
+  /* A table's header and its cells share a left edge. components.css
+     right-aligns every td as a default for numeric tables, and this one holds
+     dates, bands, accession numbers and ids. */
+  const firstRow = document.querySelector(".cmp-table tbody tr");
+  const table = firstRow && {
+    th: [...document.querySelectorAll(".cmp-table th")].map((t) => Math.round(t.getBoundingClientRect().left)),
+    td: [...firstRow.children].map((t) => Math.round(t.getBoundingClientRect().left)),
+    tdAlign: [...firstRow.children].map((t) => getComputedStyle(t).textAlign),
+  };
+
+  /* ONE focus ring. The box draws it; the input inside it must not draw a
+     second, or one control reads as two. */
+  /* The VISIBLE box. index.html keeps the door in the DOM and hides it with
+     CSS, and the door's markup comes first — so a plain querySelector focused a
+     `display: none` input, which can never match :focus-visible and so could
+     never show a second ring. The check passed by testing nothing. */
+  const boxInput = [...document.querySelectorAll(".srch-box input, .door-box input")]
+    .find((el) => el.getClientRects().length > 0) ?? null;
+  let ring = null;
+  if (boxInput) {
+    boxInput.focus();
+    const box = boxInput.closest(".srch-box, .door-box");
+    ring = {
+      inputOutline: getComputedStyle(boxInput).outlineStyle,
+      inputBorder: getComputedStyle(boxInput).borderStyle,
+      boxBorder: getComputedStyle(box).borderStyle,
+    };
+  }
   const srow = cs(".srch-row:not(:first-of-type)");
   const srowCount = document.querySelectorAll(".srch-row").length;
 
@@ -163,7 +214,7 @@ function readPage() {
     tag: tag && { fontFamily: tag.fontFamily, borderTopWidth: tag.borderTopWidth, borderTopStyle: tag.borderTopStyle },
     row: row && { gridTemplateColumns: row.gridTemplateColumns, display: row.display, backgroundColor: row.backgroundColor },
     card: card && { backgroundColor: card.backgroundColor, borderTopWidth: card.borderTopWidth },
-    plotLefts,
+    plotLefts, gutter, frame, table, ring,
     summary: summary && { display: summary.display, gridTemplateColumns: summary.gridTemplateColumns },
     srowCount,
     srow: srow && { borderTopStyle: srow.borderTopStyle, backgroundColor: srow.backgroundColor },
@@ -216,6 +267,35 @@ function assertShell(page, r) {
     "a mono stack", r.tag?.fontFamily ?? "no .tag on this page");
   ok(page, "tag has a 1px solid border", r.tag?.borderTopWidth === "1px" && r.tag?.borderTopStyle === "solid",
     "1px solid", `${r.tag?.borderTopWidth} ${r.tag?.borderTopStyle}`);
+
+  // The disclosure is in the frame, not beside it.
+  ok(page, "the disclosure shares the page gutter", r.gutter.why !== null && r.gutter.why === r.gutter.section,
+    `left ${r.gutter.section} (a section's)`, `left ${r.gutter.why}`);
+}
+
+function assertHeadWidth(page, r) {
+  ok(page, "the head reaches the chart grid's right edge", r.frame.head !== null && r.frame.head === r.frame.grid,
+    `right ${r.frame.grid} (the grid's)`, `right ${r.frame.head}`);
+}
+
+function assertTable(page, r) {
+  ok(page, "the filings table has rows to check", r.table !== null, "a tbody row", "none");
+  if (!r.table) return;
+  ok(page, "every header sits on its column", String(r.table.th) === String(r.table.td),
+    `th lefts ${r.table.th}`, `td lefts ${r.table.td}`);
+  ok(page, "cells read from the left, like their headers",
+    r.table.tdAlign.every((a) => a === "left" || a === "start"),
+    "every cell left", r.table.tdAlign.join(", "));
+}
+
+function assertOneRing(page, r) {
+  ok(page, "the search box has an input to focus", r.ring !== null, "an input in the box", "none");
+  if (!r.ring) return;
+  // The BOX is the control. Two rings on one control read as two controls.
+  ok(page, "the input draws no second ring", r.ring.inputOutline === "none" && r.ring.inputBorder === "none",
+    "no outline and no border on the input",
+    `outline ${r.ring.inputOutline}, border ${r.ring.inputBorder}`);
+  ok(page, "the box draws the ring", r.ring.boxBorder === "solid", "solid", r.ring.boxBorder);
 }
 
 function assertJournalRows(page, r) {
@@ -263,7 +343,8 @@ function assertSearch(page, r) {
 
 const ASSERTIONS = {
   shell: assertShell, journalRows: assertJournalRows, cardSurface: assertCardSurface,
-  expandRows: assertExpandRows, search: assertSearch,
+  expandRows: assertExpandRows, search: assertSearch, headWidth: assertHeadWidth,
+  table: assertTable, oneRing: assertOneRing,
 };
 
 /** A token's value as the browser reports a length: `0.75rem` is not `12px`, and

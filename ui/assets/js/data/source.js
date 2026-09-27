@@ -175,6 +175,39 @@ export async function listCorpusCompanies() {
   };
 }
 
+/** THE matching rule, in one place.
+
+    Ticker prefix first, then company name anywhere. The search screen applies it
+    to the 120 corpus companies it holds in memory and this module applies it to
+    the 10,398-row index; two copies of it would let the two sets disagree about
+    what matched, which is precisely the question `countMatches` below answers.
+
+    `term` is expected uppercase — the caller normalises once rather than per
+    row, across 10,398 of them. */
+export function matchesTerm(row, term) {
+  if (row.ticker.startsWith(term)) return true;
+  const name = row.name;
+  if (!name || isAbsent(name)) return false;
+  return name.toUpperCase().includes(term);
+}
+
+/** How many DISTINCT symbols a term matched, across both sources.
+
+    The index holds every listed symbol INCLUDING the 120 the corpus froze, so a
+    corpus hit is a hit in both lists and adding the two totals counted it twice:
+    AAPL matched one company and reported 2, TSL matched four and reported 5.
+
+    Not `index − corpus` either. That would assume every corpus company is in the
+    index — all 120 are in this export, which is a property of it rather than a
+    guarantee, since a company frozen before the index was last synced would be
+    in one and not the other. A set over the tickers is right either way. */
+export function countMatches(symbolRows, corpusRows) {
+  const seen = new Set();
+  for (const row of symbolRows) seen.add(row.ticker);
+  for (const row of corpusRows) seen.add(row.ticker);
+  return seen.size;
+}
+
 /** The full searchable index, lazily. 10,398 rows, 864 KB — fetch it on the
     first keystroke, not at boot. */
 export async function searchSymbols(query, { limit = 20 } = {}) {
@@ -184,9 +217,7 @@ export async function searchSymbols(query, { limit = 20 } = {}) {
   // The index is open either way, so its size is knowable even for an empty
   // query. That is what lets the box stop saying "index not read".
   if (!needle) return { rows: [], matched: 0, indexSize: rows.length, provenance: MEASURED };
-  const hits = rows.filter(
-    (r) => r.ticker.startsWith(needle) || r.name.toUpperCase().includes(needle),
-  );
+  const hits = rows.filter((r) => matchesTerm(r, needle));
   return {
     // `limit: Infinity` returns every hit, for a caller that groups them by
     // resolution before cutting each group.

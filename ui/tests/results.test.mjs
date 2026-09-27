@@ -536,7 +536,11 @@ describe("the page, its nav and its files", () => {
 
   it("gives every section the page mounts a host", () => {
     const html = file("results.html");
-    for (const id of ["identity", "pit", "baselines", "leakage", "direction", "holdout", "status", "disclosure", "legend", "footer", "masthead-nav"]) {
+    /* `res-identity`, not `identity`: company.css caps that id at the prose
+       measure and this page loads it, which held the head 236px short of the
+       chart grid. The runs screen hit the same collision and was renamed for the
+       same reason. */
+    for (const id of ["res-identity", "pit", "baselines", "leakage", "direction", "holdout", "status", "disclosure", "legend", "footer", "masthead-nav"]) {
       assert.match(html, new RegExp(`id="${id}"`), `results.html has #${id}`);
     }
     assert.match(html, /assets\/js\/results-page\.js/);

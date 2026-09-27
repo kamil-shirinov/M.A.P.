@@ -39,7 +39,7 @@ export function renderScoring(root, { scoring, company }) {
 
   if (clean) {
     list.append(scoreRow([
-      chromeText(`${clean.band} · development`, "the band and split this record covers"),
+      chromeText(`${clean.band} · development · `, "the band and split this record covers"),
       renderFigure(figure(clean.n, MEASURED, "int")),
       chromeText(" items", "how many items were scored"),
       chromeText(` · code ${clean.forecast_digest.slice(0, 8)}`, "an abbreviated forecast digest"),

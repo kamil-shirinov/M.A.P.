@@ -140,7 +140,15 @@
   letter-spacing: .1em; color: var(--ink-3); font-weight: 500;
   padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-2);
 }
-.cmp-table td { padding: var(--sp-3); border-bottom: 1px solid var(--rule); vertical-align: top; font-family: var(--font-mono); }
+/* LEFT, matching the header. components.css right-aligns every td — a sensible
+   default for a table of quantities, and wrong for this one: a filing date, a
+   band, an accession number and a run id are all strings read from the left, and
+   none of them is compared by magnitude. `.cmp-table th` had already been pulled
+   back to left and the cells had not, so each header sat away from its column. */
+.cmp-table td {
+  padding: var(--sp-3); border-bottom: 1px solid var(--rule);
+  vertical-align: top; font-family: var(--font-mono); text-align: left;
+}
 .cmp-band { color: var(--ink-2); }
 .cmp-row--unrun td { background: var(--sunken); }
 /* Attempted, settled, no forecast -- a terminal failure. This one earns amber. */
