@@ -357,3 +357,36 @@ describe("search counts, against the real export", () => {
     }
   });
 });
+
+describe("a missing price series says which absence it is", () => {
+  itNeedsExport("names the snapshot when the export carries prices", async () => {
+    stubFetch();
+    const s = await load();
+    // A corpus company with no file of its own. The full export has a window for
+    // all 120, so this is the shape of the message rather than a live case.
+    const missing = await s.getPriceSeries("ZZZZ");
+    assert.ok(s.isAbsent(missing));
+    assert.match(missing.why, /snapshot held no window/);
+  });
+
+  it("repeats the export's own words when prices were left out on purpose", async () => {
+    /* `map export --no-prices` builds the published copy. A page that then said
+       "the snapshot held no window for it" would be stating a cause that is not
+       the cause — the snapshot had one, and the export chose not to ship it.
+       Two different absences must not share one message. */
+    const REASON = "the per-company price series were not exported; each company page states the absence";
+    globalThis.fetch = async (path) => {
+      const name = String(path).replace(/^assets\/export\//, "");
+      if (name === "manifest.json") {
+        return { status: 200, ok: true, json: async () => ({ absent: [{ what: "prices", reason: REASON }] }) };
+      }
+      return { status: 404, ok: false };
+    };
+    const s = await load();
+    const missing = await s.getPriceSeries("AAPL");
+    assert.ok(s.isAbsent(missing));
+    assert.match(missing.why, /were not exported/);
+    assert.ok(!/snapshot held no window/.test(missing.why), "not the other reason");
+    assert.match(missing.why, /AAPL/, "and it names the company");
+  });
+});

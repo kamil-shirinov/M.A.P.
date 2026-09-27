@@ -701,6 +701,7 @@ uv run map export --out ./export   # somewhere else, for a diff
 | Flag | Default | What it does |
 |---|---|---|
 | `--out` | `ui/assets/export` | Directory to write into. The default is where the front end reads. |
+| `--no-prices` | off | Omit the per-company price series. The journal's own anchor and outcome closes stay; only the daily bars behind the company chart are left out. See `docs/publishing.md`. |
 | `--check` | off | Compare an existing export against this checkout. Writes nothing. |
 | `--snapshot` | `2026-09-05` | Price vintage the series and outcomes are read from. |
 | `--frozen` · `--ledger-path` · `--runs-dir` · `--scores-dir` | repo paths | The inputs. |
@@ -768,6 +769,13 @@ DOM stub — so it needs nothing installed that the Python side does not already
 Its tests read `ui/assets/export/`, which is generated and gitignored, and **skip
 themselves when it is absent**. A fresh clone therefore passes both suites and exercises
 the front end on nothing; `uv run map export` is what makes those assertions real.
+
+### Showing it to someone
+
+A clone **cannot** regenerate the export — `var/` is not committed — so a reviewer who
+clones sees the No-export panel. `scripts/build_site.sh` assembles a servable copy into
+`site/` and stops; it does not deploy. `docs/publishing.md` covers what the copy
+contains, what `--no-prices` leaves out, and what remains third-party either way.
 
 ### The CSS blind spot, and the probe that closes it
 

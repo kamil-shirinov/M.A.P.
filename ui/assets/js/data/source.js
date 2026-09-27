@@ -470,6 +470,18 @@ function adaptOutcome(run, spot) {
 export async function getPriceSeries(ticker) {
   const series = await readJson(`prices/${ticker}.json`);
   if (series === null) {
+    /* WHICH absence. A missing file has two quite different causes and the page
+       must not guess: the snapshot may have held no window for this company, or
+       the series may have been left out of the export on purpose — which is what
+       `map export --no-prices` does for a published copy.
+
+       The export says which. Reaching for the manifest's own words here is the
+       difference between a stated absence and a plausible one. */
+    const { manifest } = await getExportState();
+    const stated = (manifest?.absent ?? []).find((a) => a.what === "prices");
+    if (stated?.reason) {
+      return absent(NOT_COMPUTED, `no series for ${ticker}: ${stated.reason}`);
+    }
     return absent(
       NOT_COMPUTED,
       `the ${ticker} series is not in this export — the snapshot held no window for it`,

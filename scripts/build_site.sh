@@ -53,11 +53,8 @@ uv run pytest -q >/dev/null
 node --test ui/tests/*.test.mjs >/dev/null
 echo "    python and front end pass"
 
-echo "==> export into the working copy"
-uv run map export $PRICES >/dev/null
-echo "    $(du -sh ui/assets/export | cut -f1) at ui/assets/export"
-
 echo "==> computed styles, in a browser"
+# Against the working copy, which is the one a developer has been looking at.
 # Skips itself (exit 2) when Playwright is not installed; a build should not
 # depend on it, but it should use it when it is there.
 set +e
@@ -77,7 +74,25 @@ mkdir -p "$OUT"
 # screenshots: this is the thing a stranger loads, not the thing we work in.
 cp ui/*.html "$OUT/"
 cp -R ui/assets "$OUT/assets"
-rm -rf "$OUT/assets/export/.DS_Store"
+rm -rf "$OUT/assets/export" "$OUT/assets/.DS_Store"
+
+# A FRESH DIRECTORY, not the working copy.
+#
+# Two reasons, both learned the hard way. `map export` writes the files it has
+# and never removes ones it did not: exporting --no-prices over a full export
+# left 120 stale price files on disk beside a manifest that said they were not
+# exported. And exporting into `ui/assets/export` would replace whatever the
+# developer had been working against, which a build has no business doing.
+echo "==> export into $OUT/assets/export"
+uv run map export $PRICES --out "$OUT/assets/export" >/dev/null
+echo "    $(du -sh "$OUT/assets/export" | cut -f1)"
+
+# The manifest and the directory must agree. This is the check that would have
+# caught the stale-files case above.
+if [ -n "$PRICES" ] && [ -d "$OUT/assets/export/prices" ]; then
+  echo "    refusing: --no-prices was asked for and prices/ exists" >&2
+  exit 1
+fi
 
 cat > "$OUT/robots.txt" <<'EOF'
 # A research artifact, not a publication. Not for indexing.
