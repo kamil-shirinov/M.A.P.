@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { before, describe, it } from "node:test";
+import { HAVE_EXPORT, itNeedsExport } from "./needs-export.mjs";
 
 const EXPORT = new URL("../assets/export/", import.meta.url);
 const HAVE = existsSync(new URL("manifest.json", EXPORT));
@@ -134,10 +135,11 @@ async function build({ filters = { ticker: null, relation: "all", outcome: "all"
   return { roots, rows, filtered, unrun, source, universe, counts, manifest: state.manifest };
 }
 
-describe("the runs screen, against the real export", { skip: !HAVE }, () => {
-  before(async () => { ctx = await build(); });
+describe("the runs screen, against the real export", () => {
+  // A hook is not a test and cannot be skipped, so it declines on its own.
+  before(async () => { if (HAVE_EXPORT) ctx = await build(); });
 
-  it("totals the four files and reads each of them separately", () => {
+  itNeedsExport("totals the four files and reads each of them separately", () => {
     const rows = ctx.manifest.runs.rows;
     const total = SOURCES.reduce((n, s) => n + rows[s], 0);
     const shown = byClass(ctx.roots.identity, "runs-total")[0].textContent;
@@ -147,19 +149,19 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     assert.ok(!fetched.some((f) => /runs\.json|all\.json/.test(f)), "there is no combined file to read");
   });
 
-  it("never prints the ledger's item count anywhere", () => {
+  itNeedsExport("never prints the ledger's item count anywhere", () => {
     for (const [name, root] of Object.entries(ctx.roots)) {
       assert.ok(!root.textContent.includes("709"), `${name} prints 709, which counts corpus items and not runs`);
     }
   });
 
-  it("marks every number on screen, with the journal fully expanded", () => {
+  itNeedsExport("marks every number on screen, with the journal fully expanded", () => {
     for (const [name, root] of Object.entries(ctx.roots)) {
       assert.deepEqual(unmarked(root), [], `${name} has unmarked numbers`);
     }
   });
 
-  it("labels nothing a score except the two statements that say there is none", () => {
+  itNeedsExport("labels nothing a score except the two statements that say there is none", () => {
     const hits = [...walk(ctx.roots.journal)].filter((n) => /score/i.test(n._text ?? ""));
     for (const node of hits) {
       const text = node._text;
@@ -172,7 +174,7 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     }
   });
 
-  it("shows the ratio and no realised figure on every re-based row", () => {
+  itNeedsExport("shows the ratio and no realised figure on every re-based row", () => {
     const drifted = ctx.rows.filter((r) => !ctx.source.isAbsent(r.anchor_drift));
     assert.equal(drifted.length, 9);
     const rendered = byClass(ctx.roots.journal, "runs-row").filter((r) => r.dataset.drift === "true");
@@ -188,7 +190,7 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     }
   });
 
-  it("carries the filing date from the ledger on every panel row", () => {
+  itNeedsExport("carries the filing date from the ledger on every panel row", () => {
     const panel = ctx.rows.filter((r) => r.corpus_relation === "ledger_item");
     assert.equal(panel.length, 701);
     const sameAsAnchor = panel.filter((r) => r.ledger_item.filing_date === r.anchor_date);
@@ -204,14 +206,14 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     assert.equal(checked, 701);
   });
 
-  it("lists the filings that never ran, each linking to its company page", () => {
+  itNeedsExport("lists the filings that never ran, each linking to its company page", () => {
     assert.equal(ctx.unrun.length, 8);
     const cells = byClass(ctx.roots.unrun, "runs-cell");
     assert.equal(cells.length, 8);
     for (const cell of cells) assert.match(cell.href, /^company\.html\?ticker=[A-Z.]+$/);
   });
 
-  it("counts facet options by what choosing them would show", async () => {
+  itNeedsExport("counts facet options by what choosing them would show", async () => {
     const { matches } = await load("ui/runs-filters.js");
     const filters = { ticker: null, relation: "repeat_of_exhibit", outcome: "all", freeze: "all" };
     const one = await build({ filters });
@@ -222,7 +224,7 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     assert.match(closed.textContent, new RegExp(`${expected}$`), "the count is cross-filtered, not the raw total");
   });
 
-  it("renders a zero-count option disabled rather than hiding it", async () => {
+  itNeedsExport("renders a zero-count option disabled rather than hiding it", async () => {
     const one = await build({ filters: { ticker: null, relation: "repeat_of_exhibit", outcome: "all", freeze: "all" } });
     const opts = byClass(one.roots.journal, "runs-opt");
     const open = opts.find((o) => o.textContent.startsWith("window open"));
@@ -231,7 +233,7 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     assert.equal(open.title, "No run in this export has this value");
   });
 
-  it("keeps an open row open across a filter change, by run id", async () => {
+  itNeedsExport("keeps an open row open across a filter change, by run id", async () => {
     const target = ctx.rows.find((r) => r.corpus_relation === "repeat_of_exhibit");
     const before = await build({ openRows: new Set([target.run_id]) });
     assert.equal(byClass(before.roots.journal, "runs-detail").length, 1);
@@ -244,14 +246,14 @@ describe("the runs screen, against the real export", { skip: !HAVE }, () => {
     assert.equal(byClass(after.roots.journal, "runs-detail").length, 1);
   });
 
-  it("states the convention of the realised number it actually shows", () => {
+  itNeedsExport("states the convention of the realised number it actually shows", () => {
     const text = ctx.roots.journal.textContent;
     assert.match(text, /a log return, shown as the simple return it equals/);
   });
 });
 
-describe("the runs screen's own boundary", { skip: !HAVE }, () => {
-  it("returns four keys and no combined array", async () => {
+describe("the runs screen's own boundary", () => {
+  itNeedsExport("returns four keys and no combined array", async () => {
     installDom();
     const source = await load("data/source.js");
     const journal = await source.listJournal();
@@ -260,7 +262,7 @@ describe("the runs screen's own boundary", { skip: !HAVE }, () => {
     assert.equal(journal.bySource.unknown.length, read("manifest.json").runs.rows.unknown);
   });
 
-  it("states an unrecorded freeze version as absent, not as a blank", async () => {
+  itNeedsExport("states an unrecorded freeze version as absent, not as a blank", async () => {
     installDom();
     const source = await load("data/source.js");
     const journal = await source.listJournal();
@@ -269,7 +271,7 @@ describe("the runs screen's own boundary", { skip: !HAVE }, () => {
     assert.match(unrecorded[0].freeze_version.why, /predates the field/);
   });
 
-  it("names the provider and the adjustment basis in the outcome sentence", async () => {
+  itNeedsExport("names the provider and the adjustment basis in the outcome sentence", async () => {
     installDom();
     const source = await load("data/source.js");
     const journal = await source.listJournal();

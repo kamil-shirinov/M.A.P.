@@ -306,3 +306,7 @@ a.cmp-score-row:hover .cmp-score-go { color: var(--accent); }
   flex: 1 0 100%; margin-top: var(--sp-2); padding-top: var(--sp-2);
   border-top: 1px solid var(--rule); color: var(--ink-3);
 }
+
+/* A name the export does not carry. Italic and quiet, like every other stated
+   absence on the page — never the ticker printed twice. */
+.page-title-absent { font-style: italic; color: var(--ink-3); font-size: var(--step-2); }

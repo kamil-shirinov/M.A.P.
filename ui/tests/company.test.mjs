@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { before, describe, it } from "node:test";
+import { HAVE_EXPORT, itNeedsExport } from "./needs-export.mjs";
 
 const EXPORT = new URL("../assets/export/", import.meta.url);
 const HAVE = existsSync(new URL("manifest.json", EXPORT));
@@ -138,9 +139,9 @@ async function renderCompany(ticker, { openRuns = true } = {}) {
   return { roots, company, runs, source, why: whyRoot.textContent };
 }
 
-describe("company page, against the real export", { skip: !HAVE }, () => {
+describe("company page, against the real export", () => {
   for (const ticker of ["ACHC", "ATI", "AAPL"]) {
-    it(`${ticker}: every number on screen is marked`, async () => {
+    itNeedsExport(`${ticker}: every number on screen is marked`, async () => {
       const { roots } = await renderCompany(ticker);
       for (const [name, root] of Object.entries(roots)) {
         assert.deepEqual(unmarkedNumbers(root), [], `${ticker}/${name} has unmarked numbers`);
@@ -148,7 +149,7 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     });
   }
 
-  it("ACHC is the plain page: no drift, no repeat, no open window", async () => {
+  itNeedsExport("ACHC is the plain page: no drift, no repeat, no open window", async () => {
     const { runs, source } = await renderCompany("ACHC");
     const rows = Object.values(runs.bySource).flat();
     assert.equal(rows.length, 6);
@@ -157,7 +158,7 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.ok(rows.every((r) => source.isAbsent(r.anchor_drift)));
   });
 
-  it("ATI shows a repeat whose panel run does not exist", async () => {
+  itNeedsExport("ATI shows a repeat whose panel run does not exist", async () => {
     const { roots, company } = await renderCompany("ATI");
     const text = roots.runs.textContent;
     assert.match(text, /whose panel run does not exist/);
@@ -167,7 +168,7 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.equal(company.filings.filter((f) => !f.ran).length, 2);
   });
 
-  it("AAPL shows drift and an open window, and keeps the outcome", async () => {
+  itNeedsExport("AAPL shows drift and an open window, and keeps the outcome", async () => {
     const { roots } = await renderCompany("AAPL");
     const text = roots.runs.textContent;
     assert.match(text, /re-based since this run/);
@@ -182,7 +183,7 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.match(text, /not part of any published score/);
   });
 
-  it("no run is both drifted and open, so that drift tail never renders", async () => {
+  itNeedsExport("no run is both drifted and open, so that drift tail never renders", async () => {
     // The spec gives the drift block two tails, one for a closed outcome and one
     // for an open window. All 9 drifted runs are closed and both open runs are
     // undrifted, so the open-window tail is unreachable against this export. The
@@ -196,7 +197,7 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
       .every((r) => source.isAbsent(r.anchor_drift)));
   });
 
-  it("refuses the two renderings, in the disclosure rather than silently", async () => {
+  itNeedsExport("refuses the two renderings, in the disclosure rather than silently", async () => {
     /* These were two cards under the scoring section. They are refusals, and the
        shared system gives every screen's refusals one group in the page-foot
        disclosure — so they are still stated, in the same words, in the place a
@@ -208,7 +209,7 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.match(why, /modelling presented as reading/);
   });
 
-  it("shows the clean-band record, and names the other band as a control", async () => {
+  itNeedsExport("shows the clean-band record, and names the other band as a control", async () => {
     /* `identified[0]` picked whichever record sorted first. When the ambiguous
        band was scored it sorted ahead of clean by filename, which would have put
        an ambiguous record under copy about clean-band scope. */
@@ -232,21 +233,21 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.match(text, /none exist — never persisted, unrecoverable by design/);
   });
 
-  it("never prints a per-run score", async () => {
+  itNeedsExport("never prints a per-run score", async () => {
     const { roots } = await renderCompany("ACHC");
     for (const word of ["CRPS", "crps", "PIT", "Brier", "log score"]) {
       assert.doesNotMatch(roots.runs.textContent, new RegExp(word), `${word} appeared on a run card`);
     }
   });
 
-  it("states exchange as not loaded rather than fetching symbols.json", async () => {
+  itNeedsExport("states exchange as not loaded rather than fetching symbols.json", async () => {
     const { roots, why } = await renderCompany("ACHC");
     // The fact strip says WHICH it is; the reason is one of the page's notes.
     assert.match(roots.identity.textContent, /not loaded/);
     assert.match(why, /does not fetch a megabyte to fill one field/);
   });
 
-  it("names the page a record rather than a projection", async () => {
+  itNeedsExport("names the page a record rather than a projection", async () => {
     const { roots, why } = await renderCompany("ACHC");
     /* This moved from a paragraph under the fact strip into the disclosure, and
        the strip gained two facts that make the same point without a sentence:
@@ -257,14 +258,14 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.match(why, /not a current projection/);
   });
 
-  it("draws no y-axis ticks", async () => {
+  itNeedsExport("draws no y-axis ticks", async () => {
     const { roots } = await renderCompany("ACHC");
     const numbers = roots.series.textContent.match(/\d+\.\d\d/g) ?? [];
     // Only the last close is a number in this section; the axis carries dates.
     assert.ok(numbers.length <= 1, `unexpected numeric ticks: ${numbers}`);
   });
 
-  it("carries filing_date from the ledger, not derived from the anchor", async () => {
+  itNeedsExport("carries filing_date from the ledger, not derived from the anchor", async () => {
     const { runs } = await renderCompany("ACHC");
     const rows = Object.values(runs.bySource).flat();
     const withItem = rows.filter((r) => r.ledger_item && !r.ledger_item.absent);
@@ -272,16 +273,16 @@ describe("company page, against the real export", { skip: !HAVE }, () => {
     assert.ok(withItem.some((r) => r.ledger_item.filing_date !== r.anchor_date));
   });
 
-  it("keeps the four run files apart", async () => {
+  itNeedsExport("keeps the four run files apart", async () => {
     const { runs } = await renderCompany("AAPL");
     assert.deepEqual(Object.keys(runs.bySource).sort(), ["corpus", "edgar", "news", "unknown"]);
   });
 });
 
-describe("colour discipline", { skip: !HAVE }, () => {
+describe("colour discipline", () => {
   const css = readFileSync(new URL("../assets/styles/company.css", import.meta.url), "utf8");
 
-  it("reserves amber for a number that is not a settled measurement", () => {
+  itNeedsExport("reserves amber for a number that is not a settled measurement", () => {
     /* ACROSS EVERY STYLESHEET, not just this one. Scoped to company.css this
        assertion passed while amber quietly acquired four meanings elsewhere: a
        provenance chip on search, an in-flight fetch beside it, and an
@@ -314,7 +315,7 @@ describe("colour discipline", { skip: !HAVE }, () => {
     }
   });
 
-  it("does not colour an open window as an attention state", () => {
+  itNeedsExport("does not colour an open window as an attention state", () => {
     // A fact about the calendar: nothing is wrong, nothing refused, and it
     // resolves by itself. Distinguished by the dash, not by colour.
     const openRules = css.split("}").filter((b) => /cmp-anchor--open|window_open/.test(b.split("{")[0] ?? ""));
@@ -326,8 +327,8 @@ describe("colour discipline", { skip: !HAVE }, () => {
   });
 });
 
-describe("run identity on every card", { skip: !HAVE }, () => {
-  it("shows an abbreviated run_id on all of them, not just collisions", async () => {
+describe("run identity on every card", () => {
+  itNeedsExport("shows an abbreviated run_id on all of them, not just collisions", async () => {
     const { roots, runs } = await renderCompany("AAPL");
     const rows = Object.values(runs.bySource).flat();
     const text = roots.runs.textContent;
@@ -336,7 +337,7 @@ describe("run identity on every card", { skip: !HAVE }, () => {
     }
   });
 
-  it("distinguishes same-anchor runs, which are common rather than rare", async () => {
+  itNeedsExport("distinguishes same-anchor runs, which are common rather than rare", async () => {
     // 62 (ticker, anchor, horizon) groups corpus-wide hold more than one run.
     // AAPL has three such pairs; without an id the cards are indistinguishable.
     const { runs } = await renderCompany("AAPL");
@@ -352,21 +353,21 @@ describe("run identity on every card", { skip: !HAVE }, () => {
   });
 });
 
-describe("layout invariants", { skip: !HAVE }, () => {
+describe("layout invariants", () => {
   const css = readFileSync(new URL("../assets/styles/company.css", import.meta.url), "utf8");
 
-  it("gives the masthead, content and footer one measure", () => {
+  itNeedsExport("gives the masthead, content and footer one measure", () => {
     // They sat at different left edges: the masthead outside any container and
     // the content capped, so the difference read as dead space.
     assert.match(css, /\.masthead,\s*\n\s*\.company,\s*\n\s*\.cmp-footer \{[^}]*--measure/);
   });
 
-  it("anchors the vintage stamps right without relying on a spacer element", () => {
+  itNeedsExport("anchors the vintage stamps right without relying on a spacer element", () => {
     // base.css does this with a .spacer that this page's markup does not have.
     assert.match(css, /\.masthead-vintage \{ margin-left: auto/);
   });
 
-  it("gives section headers a voice of their own, and a rule above them", () => {
+  itNeedsExport("gives section headers a voice of their own, and a rule above them", () => {
     /* This used to demand --step-2 and forbid --step--1: a section head earned
        presence by being bigger than the body. The shared pass gets it a
        different way — mono, uppercase and tracked to .32em, which is the door's
@@ -387,8 +388,8 @@ describe("layout invariants", { skip: !HAVE }, () => {
   });
 });
 
-describe("the pre-screen is a search question", { skip: !HAVE }, () => {
-  it("does not appear on a company page", async () => {
+describe("the pre-screen is a search question", () => {
+  itNeedsExport("does not appear on a company page", async () => {
     const { roots } = await renderCompany("ACHC");
     for (const root of Object.values(roots)) {
       assert.doesNotMatch(root.textContent, /recent EDGAR block/);
@@ -396,7 +397,7 @@ describe("the pre-screen is a search question", { skip: !HAVE }, () => {
     }
   });
 
-  it("is still reachable from the boundary, for the screen that needs it", async () => {
+  itNeedsExport("is still reachable from the boundary, for the screen that needs it", async () => {
     installDom();
     stubFetch();
     const source = await load("data/source.js");
@@ -405,22 +406,22 @@ describe("the pre-screen is a search question", { skip: !HAVE }, () => {
   });
 });
 
-describe("URL forms", { skip: !HAVE }, () => {
+describe("URL forms", () => {
   const js = readFileSync(new URL("../assets/js/company.js", import.meta.url), "utf8");
 
-  it("accepts ?ticker= as the linked form and keeps ?example= for review", () => {
+  itNeedsExport("accepts ?ticker= as the linked form and keeps ?example= for review", () => {
     assert.match(js, /params\.get\("ticker"\)/);
     assert.match(js, /params\.get\("example"\)/);
   });
 
-  it("marks a ticker link as linked, never as an example name", () => {
+  itNeedsExport("marks a ticker link as linked, never as an example name", () => {
     // Styling keyed on an example must not silently apply to an arbitrary
     // company reached from search.
     assert.match(js, /mode: "linked"/);
     assert.match(js, /dataset\.example = mode/);
   });
 
-  it("renders a stated absence for a ticker the corpus does not hold", () => {
+  itNeedsExport("renders a stated absence for a ticker the corpus does not hold", () => {
     // CD's patch header said the identity section already handled this. It did
     // not: renderIdentity prints undefined and renderFilings throws on
     // company.filings. The guard is in the composition root instead.
@@ -434,10 +435,10 @@ describe("URL forms", { skip: !HAVE }, () => {
   });
 });
 
-describe("the four screen defects", { skip: !HAVE }, () => {
+describe("the four screen defects", () => {
   const css = readFileSync(new URL("../assets/styles/company.css", import.meta.url), "utf8");
 
-  it("resolves a repeat's panel run by anchor, not by filing arithmetic", async () => {
+  itNeedsExport("resolves a repeat's panel run by anchor, not by filing arithmetic", async () => {
     // TSLA's 2026-01-02 filing is one of the 66 whose anchor IS the filing date.
     // A `filing + 1` rule found nothing there and printed ATI's copy about a
     // panel run that does not exist, while a9b0c9d8 sat in the filings table on
@@ -449,12 +450,12 @@ describe("the four screen defects", { skip: !HAVE }, () => {
     assert.match(text, /the panel's run is a9b0c9d8, anchored 2026-01-02/);
   });
 
-  it("still reports the one repeat whose panel run really is absent", async () => {
+  itNeedsExport("still reports the one repeat whose panel run really is absent", async () => {
     const { roots } = await renderCompany("ATI");
     assert.match(roots.runs.textContent, /filed 2026-02-03, whose panel run does not exist/);
   });
 
-  it("names the two different run counts rather than showing one", async () => {
+  itNeedsExport("names the two different run counts rather than showing one", async () => {
     // Search counts panel runs from corpus.json; this page counts every run for
     // the ticker. TSLA is 12 and 16. Unlabelled they read as a contradiction.
     const { roots, runs, company } = await renderCompany("TSLA");
@@ -466,7 +467,7 @@ describe("the four screen defects", { skip: !HAVE }, () => {
     assert.match(roots.identity.textContent, /Runs on this page/);
   });
 
-  it("colours neither half of the split", () => {
+  itNeedsExport("colours neither half of the split", () => {
     // Accent means panel membership, and dev and holdout are both the panel.
     // Same overloading that took clean/ambiguous neutral.
     assert.doesNotMatch(css, /\.cmp-badge--holdout \{/);
@@ -475,7 +476,7 @@ describe("the four screen defects", { skip: !HAVE }, () => {
     assert.doesNotMatch(base, /var\(--accent/);
   });
 
-  it("gives the badge an outline that survives the row it sits on", () => {
+  itNeedsExport("gives the badge an outline that survives the row it sits on", () => {
     // The dev text measured 6.62:1 and was never the problem: the border was
     // --rule-2, about 1.3:1 on a sunken row, so the badge had no shape.
     const base = css.match(/\.cmp-badge \{[^}]*\}/)[0];
@@ -483,14 +484,14 @@ describe("the four screen defects", { skip: !HAVE }, () => {
     assert.doesNotMatch(base, /border: 1px solid var\(--rule-2\)/);
   });
 
-  it("centres the unknown-company state instead of pinning it to the top", () => {
+  itNeedsExport("centres the unknown-company state instead of pinning it to the top", () => {
     const empty = css.match(/\.cmp-empty \{[^}]*\}/)[0];
     assert.match(empty, /min-height/);
     assert.match(empty, /justify-content: center/);
   });
 });
 
-describe("a re-based run has no realised return, on any screen", { skip: !HAVE }, () => {
+describe("a re-based run has no realised return, on any screen", () => {
   /* A re-based run is one whose pinned snapshot disagrees with the spot the run
      recorded, because the provider applied a corporate action between them. Its
      outcome close is split-adjusted and its anchor spot is not, so dividing one
@@ -516,7 +517,7 @@ describe("a re-based run has no realised return, on any screen", { skip: !HAVE }
   const drifted = (runs, source) =>
     Object.values(runs.bySource).flat().filter((r) => !source.isAbsent(r.anchor_drift));
 
-  it("finds the runs this is about, so the test cannot pass by finding none", async () => {
+  itNeedsExport("finds the runs this is about, so the test cannot pass by finding none", async () => {
     const { runs, source } = await renderCompany("AAPL");
     const bad = drifted(runs, source);
     assert.equal(bad.length, 2, "AAPL carries the two 2026-08-13 re-based runs");
@@ -528,7 +529,7 @@ describe("a re-based run has no realised return, on any screen", { skip: !HAVE }
     }
   });
 
-  it("shows the ratio and no realised figure on the company page", async () => {
+  itNeedsExport("shows the ratio and no realised figure on the company page", async () => {
     const { roots, runs, source } = await renderCompany("AAPL");
     const bad = drifted(runs, source);
 
@@ -567,7 +568,7 @@ describe("a re-based run has no realised return, on any screen", { skip: !HAVE }
     assert.ok(ordinary.length >= 5, "ordinary runs keep their realised return");
   });
 
-  it("agrees with the runs journal, which is where the rule came from", () => {
+  itNeedsExport("agrees with the runs journal, which is where the rule came from", () => {
     // Both screens reach the same conclusion from the same field, in the same
     // words, so a reader moving between them sees one fact rather than two.
     const card = readFileSync(new URL("../assets/js/ui/company-runs.js", import.meta.url), "utf8");

@@ -6,11 +6,18 @@
 
 import { chromeText } from "../lib/figure.js";
 
+/** A vintage that does not exist is "not exported", never the word `null`.
+
+    `map export --allow-partial` on a clone has no symbol index, so
+    `symbols.synced_on` is null — and both the masthead and the footer printed
+    `symbols null`, which reads as a value rather than as an absence. */
+const vintage = (value) => (value === null || value === undefined ? "not exported" : String(value));
+
 export function renderMastheadVintage(root, manifest) {
   root.textContent = "";
   root.append(
-    chromeText(`prices ${manifest.prices.snapshot}`, "the pinned price vintage"),
-    chromeText(`symbols ${manifest.symbols.synced_on}`, "when the symbol index was synced"),
+    chromeText(`prices ${vintage(manifest.prices?.snapshot)}`, "the pinned price vintage"),
+    chromeText(`symbols ${vintage(manifest.symbols?.synced_on)}`, "when the symbol index was synced"),
   );
 }
 
@@ -25,14 +32,14 @@ export function renderFooter(root, manifest) {
   stamps.className = "cmp-stamps";
   for (const [label, value] of [
     ["export", manifest.export_version],
-    ["prices", manifest.prices.snapshot],
-    ["symbols", manifest.symbols.synced_on],
-    ["freeze", manifest.freeze.version],
+    ["prices", manifest.prices?.snapshot],
+    ["symbols", manifest.symbols?.synced_on],
+    ["freeze", manifest.freeze?.version],
     // Which code wrote the export. Abbreviated to seven, like every other commit
     // reference in this project.
-    ["code", manifest.code.commit.slice(0, 7)],
+    ["code", manifest.code?.commit ? manifest.code.commit.slice(0, 7) : null],
   ]) {
-    stamps.append(stamp(label, value, `the ${label} vintage stamp`));
+    stamps.append(stamp(label, vintage(value), `the ${label} vintage stamp`));
   }
   root.append(stamps);
 }

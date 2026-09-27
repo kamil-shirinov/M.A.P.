@@ -11,6 +11,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { HAVE_EXPORT, itNeedsExport } from "./needs-export.mjs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const EXPORT = new URL("../assets/export/", import.meta.url);
@@ -109,7 +110,7 @@ describe("mode controller", () => {
   });
 });
 
-describe("the door's strip", { skip: !HAVE }, () => {
+describe("the door's strip", () => {
   const exported = (name) => JSON.parse(readFileSync(new URL(name, EXPORT), "utf8"));
 
   /** Mount the door into a stub tree and return its strip's parts. */
@@ -131,7 +132,7 @@ describe("the door's strip", { skip: !HAVE }, () => {
     return { node, block, parts: node.children.map((c) => c.textContent) };
   }
 
-  it("counts runs from the manifest's four counts, summed on the page and marked derived", async () => {
+  itNeedsExport("counts runs from the manifest's four counts, summed on the page and marked derived", async () => {
     const source = await import("../assets/js/data/source.js");
     const manifest = exported("manifest.json");
     const companies = exported("universe.json").length;
@@ -157,7 +158,7 @@ describe("the door's strip", { skip: !HAVE }, () => {
     assert.ok(block.children.some((c) => c.className === "door-box"), "the box goes into the static block");
   });
 
-  it("adds all four populations, not whichever one holds the runs today", async () => {
+  itNeedsExport("adds all four populations, not whichever one holds the runs today", async () => {
     // Every real run is `unknown`, so the export alone cannot tell a sum from a read.
     const { figure } = await import("../assets/js/lib/figure.js");
     const runsBySource = { corpus: 2, edgar: 1, news: 0, unknown: 4 };
@@ -166,7 +167,7 @@ describe("the door's strip", { skip: !HAVE }, () => {
     assert.equal(parts[3], "7 runs");
   });
 
-  it("states a missing run count instead of reading an old export as zero", async () => {
+  itNeedsExport("states a missing run count instead of reading an old export as zero", async () => {
     const source = await import("../assets/js/data/source.js");
     const { runs, ...older } = exported("manifest.json");
     const { parts, node } = strip({ companies: 120, runsBySource: source.runCountsBySource(older), finding: false });
@@ -174,7 +175,7 @@ describe("the door's strip", { skip: !HAVE }, () => {
     assert.match(node.children[3].dataset.chrome, /predates runs\.rows/);
   });
 
-  it("makes no claim about baselines when the export carries no development record", async () => {
+  itNeedsExport("makes no claim about baselines when the export carries no development record", async () => {
     const source = await import("../assets/js/data/source.js");
     const manifest = { ...exported("manifest.json"), scores: { records: [], absent: [] } };
     assert.equal(source.devScoringRecordExported(manifest), false);
@@ -182,7 +183,7 @@ describe("the door's strip", { skip: !HAVE }, () => {
     assert.ok(!parts.some((p) => /random walk|GARCH/.test(p)));
   });
 
-  it("is still true of every development record the export carries", () => {
+  itNeedsExport("is still true of every development record the export carries", () => {
     // The finding is prose, so a re-export cannot update it. This is what fails
     // if a later development pass beats either baseline on either rule.
     const records = exported("manifest.json").scores.records.filter((r) => r.split === "dev");

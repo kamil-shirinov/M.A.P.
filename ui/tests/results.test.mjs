@@ -12,6 +12,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { before, describe, it } from "node:test";
+import { HAVE_EXPORT, itNeedsExport } from "./needs-export.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const EXPORT = new URL("assets/export/", ROOT);
@@ -157,10 +158,11 @@ async function build({ band = "clean" } = {}) {
   return { roots, source, records, loaded, holdout, domains, band, mods: { baselines, leakage, direction, holdoutUi } };
 }
 
-describe("the results screen, against the real export", { skip: !HAVE }, () => {
-  before(async () => { ctx = await build(); });
+describe("the results screen, against the real export", () => {
+  // A hook is not a test and cannot be skipped, so it declines on its own.
+  before(async () => { if (HAVE_EXPORT) ctx = await build(); });
 
-  it("reads the manifest, both identifiable records and the spend — and never the dirty one", () => {
+  itNeedsExport("reads the manifest, both identifiable records and the spend — and never the dirty one", () => {
     assert.ok(fetched.includes("manifest.json"));
     assert.ok(fetched.includes(CLEAN), "the clean record with a digest");
     assert.ok(fetched.includes(AMBIG), "the ambiguous record");
@@ -171,13 +173,13 @@ describe("the results screen, against the real export", { skip: !HAVE }, () => {
     }
   });
 
-  it("marks every number on screen", () => {
+  itNeedsExport("marks every number on screen", () => {
     for (const [name, root] of Object.entries(ctx.roots)) {
       assert.deepEqual(unmarked(root), [], `${name} has unmarked numbers`);
     }
   });
 
-  it("prefers the record with a forecast digest and names the other without averaging", () => {
+  itNeedsExport("prefers the record with a forecast digest and names the other without averaging", () => {
     const clean = ctx.records.preferred.get("clean");
     assert.equal(clean.file, CLEAN);
     assert.ok(clean.forecast_digest, "the shown record names its code");
@@ -190,8 +192,8 @@ describe("the results screen, against the real export", { skip: !HAVE }, () => {
   });
 });
 
-describe("the first paint, before any record has landed", { skip: !HAVE }, () => {
-  it("marks the reading lines, which carry a file size", async () => {
+describe("the first paint, before any record has landed", () => {
+  itNeedsExport("marks the reading lines, which carry a file size", async () => {
     installDom();
     const { renderPit } = await load("ui/results-pit.js");
     const baselines = await load("ui/results-baselines.js");
@@ -217,7 +219,7 @@ describe("the first paint, before any record has landed", { skip: !HAVE }, () =>
     }
   });
 
-  it("renders the identity block from the manifest alone", async () => {
+  itNeedsExport("renders the identity block from the manifest alone", async () => {
     installDom();
     const source = await load("data/source.js");
     const records = await source.listScoringRecords();
@@ -235,10 +237,10 @@ describe("the first paint, before any record has landed", { skip: !HAVE }, () =>
   });
 });
 
-describe("the figures, recomputed from the record files", { skip: !HAVE }, () => {
+describe("the figures, recomputed from the record files", () => {
   const record = () => read(CLEAN);
 
-  it("reproduces the PIT histogram, the ratio and the PIT mean", async () => {
+  itNeedsExport("reproduces the PIT histogram, the ratio and the PIT mean", async () => {
     installDom();
     const source = await load("data/source.js");
     const stats = source.scoreStatistics(record().items);
@@ -251,7 +253,7 @@ describe("the figures, recomputed from the record files", { skip: !HAVE }, () =>
     assert.deepEqual(stats.horizons, [5]);
   });
 
-  it("puts a PIT of exactly 1 in the last bin rather than off the end", async () => {
+  itNeedsExport("puts a PIT of exactly 1 in the last bin rather than off the end", async () => {
     installDom();
     const source = await load("data/source.js");
     const items = record().items.slice(0, 3).map((i, k) => ({ ...i, map_pit: [0, 0.5, 1][k] }));
@@ -259,7 +261,7 @@ describe("the figures, recomputed from the record files", { skip: !HAVE }, () =>
     assert.deepEqual(stats.histogram, [1, 0, 0, 0, 0, 1, 0, 0, 0, 1]);
   });
 
-  it("reproduces both rules' means and deltas on the clean band", async () => {
+  itNeedsExport("reproduces both rules' means and deltas on the clean band", async () => {
     installDom();
     const source = await load("data/source.js");
     const items = record().items;
@@ -277,7 +279,7 @@ describe("the figures, recomputed from the record files", { skip: !HAVE }, () =>
     assert.equal(delta("log_score", "earnings_scaled_random_walk").toFixed(4), "-0.0272");
   });
 
-  it("counts the direction and the P(up) span", async () => {
+  itNeedsExport("counts the direction and the P(up) span", async () => {
     installDom();
     const source = await load("data/source.js");
     const stats = source.scoreStatistics(record().items);
@@ -292,7 +294,7 @@ describe("the figures, recomputed from the record files", { skip: !HAVE }, () =>
     assert.equal(ambiguous.pitMean.toFixed(3), "0.475");
   });
 
-  it("checks the Brier claim against every item instead of asserting it", async () => {
+  itNeedsExport("checks the Brier claim against every item instead of asserting it", async () => {
     installDom();
     const source = await load("data/source.js");
     const stats = source.scoreStatistics(record().items);
@@ -306,8 +308,8 @@ describe("the figures, recomputed from the record files", { skip: !HAVE }, () =>
   });
 });
 
-describe("the tail counts, and which z they use", { skip: !HAVE }, () => {
-  it("counts |z| with z = inverse-normal(PIT), which is the published definition", async () => {
+describe("the tail counts, and which z they use", () => {
+  itNeedsExport("counts |z| with z = inverse-normal(PIT), which is the published definition", async () => {
     installDom();
     const source = await load("data/source.js");
     const { inverseNormalCdf } = await load("lib/gaussian.js");
@@ -336,7 +338,7 @@ describe("the tail counts, and which z they use", { skip: !HAVE }, () => {
     assert.notEqual(stats.tails[2.5], byRatio.filter((z) => Math.abs(z) > 2.5).length);
   });
 
-  it("names the sample beside every tail count", async () => {
+  itNeedsExport("names the sample beside every tail count", async () => {
     const shown = byClass(ctx.roots.pit, "res-tail").map((n) => n.textContent);
     assert.equal(shown.length, 2);
     for (const line of shown) assert.match(line, /of 175/, "a bare count reads as a contradiction");
@@ -348,7 +350,7 @@ describe("the tail counts, and which z they use", { skip: !HAVE }, () => {
     assert.equal(repeats.length, 1, "and said once");
   });
 
-  it("refuses a PIT outside the open interval rather than inventing a z", async () => {
+  itNeedsExport("refuses a PIT outside the open interval rather than inventing a z", async () => {
     const { inverseNormalCdf } = await load("lib/gaussian.js");
     for (const p of [0, 1, -0.1, 1.5, NaN]) assert.throws(() => inverseNormalCdf(p), RangeError);
     // Accurate enough for the thresholds it is compared against.
@@ -357,8 +359,8 @@ describe("the tail counts, and which z they use", { skip: !HAVE }, () => {
   });
 });
 
-describe("intervals and verdicts are quoted, never computed", { skip: !HAVE }, () => {
-  it("parses every interval out of the record's own sentence", async () => {
+describe("intervals and verdicts are quoted, never computed", () => {
+  itNeedsExport("parses every interval out of the record's own sentence", async () => {
     const { parseSummary, summaryFor, BASELINES } = await load("ui/results-baselines.js");
     for (const f of [CLEAN, AMBIG]) {
       const record = read(f);
@@ -378,7 +380,7 @@ describe("intervals and verdicts are quoted, never computed", { skip: !HAVE }, (
     assert.equal(parseSummary("no interval here").interval, null);
   });
 
-  it("takes the verdict from the sentence and not from the sign of the point", async () => {
+  itNeedsExport("takes the verdict from the sentence and not from the sign of the point", async () => {
     const { summaryFor } = await load("ui/results-baselines.js");
     const record = read(CLEAN);
     installDom();
@@ -394,7 +396,7 @@ describe("intervals and verdicts are quoted, never computed", { skip: !HAVE }, (
     assert.equal(row.dataset.verdict, "neither");
   });
 
-  it("prints each sentence verbatim", () => {
+  itNeedsExport("prints each sentence verbatim", () => {
     const record = read(CLEAN);
     const said = byClass(ctx.roots.baselines, "res-row-said").map((n) => n.textContent);
     for (const line of [...record.summaries.crps, ...record.summaries["log score"]]) {
@@ -402,7 +404,7 @@ describe("intervals and verdicts are quoted, never computed", { skip: !HAVE }, (
     }
   });
 
-  it("fixes one axis per rule across both bands", async () => {
+  itNeedsExport("fixes one axis per rule across both bands", async () => {
     const { domainFor } = await load("ui/results-baselines.js");
     installDom();
     const source = await load("data/source.js");
@@ -417,8 +419,8 @@ describe("intervals and verdicts are quoted, never computed", { skip: !HAVE }, (
   });
 });
 
-describe("the leakage control", { skip: !HAVE }, () => {
-  it("reproduces the published difference from the two records", async () => {
+describe("the leakage control", () => {
+  itNeedsExport("reproduces the published difference from the two records", async () => {
     installDom();
     const source = await load("data/source.js");
     const clean = source.scoreStatistics(read(CLEAN).items);
@@ -432,7 +434,7 @@ describe("the leakage control", { skip: !HAVE }, () => {
     assert.match(check.textContent, /agrees with the published figure/);
   });
 
-  it("shows its arithmetic and quotes the interval it cannot derive", () => {
+  itNeedsExport("shows its arithmetic and quotes the interval it cannot derive", () => {
     const working = byClass(ctx.roots.leakage, "res-leak-working")[0].textContent;
     assert.match(working, /0\.03179/);
     assert.match(working, /0\.03348/);
@@ -447,7 +449,7 @@ describe("the leakage control", { skip: !HAVE }, () => {
     }
   });
 
-  it("shows both bands whatever the switch says", async () => {
+  itNeedsExport("shows both bands whatever the switch says", async () => {
     const ambiguousView = await build({ band: "ambiguous" });
     for (const view of [ctx, ambiguousView]) {
       const text = view.roots.leakage.textContent;
@@ -459,8 +461,8 @@ describe("the leakage control", { skip: !HAVE }, () => {
   });
 });
 
-describe("the holdout panel", { skip: !HAVE }, () => {
-  it("renders the terms out of the spend record and nothing else", () => {
+describe("the holdout panel", () => {
+  itNeedsExport("renders the terms out of the spend record and nothing else", () => {
     const spend = read("scores/holdout_spend.json").at(-1);
     const text = ctx.roots.holdout.textContent;
     assert.match(text, /173/);
@@ -471,7 +473,7 @@ describe("the holdout panel", { skip: !HAVE }, () => {
     assert.match(text, /git note record 14 on ad71b13/);
   });
 
-  it("states that no holdout score exists, and prints none", () => {
+  itNeedsExport("states that no holdout score exists, and prints none", () => {
     const text = ctx.roots.holdout.textContent;
     assert.match(text, /none exist — never persisted, unrecoverable by design/);
     // Every number on the panel comes out of the spend record. Nothing from the
@@ -493,7 +495,7 @@ describe("the holdout panel", { skip: !HAVE }, () => {
     }
   });
 
-  it("shows the rewritten commit as two rows, the record's and the published one", async () => {
+  itNeedsExport("shows the rewritten commit as two rows, the record's and the published one", async () => {
     const { REWRITTEN } = await load("ui/results-holdout.js");
     const spend = read("scores/holdout_spend.json").at(-1);
     const recorded = spend.commit.slice(0, 7);
@@ -506,7 +508,7 @@ describe("the holdout panel", { skip: !HAVE }, () => {
     assert.equal(spend.commit, "9cb1b84f21726a82d211b9c7b62b2ada2abd1e41");
   });
 
-  it("falls back to the recorded commit alone when the table does not know it", async () => {
+  itNeedsExport("falls back to the recorded commit alone when the table does not know it", async () => {
     installDom();
     const { renderHoldout } = await load("ui/results-holdout.js");
     const spend = read("scores/holdout_spend.json").at(-1);
@@ -582,14 +584,14 @@ describe("the page, its nav and its files", () => {
   });
 });
 
-describe("the rendered page", { skip: !HAVE }, () => {
-  it("states the log score's orientation where it can be misread", () => {
+describe("the rendered page", () => {
+  itNeedsExport("states the log score's orientation where it can be misread", () => {
     const text = ctx.roots.baselines.textContent;
     assert.match(text, /stored lower-is-better/);
     assert.match(text, /M\.A\.P\. worse →/);
   });
 
-  it("never uses 779 or 709 as a denominator, and names 779 only to refuse it", () => {
+  itNeedsExport("never uses 779 or 709 as a denominator, and names 779 only to refuse it", () => {
     for (const [name, root] of Object.entries(ctx.roots)) {
       if (name === "disclosure") continue;
       for (const wrong of ["779", "709"]) {
@@ -602,7 +604,7 @@ describe("the rendered page", { skip: !HAVE }, () => {
     assert.ok(!why.includes("709"), "items_settled belongs to the runs screen");
   });
 
-  it("writes the two band-specific disclosure blocks from the record on screen", async () => {
+  itNeedsExport("writes the two band-specific disclosure blocks from the record on screen", async () => {
     const ambiguous = await build({ band: "ambiguous" });
     const cleanText = ctx.roots.disclosure.textContent;
     const ambigText = ambiguous.roots.disclosure.textContent;

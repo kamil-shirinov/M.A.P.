@@ -366,6 +366,24 @@ if (!pw) {
   process.exit(2);
 }
 
+/* NO EXPORT, NO PROBE. Every check here reads a computed style off an element
+   the page renders from the export, so on a clone the elements do not exist and
+   the probe reported 42 failures that read as broken CSS. They were not: there
+   was nothing on the page to check.
+
+   Exit 2, the same code and the same shape as a missing Playwright — "could not
+   run", not "ran and found problems". A check that cannot tell those apart
+   teaches you to ignore it. */
+if (!existsSync(new URL("../assets/export/manifest.json", import.meta.url))) {
+  console.error(
+    "styles.probe: no export at ui/assets/export, so there is nothing rendered to\n" +
+    "check. This is not a CSS failure. Generate one first:\n\n" +
+    "  uv run map export                  # needs a ledger, runs and scores\n" +
+    "  uv run map export --allow-partial  # what a fresh clone can produce\n",
+  );
+  process.exit(2);
+}
+
 const server = await serve();
 const base = `http://127.0.0.1:${server.address().port}`;
 const browser = await pw.chromium.launch();

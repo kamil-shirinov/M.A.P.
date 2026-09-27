@@ -38,6 +38,7 @@ import { renderDirection } from "./ui/results-direction.js";
 import { renderHoldout } from "./ui/results-holdout.js";
 import { whyGroups } from "./ui/results-disclosure.js";
 import { renderPageWhy } from "./ui/page-why.js";
+import { renderNoExport } from "./ui/no-export.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -68,7 +69,16 @@ const shown = () => state.loaded.get(state.band) ?? null;
 
 function paint() {
   if (state.stage === "no-export") {
-    renderStatus(state.error);
+    renderNoExport($("results-page"), state.error, {
+      footer: $("footer"), vintage: $("masthead-vintage"),
+    });
+    applyPageProvenance();
+    enforce();
+    return;
+  }
+
+  if (state.stage === "no-records") {
+    renderNoRecords();
     applyPageProvenance();
     enforce();
     return;
@@ -190,12 +200,32 @@ async function boot() {
   const exportState = await source.getExportState();
   if (exportState.state === source.NO_EXPORT) {
     state.stage = "no-export";
-    state.error = exportState.why.why;
+    // The absence itself, not its message: the panel prints the reason AND the
+    // command that fixes it.
+    state.error = exportState.why;
     paint();
     return;
   }
   state.manifest = exportState.manifest;
   state.records = await source.listScoringRecords();
+
+  /* AN EXPORT WITH NO SCORING RECORD IN IT. `map export --allow-partial` on a
+     clone produces exactly this, and it is what a newcomer gets.
+
+     Before this the page fell straight through: `Promise.all([])` resolves at
+     once, the stage went to `ready` with nothing loaded, and every figure sat on
+     its pending "…" forever — with the status line hidden, because the page
+     believed it had finished. A reader saw eight ellipses and no explanation.
+
+     The export states this absence itself, so the page prints its words. */
+  if (state.records.preferred.size === 0) {
+    state.stage = "no-records";
+    state.error = (state.manifest.absent ?? []).find((a) => a.what === "scores") ?? null;
+    renderMastheadVintage($("masthead-vintage"), state.manifest);
+    paint();
+    return;
+  }
+
   if (!state.records.preferred.has(state.band)) {
     state.band = [...state.records.preferred.keys()][0] ?? state.band;
   }
@@ -217,6 +247,45 @@ async function boot() {
   }
 
   paint();
+}
+
+/** The export exists and carries no scoring pass.
+
+    Distinct from NO EXPORT, which is a missing directory, and said differently:
+    the export is here, it named this gap itself, and the page repeats its words
+    rather than inventing a second explanation. Every panel below the head is
+    removed rather than left showing "…", because there is nothing coming. */
+function renderNoRecords() {
+  const main = $("results-page");
+  for (const id of ["res-identity", "pit", "baselines", "leakage", "direction", "holdout"]) {
+    const host = $(id);
+    if (host) host.textContent = "";
+  }
+  for (const row of main.querySelectorAll(".res-row-1, .res-row-2")) row.remove();
+
+  const box = document.createElement("div");
+  box.className = "cmp-empty res-absent-page";
+  box.dataset.chrome = "a stated absence; its digits are a path";
+  const h = document.createElement("h2");
+  h.className = "section-h";
+  h.textContent = "No scoring pass in this export";
+  const p = document.createElement("p");
+  p.textContent = state.error?.reason
+    ? `${state.error.reason} — nothing has been scored, so there is no result to show.`
+    : "This export carries no scoring record, so there is no result to show.";
+  const where = document.createElement("p");
+  where.className = "cmp-note";
+  where.textContent = state.error?.path
+    ? `Scoring passes are written to ${state.error.path} by \`map evaluate\`, and exported from there.`
+    : "Scoring passes are written by `map evaluate` and exported from there.";
+  box.append(h, p, where);
+  $("res-identity").append(box);
+
+  renderFooter($("footer"), state.manifest);
+  renderPageWhy($("disclosure"), {
+    groups: whyGroups({ holdoutReason: state.records?.holdout?.why ?? null, stats: null, band: state.band }),
+  });
+  renderStatus(null);
 }
 
 /** The shared footer plus one stamp of this screen's own.

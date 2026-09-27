@@ -29,6 +29,7 @@ import { renderPageWhy } from "./ui/page-why.js";
 import { COMPANY_WHY } from "./ui/company-why.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { mountMastheadNav } from "./ui/front-door.js";
+import { renderNoExport } from "./ui/no-export.js";
 
 const EXAMPLES = { typical: "ACHC", ati: "ATI", aapl: "AAPL" };
 
@@ -75,7 +76,7 @@ async function paint() {
   ]);
 
   if (state.state === source.NO_EXPORT) {
-    renderNoExport(state);
+    showNoExport(state);
     return;
   }
 
@@ -117,22 +118,10 @@ async function paint() {
 /** The one state the export cannot describe for itself: there is no manifest to
     read an absence from, so this module states it. Distinct from a partial
     export, which exists and names its own gaps. */
-function renderNoExport(state) {
-  const main = $("company");
-  main.textContent = "";
-  const box = document.createElement("div");
-  box.className = "cmp-empty";
-  box.dataset.chrome = "no export is present; nothing on screen is a figure";
-  const h = document.createElement("h1");
-  h.textContent = "No export";
-  const p = document.createElement("p");
-  p.textContent = state.why.why;
-  const pre = document.createElement("pre");
-  pre.textContent = state.why.remedy;
-  box.append(h, p, pre);
-  main.append(box);
-  $("footer").textContent = "";
-  $("masthead-vintage").textContent = "";
+function showNoExport(state) {
+  renderNoExport($("company"), state.why, {
+    footer: $("footer"), vintage: $("masthead-vintage"),
+  });
 }
 
 /** Not in the frozen corpus. The export can say that much and no more: there is
@@ -191,8 +180,17 @@ function renderTitle(company) {
   tick.dataset.chrome = "a ticker symbol, not a quantity";
   tick.textContent = company.ticker;
 
+  /* A name the export does not carry is a stated absence, not the ticker again.
+     `universe.json` holds null when the symbol index was not exported — which is
+     what `--allow-partial` produces — and falling back to the ticker printed
+     "AAPL AAPL", where the second AAPL looked like the company's name. */
   const name = document.createElement("span");
-  name.textContent = typeof company.name === "string" ? company.name : company.ticker;
+  if (typeof company.name === "string" && company.name) {
+    name.textContent = company.name;
+  } else {
+    name.className = "page-title-absent";
+    name.textContent = "name not exported";
+  }
 
   // The split, as a tag. A factual partition, so no tone: the word carries it.
   const split = document.createElement("span");

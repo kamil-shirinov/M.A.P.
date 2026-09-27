@@ -29,6 +29,7 @@ import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { renderDrift, renderIdentity, renderPopulations, renderUnrun } from "./ui/runs-header.js";
 import { describeFilters, matches, quarterLabel, renderChart, renderFilters } from "./ui/runs-filters.js";
 import { renderJournal } from "./ui/runs-journal.js";
+import { renderNoExport } from "./ui/no-export.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -278,9 +279,14 @@ async function boot() {
   // -- stage 1: the manifest
   const exportState = await source.getExportState();
   if (exportState.state === source.NO_EXPORT) {
-    state.stage = "no-export";
-    state.error = exportState.why;
-    paint();
+    /* The panel, not the page. This branch used to fall through to `paint()`,
+       which drew the ordinary header against an empty journal and reported
+       "0 RUNS · across the four document-source files, not yet read" — an
+       absence shown as a count, which is the one reading this screen exists to
+       refuse. Nothing had been read, so nothing could be zero. */
+    renderNoExport($("runs-page"), exportState.why, {
+      footer: $("footer"), vintage: $("masthead-vintage"),
+    });
     return;
   }
   state.manifest = exportState.manifest;

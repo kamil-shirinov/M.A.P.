@@ -9,9 +9,9 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { HAVE_EXPORT, itNeedsExport } from "./needs-export.mjs";
 
 const EXPORT = new URL("../assets/export/", import.meta.url);
-const HAVE_EXPORT = existsSync(new URL("manifest.json", EXPORT));
 
 function stubFetch({ missing = [] } = {}) {
   globalThis.fetch = async (path) => {
@@ -85,8 +85,8 @@ describe("the three absence kinds stay apart", () => {
   });
 });
 
-describe("against the real export", { skip: !HAVE_EXPORT }, () => {
-  it("reads the corpus universe without loading the symbol index", async () => {
+describe("against the real export", () => {
+  itNeedsExport("reads the corpus universe without loading the symbol index", async () => {
     stubFetch();
     const s = await load();
     const { rows } = await s.listCorpusCompanies();
@@ -95,7 +95,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.equal(rows[0].exchange.absent, s.NOT_COMPUTED);
   });
 
-  it("returns all 709 filings including the 8 nothing ran", async () => {
+  itNeedsExport("returns all 709 filings including the 8 nothing ran", async () => {
     stubFetch();
     const s = await load();
     const companies = await Promise.all(
@@ -106,7 +106,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.equal(filings.filter((f) => !f.ran).length, 8);
   });
 
-  it("never merges the four run files", async () => {
+  itNeedsExport("never merges the four run files", async () => {
     stubFetch();
     const s = await load();
     const { bySource } = await s.listRuns("ZTS");
@@ -115,7 +115,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.equal(Object.keys(bySource).length, 4);
   });
 
-  it("carries ledger_item.filing_date rather than deriving it from the anchor", async () => {
+  itNeedsExport("carries ledger_item.filing_date rather than deriving it from the anchor", async () => {
     stubFetch();
     const s = await load();
     const { bySource } = await s.listRuns("ZTS");
@@ -124,7 +124,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.notEqual(run.ledger_item.filing_date, run.anchor_date);
   });
 
-  it("leaves runs in anchor-date descending order", async () => {
+  itNeedsExport("leaves runs in anchor-date descending order", async () => {
     stubFetch();
     const s = await load();
     const rows = (await s.listRuns("ZTS")).bySource.unknown;
@@ -132,7 +132,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.deepEqual(dates, [...dates].sort().reverse());
   });
 
-  it("stamps a computed target price as derived, not measured", async () => {
+  itNeedsExport("stamps a computed target price as derived, not measured", async () => {
     stubFetch();
     const s = await load();
     const run = (await s.listRuns("ZTS")).bySource.unknown[0];
@@ -141,7 +141,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.equal(run.scenarios[0].target_price.provenance, s.DERIVED);
   });
 
-  it("formats a derived realised return as logpct, not pct", async () => {
+  itNeedsExport("formats a derived realised return as logpct, not pct", async () => {
     stubFetch();
     const s = await load();
     const run = (await s.listRuns("ZTS")).bySource.unknown.find((r) => !s.isAbsent(r.outcome));
@@ -149,7 +149,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.equal(run.outcome.realised_log_return.provenance, s.DERIVED);
   });
 
-  it("renders the holdout as cannot-be-computed, with what_survives", async () => {
+  itNeedsExport("renders the holdout as cannot-be-computed, with what_survives", async () => {
     stubFetch();
     const s = await load();
     const { holdout } = await s.listScoringRecords();
@@ -158,7 +158,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.match(holdout.survives_in, /holdout_spend\.jsonl/);
   });
 
-  it("prefers an identifiable scoring record over a dirty one", async () => {
+  itNeedsExport("prefers an identifiable scoring record over a dirty one", async () => {
     stubFetch();
     const s = await load();
     const { records, identifiable } = await s.listScoringRecords();
@@ -173,7 +173,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.deepEqual(identifiable, records.filter((r) => r.forecast_digest));
   });
 
-  it("says items_settled is not a count of forecasts", async () => {
+  itNeedsExport("says items_settled is not a count of forecasts", async () => {
     stubFetch();
     const s = await load();
     const { manifest } = await s.getExportState();
@@ -182,7 +182,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.ok(parts.some((p) => p.kind === "text" && /not a count of forecasts/.test(p.text)));
   });
 
-  it("builds sentences as parts, with no figure welded into prose", async () => {
+  itNeedsExport("builds sentences as parts, with no figure welded into prose", async () => {
     stubFetch();
     const s = await load();
     const run = (await s.listRuns("ZTS")).bySource.unknown.find((r) => !s.isAbsent(r.outcome));
@@ -200,7 +200,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.ok(chromeParts.every((x) => x.why));
   });
 
-  it("keeps six places on a drift ratio and does not use it as a key", async () => {
+  itNeedsExport("keeps six places on a drift ratio and does not use it as a key", async () => {
     stubFetch();
     const s = await load();
     const { bySource } = await s.listRuns("SCCO");
@@ -212,7 +212,7 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.ok(raw.size > 1, "expected the ratios to differ run to run");
   });
 
-  it("labels the newest price as a close on a date, never as current", async () => {
+  itNeedsExport("labels the newest price as a close on a date, never as current", async () => {
     stubFetch();
     const s = await load();
     const series = await s.getPriceSeries("ZTS");
@@ -221,13 +221,13 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
     assert.equal(series.snapshot, "2026-09-05");
   });
 
-  it("returns an absence for a company the snapshot has no series for", async () => {
+  itNeedsExport("returns an absence for a company the snapshot has no series for", async () => {
     stubFetch();
     const s = await load();
     assert.equal((await s.getPriceSeries("ZZZZ")).absent, s.NOT_COMPUTED);
   });
 
-  it("reads the filer pre-screen as recency, not history", async () => {
+  itNeedsExport("reads the filer pre-screen as recency, not history", async () => {
     stubFetch();
     const s = await load();
     const screen = await s.getFilerScreen("AAPL");
@@ -236,8 +236,8 @@ describe("against the real export", { skip: !HAVE_EXPORT }, () => {
   });
 });
 
-describe("run counts from the manifest", { skip: !HAVE_EXPORT }, () => {
-  it("returns one read count per runs file and no total", async () => {
+describe("run counts from the manifest", () => {
+  itNeedsExport("returns one read count per runs file and no total", async () => {
     stubFetch();
     const s = await load();
     const { manifest } = await s.getExportState();
@@ -250,15 +250,15 @@ describe("run counts from the manifest", { skip: !HAVE_EXPORT }, () => {
     }
   });
 
-  it("states an export older than runs.rows as absent, not as zero runs", async () => {
+  itNeedsExport("states an export older than runs.rows as absent, not as zero runs", async () => {
     const s = await load();
     assert.ok(s.isAbsent(s.runCountsBySource({ export_version: "1.1.0" })));
     assert.ok(s.isAbsent(s.runCountsBySource({ runs: { rows: { unknown: 779 } } })), "a partial set is not four counts");
   });
 });
 
-describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () => {
-  it("returns the index size and the full match total", async () => {
+describe("search counts, against the real export", () => {
+  itNeedsExport("returns the index size and the full match total", async () => {
     stubFetch();
     const s = await load();
     const { rows, matched, indexSize } = await s.searchSymbols("A", { limit: 5 });
@@ -269,7 +269,7 @@ describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () =>
     assert.equal(all.rows.length, matched);
   });
 
-  it("counts a term that matches one corpus company as one", async () => {
+  itNeedsExport("counts a term that matches one corpus company as one", async () => {
     /* THE DEFECT THIS PINS. The index holds every listed symbol, including the
        120 the corpus froze, so a corpus company is a hit in BOTH lists. The
        screen added the two totals: AAPL matched one company and reported 2,
@@ -297,7 +297,7 @@ describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () =>
     }
   });
 
-  it("counts a corpus company the index does not hold", async () => {
+  itNeedsExport("counts a corpus company the index does not hold", async () => {
     /* All 120 corpus companies are in this export's index, which is a property
        of the export rather than a guarantee — one frozen before the index was
        last synced would be in the corpus and not the index. Subtracting the
@@ -310,7 +310,7 @@ describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () =>
     assert.equal(s.countMatches([], []), 0);
   });
 
-  it("applies one matching rule to both lists", async () => {
+  itNeedsExport("applies one matching rule to both lists", async () => {
     const s = await load();
     assert.equal(s.matchesTerm({ ticker: "AAPL", name: "Apple Inc." }, "AAP"), true, "ticker prefix");
     assert.equal(s.matchesTerm({ ticker: "MSFT", name: "Apple Inc." }, "APPLE"), true, "name anywhere");
@@ -321,7 +321,7 @@ describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () =>
     assert.equal(s.matchesTerm({ ticker: "MSFT", name: s.absent("not-computed", "no index") }, "APPLE"), false);
   });
 
-  it("knows the index size even for an empty query", async () => {
+  itNeedsExport("knows the index size even for an empty query", async () => {
     stubFetch();
     const s = await load();
     const { indexSize, matched } = await s.searchSymbols("  ", { limit: 5 });
@@ -329,7 +329,7 @@ describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () =>
     assert.equal(matched, 0);
   });
 
-  it("counts a company's filings and runs without loading them at boot", async () => {
+  itNeedsExport("counts a company's filings and runs without loading them at boot", async () => {
     stubFetch();
     const s = await load();
     const counts = await s.getCorpusFilingCounts();
@@ -342,7 +342,7 @@ describe("search counts, against the real export", { skip: !HAVE_EXPORT }, () =>
     assert.equal(totalRuns, 701);
   });
 
-  it("finds a filer row for every symbol, so the fourth group never fires here", async () => {
+  itNeedsExport("finds a filer row for every symbol, so the fourth group never fires here", async () => {
     // `getFilerScreen` can answer NOT_APPLICABLE and the search screen groups
     // those separately. Against THIS export it is unreachable: all 10,398
     // symbols are covered by the 7,998 filers. The branch stays — a later

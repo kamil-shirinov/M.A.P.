@@ -26,6 +26,7 @@ import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { mountPageRosette } from "./ui/rosette.js";
 import { createModeController, mountDoor, mountMastheadNav } from "./ui/front-door.js";
+import { renderNoExport } from "./ui/no-export.js";
 
 const $ = (id) => document.getElementById(id);
 
@@ -179,19 +180,9 @@ async function boot() {
     /* No door without an export: there is nothing to search. And door mode
        hides the page this state is written into, which left a blank screen. */
     document.body.dataset.mode = "open";
-    const main = $("search-page");
-    main.textContent = "";
-    const box2 = document.createElement("div");
-    box2.className = "cmp-empty";
-    box2.dataset.chrome = "no export is present; nothing on screen is a figure";
-    const h = document.createElement("h1");
-    h.textContent = "No export";
-    const p = document.createElement("p");
-    p.textContent = exportState.why.why;
-    const pre = document.createElement("pre");
-    pre.textContent = exportState.why.remedy;
-    box2.append(h, p, pre);
-    main.append(box2);
+    renderNoExport($("search-page"), exportState.why, {
+      footer: $("footer"), vintage: $("masthead-vintage"),
+    });
     return;
   }
 
