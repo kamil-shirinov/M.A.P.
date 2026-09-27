@@ -18,6 +18,31 @@ Then open <http://127.0.0.1:8756/>. This is what `map ui` will do in production.
 No runner, no `package.json`, no build step — Node's own test runner over
 `tests/*.test.mjs`. Adding a framework here would contradict the line above.
 
+### And one check that needs a browser
+
+    node tests/styles.probe.mjs
+
+The tests above build the DOM against a stub and **never load a stylesheet**. Two
+defects have shipped through that gap: `system.css` loaded before the per-screen
+sheets and lost every shared rule to them, and `company.html` never linked
+`runs.css`, so the journal rows it renders came out as unstyled overlapping
+blocks. Both passed the whole suite.
+
+The probe opens each page in Chromium and asserts computed values that can only
+be right if the right sheets loaded in the right order — a section head's font
+family and tracking, a journal row's grid columns, a tag's border, the crest's
+size — plus two whole-page invariants: every `<link rel=stylesheet>` parsed, and
+`system.css` is last. It is **not a pixel diff**; it fails with the property, the
+value it wanted and the value it got.
+
+Playwright is deliberately not a dependency here. Install it outside the repo:
+
+    mkdir -p ~/tools/pw && cd ~/tools/pw
+    npm i playwright && npx playwright install chromium
+    PLAYWRIGHT_PATH=~/tools/pw/node_modules/playwright node tests/styles.probe.mjs
+
+Exit `0` all passed · `1` a check failed · `2` could not run, with instructions.
+
 ## Generating the export
 
 The front end reads a static export produced by the M.A.P. CLI. It is **not

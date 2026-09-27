@@ -118,8 +118,10 @@ export function renderBaselines(root, { stats, summaries, domains, pending }) {
 function block(rule, stats, summaries, domain) {
   const box = el("div", "res-rule");
   const head = el("div", "res-rule-head");
+  // The shared tag component. No tone: amber means "not a settled measurement"
+  // and an instruction about reading an axis is not that, so the word carries it.
   const tag = chromeText(rule.tag, "how the rule is oriented");
-  tag.className = `res-rule-tag res-rule-tag--${rule.tagKind}`;
+  tag.className = `tag res-rule-tag res-rule-tag--${rule.tagKind}`;
   head.append(el("h3", null, rule.label), tag);
   box.append(head);
 

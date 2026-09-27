@@ -143,8 +143,19 @@ body > .masthead,
 .res-axis-better { color: var(--up); }
 .res-axis-worse { color: var(--down); }
 
-.res-row > summary {
-  display: grid; grid-template-columns: 1.5ch minmax(16ch, auto) minmax(180px, 1fr) auto;
+/* TWO class selectors, not one. system.css loads last and gives every `.row-x >
+   summary` a flex layout; a single-class rule here loses to it, and the six
+   comparison rows rendered ragged instead of on four aligned columns. The
+   columns are the point — the whole panel is read by scanning down them. */
+/* EVERY TRACK FIXED EXCEPT THE PLOT. Each row is its own <details>, so grid
+   tracks do not align between them — a content-sized name column made
+   "earnings scaled random walk" push its plot 26px right of the other two, and
+   with the plot on 1fr that changed its WIDTH as well as its start. The zero
+   rule is drawn at the middle of each plot, so the three zero lines in a block
+   landed at three different places on the page. A forest plot whose zero line
+   moves per row is not a forest plot. */
+.res-row.row-x > summary {
+  display: grid; grid-template-columns: 1.5ch 28ch minmax(180px, 1fr) 30ch;
   gap: var(--sp-3) var(--sp-4); align-items: center; padding: var(--sp-3) var(--sp-2);
 }
 .res-row + .res-row { border-top: 1px solid var(--rule); }

@@ -753,6 +753,7 @@ uv run ruff format --check .
 uv run mypy
 uv run lint-imports          # architecture boundaries — see ADR 0004
 node --test ui/tests/*.test.mjs   # the front end; no package.json, no dependencies
+node ui/tests/styles.probe.mjs   # computed styles in a real browser; needs Playwright
 ```
 
 The test suite must pass with the inference server switched off. If it ever needs a live
@@ -767,6 +768,26 @@ DOM stub — so it needs nothing installed that the Python side does not already
 Its tests read `ui/assets/export/`, which is generated and gitignored, and **skip
 themselves when it is absent**. A fresh clone therefore passes both suites and exercises
 the front end on nothing; `uv run map export` is what makes those assertions real.
+
+### The CSS blind spot, and the probe that closes it
+
+`node --test` builds the DOM against a stub and **never loads a stylesheet**. That is
+the right trade for a suite that runs in milliseconds with no browser, but it means a
+whole class of defect is invisible to it, and two have shipped: `system.css` loaded
+before the per-screen sheets and was silently outranked, and `company.html` never
+linked `runs.css` at all. Both passed every test.
+
+`ui/tests/styles.probe.mjs` opens each page in Chromium and asserts computed values
+that can only be right if the right sheets loaded in the right order — a section head's
+font family and tracking, a journal row's grid columns, a tag's border, the crest's
+size — plus two whole-page invariants: every `<link rel=stylesheet>` actually parsed,
+and `system.css` is last. **It is not a pixel diff**, and it fails with the property, the
+wanted value and the value it got.
+
+Playwright is **deliberately not a dependency of this repository** — it would put a
+300 MB install behind `uv run pytest`. The probe resolves it from outside and exits 2
+with instructions when it cannot, so a machine without it skips the check rather than
+failing it.
 
 The two halves meet at exactly one place, the export, and `docs/export-contract.md` is
 its contract. That is why they are one repository: a change to what the export emits and
