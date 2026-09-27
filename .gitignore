@@ -27,6 +27,11 @@ runs/*
 var/*
 !var/.gitkeep
 
+# --- the built site ---
+# ==> checking the tree is committed assembles a servable copy here. Derived from the export,
+# which is itself derived; rebuilt by the script, never edited.
+site/
+
 # --- the front end's export ---
 # `ui/` carries its own .gitignore with the same rule, so this is belt and braces —
 # and it is the belt: the root file is where someone looks before wondering why a

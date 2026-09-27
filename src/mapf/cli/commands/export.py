@@ -150,6 +150,14 @@ def export(
             "moved. Writes nothing."
         ),
     ),
+    no_prices: bool = typer.Option(
+        False,
+        "--no-prices",
+        help=(
+            "Omit the per-company price series. The journal's own anchor and outcome "
+            "closes stay; only the daily bars behind the company chart are left out."
+        ),
+    ),
     allow_partial: bool = typer.Option(
         False,
         "--allow-partial",
@@ -302,6 +310,13 @@ def export(
             # near each filing's anchor and almost never span the snapshot's own
             # date, so asking for one that does would return nothing for nearly
             # every company. A chart wants the longest history the vintage holds.
+            # --no-prices: the bars are the single largest thing in the export and
+            # the only third-party series published in bulk. Skipping them here
+            # rather than deleting the files afterwards is what keeps the manifest
+            # honest — the absence below is written by the exporter, in its own
+            # words, not patched in by a build script.
+            if no_prices:
+                continue
             series = _widest(prices, snapshot_dir, plan.ticker, vintage)
             if series is None:
                 unpriced.append(plan.ticker)
@@ -323,7 +338,15 @@ def export(
             out / "universe.json",
             [{"ticker": c["ticker"], "name": c["name"], "split": c["split"]} for c in companies],
         )
-        if unpriced:
+        if no_prices:
+            missing(
+                "prices",
+                snapshot_dir,
+                "the per-company price series were not exported; each company page "
+                "states the absence, and every close the journal and the scores "
+                "carry is unaffected",
+            )
+        elif unpriced:
             missing(
                 "prices",
                 snapshot_dir,

@@ -898,3 +898,50 @@ def test_the_default_output_is_where_the_front_end_reads(
         check=False,
     )
     assert ignored.returncode == 0, "ui/assets/export/ must be gitignored"
+
+
+def test_no_prices_omits_the_series_and_the_exporter_states_the_absence(tmp_path: Path) -> None:
+    """The bars are the largest thing in the export and the only third-party
+    series published in bulk. `--no-prices` leaves them out.
+
+    THE MANIFEST STATES IT, not a build script. Deleting `prices/` after the fact
+    would leave a manifest claiming a snapshot it did not ship, and the absence
+    would be written by whatever removed the files rather than by the thing that
+    knows what it did.
+    """
+    _ready(tmp_path)
+
+    result = _export(tmp_path, "--no-prices")
+
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / "export" / "prices").exists(), "no series were written"
+
+    manifest = _read(tmp_path, "manifest.json")
+    absence = next(a for a in manifest["absent"] if a["what"] == "prices")
+    assert "were not exported" in absence["reason"]
+    assert manifest["prices"]["companies"] == 0
+
+    # And nothing else moves. Every close the journal and the scores carry comes
+    # from the run artifacts, not from these files.
+    assert (tmp_path / "export" / "corpus.json").exists()
+    assert (tmp_path / "export" / "universe.json").exists()
+    assert (tmp_path / "export" / "runs" / "by_source" / "unknown.json").exists()
+
+
+def test_prices_are_exported_by_default(tmp_path: Path) -> None:
+    """The flag is opt-in, and the two prices absences say different things.
+
+    This fixture's companies have no window in the snapshot, so a default export
+    already records a prices absence — for a different reason. The wording is how
+    a reader tells "the snapshot held nothing for these" from "these were
+    deliberately left out", and the two must not collapse into one message.
+    """
+    _ready(tmp_path)
+
+    result = _export(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    manifest = _read(tmp_path, "manifest.json")
+    absence = next(a for a in manifest["absent"] if a["what"] == "prices")
+    assert "have no window" in absence["reason"]
+    assert "were not exported" not in absence["reason"]
