@@ -28,7 +28,14 @@ class Node {
   get textContent() {
     return this._text + this.children.map((c) => (c.nodeType === 3 ? c.data : c.textContent)).join("");
   }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
+  /* `class` set via setAttribute is the same thing as className — which is how
+     every SVG element in this app is built, since createElementNS takes its
+     attributes that way. The stub used to keep the two apart, so a class set on
+     an <svg> child was invisible to any assertion that looked for it. */
+  setAttribute(k, v) {
+    this.attrs[k] = String(v);
+    if (k === "class") this.className = String(v);
+  }
   getAttribute(k) { return this.attrs[k]; }
   addEventListener() {}
   append(...kids) {
@@ -137,6 +144,12 @@ async function renderCompany(ticker, { openRuns = true } = {}) {
   const whyRoot = mk();
   renderPageWhy(whyRoot, { groups: COMPANY_WHY });
   return { roots, company, runs, source, why: whyRoot.textContent };
+}
+
+/** Every element in a rendered tree, in order. */
+function* walk(node) {
+  yield node;
+  for (const child of node.children ?? []) if (child.nodeType !== 3) yield* walk(child);
 }
 
 describe("company page, against the real export", () => {
@@ -258,11 +271,32 @@ describe("company page, against the real export", () => {
     assert.match(why, /not a current projection/);
   });
 
-  itNeedsExport("draws no y-axis ticks", async () => {
+  itNeedsExport("draws a y-axis, and marks every level as derived", async () => {
+    /* This test used to assert the OPPOSITE — that the section drew no ticks —
+       on the grounds that a tick would be a figure with no provenance. That held
+       while the series was a fixture. The closes are real now, so a level
+       between the lowest and highest of them is computed from measured inputs,
+       which is what `derived` means. The axis is allowed; what is not allowed is
+       an unmarked one. */
     const { roots } = await renderCompany("ACHC");
-    const numbers = roots.series.textContent.match(/\d+\.\d\d/g) ?? [];
-    // Only the last close is a number in this section; the axis carries dates.
-    assert.ok(numbers.length <= 1, `unexpected numeric ticks: ${numbers}`);
+    const ticks = [...walk(roots.series)].filter((n) => n._cls?.has("cmp-ytick"));
+    assert.ok(ticks.length >= 3, `expected an axis, found ${ticks.length} ticks`);
+    for (const t of ticks) {
+      assert.equal(t.dataset.prov, "derived", "a level the page chose is derived, not measured");
+      assert.match(t.textContent, /^[\d,]+\.\d\d$/, `a tick reads as a price: ${t.textContent}`);
+    }
+    /* Emitted low to high, which puts the largest at the top of the plot because
+       y is inverted. The order that matters is that they are monotonic — an axis
+       with a level out of sequence is worse than no axis. */
+    const values = ticks.map((t) => Number(t.textContent.replace(/,/g, "")));
+    assert.deepEqual(values, [...values].sort((a, b) => a - b), "levels are monotonic");
+    assert.equal(new Set(values).size, values.length, "and distinct");
+    // And every one of them is inside the data, not invented beyond it.
+    const src = await load("data/source.js");
+    const series = await src.getPriceSeries("ACHC");
+    const closes = series.sessions.map((b) => b[1]);
+    const lo = Math.min(...closes), hi = Math.max(...closes);
+    for (const v of values) assert.ok(v >= lo && v <= hi, `${v} is outside [${lo}, ${hi}]`);
   });
 
   itNeedsExport("carries filing_date from the ledger, not derived from the anchor", async () => {
@@ -508,10 +542,6 @@ describe("a re-based run has no realised return, on any screen", () => {
      One is needed here: the assertion is about one element's content, and a
      whole-page text search would pass on a page that printed both the refusal
      and the number. */
-  function* walk(node) {
-    yield node;
-    for (const child of node.children ?? []) if (child.nodeType !== 3) yield* walk(child);
-  }
   const byClass = (root, cls) => [...walk(root)].filter((n) => n._cls?.has(cls));
 
   const drifted = (runs, source) =>

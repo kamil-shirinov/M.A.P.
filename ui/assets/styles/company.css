@@ -310,3 +310,45 @@ a.cmp-score-row:hover .cmp-score-go { color: var(--accent); }
 /* A name the export does not carry. Italic and quiet, like every other stated
    absence on the page — never the ticker printed twice. */
 .page-title-absent { font-style: italic; color: var(--ink-3); font-size: var(--step-2); }
+
+/* ---- the price chart: axis, run segments, crosshair ------------------ */
+.cmp-plot-wrap { position: relative; }
+
+/* The axis sits behind the series. Faint enough that the line is still the
+   subject, present enough to read a level off. */
+.cmp-grid { stroke: var(--rule); stroke-width: 1; }
+.cmp-ytick {
+  font-family: var(--font-mono); font-size: 9px; fill: var(--ink-3);
+}
+/* The derived mark, in SVG. `text-decoration` is unreliable on <text> across
+   engines, so the dotted rule is drawn as an underline via the same colour the
+   HTML marks use — and the legend names it. */
+.cmp-ytick { text-decoration: underline dotted 1px; text-underline-offset: 2px; }
+
+/* A run is the segment from its anchor to its outcome. */
+.cmp-span { stroke-width: 1.5; opacity: .75; }
+.cmp-stub { stroke-width: 1.5; opacity: .75; }
+.cmp-anchor.cmp-span, .cmp-anchor.cmp-stub { stroke: var(--accent); }
+.cmp-anchor--drift.cmp-span, .cmp-anchor--drift.cmp-stub { stroke: var(--down); }
+.cmp-anchor--open.cmp-span, .cmp-anchor--open.cmp-stub { stroke: var(--ink-3); stroke-dasharray: 3 3; }
+
+/* The crosshair appears on hover and is absent otherwise — not dimmed, absent,
+   so nothing on the chart is permanently greyed. */
+.cmp-hair { opacity: 0; transition: opacity var(--dur-1) var(--ease); }
+.cmp-plot-wrap[data-hover="true"] .cmp-hair { opacity: 1; }
+.cmp-hair-line { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 2 3; }
+.cmp-hair-dot { fill: var(--ink-num); }
+
+.cmp-read {
+  position: absolute; top: var(--sp-3); transform: translateX(-50%);
+  pointer-events: none; white-space: nowrap;
+  background: var(--surface); border: 1px solid var(--rule-2); border-radius: var(--radius);
+  padding: var(--sp-2) var(--sp-3);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2);
+  opacity: 0; transition: opacity var(--dur-1) var(--ease);
+}
+.cmp-plot-wrap[data-hover="true"] .cmp-read { opacity: 1; }
+/* Past the middle of the plot the box would run off the right edge. */
+.cmp-read[data-flip="true"] { transform: translateX(-100%); }
+.cmp-read-head { display: flex; gap: var(--sp-3); align-items: baseline; color: var(--ink-num); }
+.cmp-read-run { margin-top: var(--sp-1); color: var(--ink-3); }
