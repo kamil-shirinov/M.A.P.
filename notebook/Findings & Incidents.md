@@ -2686,3 +2686,59 @@ to write. What was avoidable was the other half — a statistic reported in a wr
 implemented only in a scratch file has no way back, and deleting the write-up's own lines
 in the next commit nearly closed that route too. The statistic now lives in
 `mapf.eval.aggregate` with tests, which is where it should have been on 2026-09-04.
+
+---
+
+## 62 · A test isolated on six paths out of seven, and the seventh was the one nothing read
+
+`map export --check` re-derives the identity of every input and names the ones that have
+moved. Its test helper passed `--out`, `--frozen`, `--ledger-path`, `--filers-path`,
+`--snapshot` and `--config`, all pointed at `tmp_path`. It did not pass `--runs-dir`, which
+therefore defaulted to `Path("runs")` — **the repository's own 826 run directories**, read
+from whatever the working directory happened to be.
+
+The tests passed. `test_check_reports_a_current_export_as_current` asserted "nothing has
+moved" and got it; `test_check_names_the_input_that_moved` asserted "1 of 7 inputs have
+moved" and got that too.
+
+**They passed because nothing read the unisolated path.** The seven identities were the
+freeze version and digest, the code commit and forecast digest, the ledger count, the
+symbol vintage and the price snapshot. Not one of them touched `runs/`. The helper was
+handing the command a path into the real repository on every invocation, and the defect was
+undetectable by construction: an input nobody reads cannot disagree with anything.
+
+It surfaced the moment run counts joined the comparison for ADR 0036 §5 — at which point
+the pre-existing tests began reporting the repository's 779 unknown-source runs against a
+fixture export's zero, and failed. **The new feature did not break them. It made them
+capable of failing.**
+
+### The family
+
+[[#39]] collected six representations that could not hold the state they had to
+distinguish, and one of its six rows is this same command: *the `--check` stale line —
+"nothing is stale" versus "the check never ran" — prints only when the list is non-empty,
+so a clean report and a silently skipped one are the same output*.
+
+This is that shape moved one level out, from the code into the test. There the two states
+collapsed because the output had no encoding for the difference. Here they collapsed because
+the assertion had no *dependency* on the difference: "isolated from the repository" and "not
+isolated, but reading nothing" produce identical test output, for as long as the reading
+part stays true.
+
+**So a test's isolation is not a property of the test.** It is a property of the pair — what
+the test isolates and what the code reads — and only one half of that pair is visible when
+the test is written. This helper was correct on the day it was written and became wrong
+without being edited.
+
+### The practical rule
+
+**Isolate every path a command accepts, not every path it currently reads.** The cost is one
+argument; the cost of the alternative is a test that silently widens its blast radius the
+next time the command grows. `_export` in the same file already did this — it passed
+`--runs-dir` from the beginning — which is why the export tests were unaffected and only the
+`--check` tests broke. One helper had the habit and the other did not, and the difference was
+invisible for as long as it did not matter.
+
+Not caught by review, and it would not have been: reading `_check` beside `_export` shows one
+argument missing from a list of six, and the reason it is missing is a fact about a different
+file. The thing that found it was adding a reader.
