@@ -344,7 +344,7 @@ describe("front-door.css and the two documents", () => {
 
   it("turns off all three motions under reduced motion", () => {
     const block = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
-    assert.match(block, /\[data-band\] \{ animation: none; \}/);
+    assert.match(block, /\[data-band\] \{ animation: none;/);
     assert.match(block, /\.ground \{ transition: none; \}/);
     assert.match(block, /::view-transition-group\(\*\),\s*::view-transition-old\(\*\),\s*::view-transition-new\(\*\) \{ animation-duration: 1ms !important; \}/);
   });
@@ -443,6 +443,71 @@ describe("the ground drifts, on every screen", () => {
 
   it("stops entirely under reduced motion, rather than holding a rotated frame", () => {
     const reduce = systemCss.slice(systemCss.indexOf("@media (prefers-reduced-motion: reduce)"));
-    assert.match(reduce, /\[data-band\] \{ animation: none !important; \}/);
+    assert.match(reduce, /\[data-band\] \{ animation: none !important;/);
+    // And the layer hint goes with it: a figure that never moves should not hold
+    // a compositor layer for the life of the page.
+    assert.match(reduce, /\[data-band\][^}]*will-change: auto !important/);
+  });
+});
+
+describe("motion is on one curve and never shifts the layout", () => {
+  const SHEETS = ["tokens", "system", "base", "components", "front-door", "search", "results", "runs", "company"];
+  /* Comments come out first. They quote declarations in prose — "`animation:
+     ... both` applies its FROM state" — and a scan that reads them is testing the
+     commentary rather than the stylesheet. */
+  const bare = (text) => text.replace(/\/\*[\s\S]*?\*\//g, "");
+  const css = Object.fromEntries(SHEETS.map((n) => [n, bare(read(`assets/styles/${n}.css`))]));
+  const all = Object.values(css).join("\n");
+
+  it("names no easing curve but the token, except the drift", () => {
+    /* Two transitions used a bare `ease` and a literal copy of the token. One
+       curve is the rule; the drift's `linear` is the one stated exception, and
+       tokens.css says so. */
+    const eased = [...all.matchAll(/(transition|animation):[^;]+;/g)].map((m) => m[0]);
+    for (const decl of eased) {
+      if (/rosette/.test(decl)) {
+        assert.match(decl, /\blinear\b/, `the drift is linear: ${decl}`);
+        continue;
+      }
+      if (!/\b(ease|cubic-bezier|linear|steps)\b/.test(decl)) continue;
+      assert.match(decl, /var\(--ease\)/, `should use var(--ease): ${decl}`);
+      assert.doesNotMatch(decl, /cubic-bezier/, `should not restate the curve: ${decl}`);
+    }
+  });
+
+  it("names no duration inline", () => {
+    // Every duration is a token, so the set of them is readable in one place.
+    const decls = [...all.matchAll(/(transition|animation):[^;]+;/g)].map((m) => m[0]);
+    for (const decl of decls) {
+      if (/rosette/.test(decl)) continue; // periods in the tens of seconds, per band
+      const literal = decl.match(/\b\d+(\.\d+)?m?s\b/);
+      assert.equal(literal, null, `duration should be a token: ${decl}`);
+    }
+    assert.match(css.tokens, /--dur-4:/);
+  });
+
+  it("animates nothing that reflows the page", () => {
+    /* Every entrance moves opacity and transform only. A transition on width,
+       height or a box offset would shift the rows beneath it while it ran. */
+    const LAYOUT = /\b(width|height|margin|padding|top|left|right|bottom|font-size|inset)\b/;
+    for (const decl of [...all.matchAll(/transition:[^;]+;/g)].map((m) => m[0])) {
+      assert.doesNotMatch(decl, LAYOUT, `transitions a layout property: ${decl}`);
+    }
+    // One level of nesting, which is exactly what a keyframes block is:
+    // `from { ... } to { ... }`. Several are written on a single line.
+    const frames = [...all.matchAll(/@keyframes [\w-]+ \{(?:[^{}]|\{[^{}]*\})*\}/g)].map((m) => m[0]);
+    assert.ok(frames.length >= 8, "found the keyframes");
+    for (const frame of frames) {
+      const inner = frame.slice(frame.indexOf("{") + 1);
+      assert.doesNotMatch(inner, LAYOUT, `keyframe animates a layout property: ${frame.slice(0, 60)}`);
+    }
+  });
+
+  it("scrolls smoothly only when movement was not declined", () => {
+    const page = read("assets/js/runs-page.js");
+    assert.match(page, /prefersReducedMotion\(\) \? "auto" : "smooth"/);
+    // One scroll, not a smooth one followed by a jump to correct it.
+    assert.doesNotMatch(page, /window\.scrollBy\(/);
+    assert.match(page, /window\.scrollTo\(\{ top, behavior \}\)/);
   });
 });

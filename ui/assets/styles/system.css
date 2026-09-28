@@ -368,5 +368,5 @@ a:hover { color: var(--ink-num); text-decoration: underline 1px; text-underline-
   /* Stated rather than left to the brake above. Crushing a duration to .01ms
      leaves the figure holding its `to` state, which is a rosette rotated two and
      a half degrees off true for no reason. `none` leaves it where it was drawn. */
-  [data-band] { animation: none !important; }
+  [data-band] { animation: none !important; will-change: auto !important; }
 }

@@ -34,13 +34,21 @@
 
   --radius: 2px;
 
-  /* Motion. Three durations and one curve, so nothing has to invent its own.
-     --dur-1 hover, caret, nav rule · --dur-2 row entrance · --dur-3 chart
-     entrance. The curve is ease-out with no overshoot: this is a record of
-     measurements and nothing on it should bounce. */
+  /* Motion. Four durations and ONE curve, so nothing has to invent its own.
+     --dur-1 hover, caret, nav rule, focus ring · --dur-2 row entrance ·
+     --dur-3 chart entrance · --dur-4 the door-to-page flip, which moves the
+     whole ground and needs longer than anything on a page does. The curve is
+     ease-out with no overshoot: this is a record of measurements and nothing on
+     it should bounce.
+
+     The rosette's drift is the one exception and is deliberately LINEAR, not
+     this curve: an eased swing over 34 seconds is imperceptible at both ends,
+     which is why the door looked still. Stated here so the exception reads as a
+     decision rather than as something missed. */
   --dur-1: 150ms;
   --dur-2: 250ms;
   --dur-3: 400ms;
+  --dur-4: 700ms;
   --ease: cubic-bezier(.2, .7, .2, 1);
 
   /* ---- dark, the default ---- */

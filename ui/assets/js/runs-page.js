@@ -22,6 +22,7 @@
 
 import * as source from "./data/source.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
+import { prefersReducedMotion } from "./lib/motion.js";
 import { mountPageRosette } from "./ui/rosette.js";
 import { renderPageWhy } from "./ui/page-why.js";
 import { mountMastheadNav } from "./ui/front-door.js";
@@ -241,8 +242,16 @@ function paint() {
       onPick: (label) => {
         state.openGroups = new Set([label]);
         paint();
-        document.getElementById(`q-${label.replace(/\s+/g, "-")}`)?.scrollIntoView({ block: "start" });
-        window.scrollBy(0, -40);
+        /* Smooth unless the visitor asked for less movement, in which case the
+           jump is the correct answer rather than a lesser one. It was an
+           unconditional jump: the only abrupt move left on any screen once the
+           entrances and the flip are eased. The nudge is part of the same scroll,
+           so it cannot land as a second jerk after a smooth one. */
+        const behavior = prefersReducedMotion() ? "auto" : "smooth";
+        const target = document.getElementById(`q-${label.replace(/\s+/g, "-")}`);
+        if (!target) return;
+        const top = target.getBoundingClientRect().top + window.scrollY - 40;
+        window.scrollTo({ top, behavior });
       },
     });
   }
