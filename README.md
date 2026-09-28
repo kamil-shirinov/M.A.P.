@@ -162,16 +162,24 @@ git log --format='%h %ad %s' --date=iso refs/notes/commits   # 22 appends, in or
 git notes show ad71b13                                        # the records themselves
 ```
 
-The second command is the one that proves the ordering: it is the history of the notes
-ref itself, one commit per append, each timestamped. `git log --show-notes=commits`
-displays a note beside its commit but says nothing about **when the note was written**,
-which is the whole claim.
+The second command is the one that carries the evidence for the ordering: it is the
+history of the notes ref itself, one commit per append, each timestamped.
+`git log --show-notes=commits` displays a note beside its commit but says nothing about
+**when the note was written**, which is the whole claim.
+
+`%ad` is the **author** date, and that is deliberate. A rebase on 2026-09-08 rewrote part
+of this history and moved several *commit* dates to that day — `9cb1b84` was replayed as
+`710879a` with its author date intact — so any ordering read off commit dates would put
+work in September that happened earlier. Author dates survived the rebase; the notes ref
+was not rebased at all, and its two dates agree. Evidence rather than proof, since author
+dates can be set by hand: what the ref establishes is that 22 appends exist in a
+sequence, each recorded before the result it constrains.
 
 **Run the test suites.** Both pass with no inference server and no network.
 
 ```bash
 uv sync --extra dev
-uv run pytest                     # 1,616 tests, 100% coverage of `mapf`
+uv run pytest                     # 1,643 tests, 100% coverage of `mapf`
 node --test ui/tests/*.test.mjs   # the front end; no build step, no dependencies
 ```
 

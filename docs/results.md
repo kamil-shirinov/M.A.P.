@@ -47,6 +47,16 @@ the contamination hypothesis rather than supporting it. This design could have d
 gross memorisation and could not have detected a subtle familiarity effect of a few
 percent, and this sentence is the write-up saying so.
 
+**An extra check, not pre-registered.** The same comparison stated as each band's gap to
+the random walk: **+5.41% on the clean band against +3.89% on the ambiguous band, a
+difference of −1.52% with an interval from −6.98% to +2.96%** — computed today from the
+two persisted records on `block_resamples`, 4,000 draws, seed 20260813, ten-day blocks,
+each band resampled on its own days because the two hold different items and pairing is
+not defined across them. The interval covers zero, so the bands are not distinguishable on
+this measure either. Labelled an extra check because nothing registered it in advance: the
+registered leakage statistic is the CRPS difference above, and this is the same evidence
+re-expressed against a baseline rather than a second test of it.
+
 ### Phase 3 — the correction, and the one-shot test
 
 A two-parameter map `z → (z − a) / b`, fitted on the development half only, by minimising
@@ -145,7 +155,10 @@ Phase 4 built read paths, not results. None of it is new evidence about forecast
 
 **What you can check, and with what.** The Phase 1–3 results above are verifiable from
 this repository alone: `corpus/frozen.json` is the pre-registration and its commit order
-is the proof, and `corpus/holdout_spend.jsonl` is the record of the single holdout spend.
+is the evidence for it, and `corpus/holdout_spend.jsonl` is the record of the single
+holdout spend. Evidence rather than proof throughout, where the thing being relied on is
+a git timestamp: dates in a repository are writable, and a 2026-09-08 rebase moved some
+commit dates in this one. Read author dates, and read the ordering rather than the clock.
 Phase 4's *structure* is verifiable from the source and the test suite — that the journal
 cannot compute a score, that populations have no pooled accessor, that a scoring record
 refuses to be overwritten. Phase 4's *numbers* are not: 779 runs, 701/74/4, 777 closed,
