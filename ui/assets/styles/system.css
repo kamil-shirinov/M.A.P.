@@ -174,6 +174,22 @@ body[data-mode="open"] .ground,
 body[data-mode="open"] .ground ~ *,
 .ground[data-scope="page"] ~ * { position: relative; z-index: 1; }
 
+/* The same drift as the door, a third of the swing on periods half again as
+   long. Subtle is the point: behind a table the figure should be something you
+   notice only if you stop reading, so the swing is small enough that no ring
+   crosses a cell boundary while an eye is on it. Linear and phase-offset for the
+   reasons front-door.css gives — eased, this amount of travel would never be
+   perceptible at all. */
+@keyframes rosette-page-a { from { transform: rotate(-2.4deg); } to { transform: rotate(2.4deg); } }
+@keyframes rosette-page-b { from { transform: rotate(1.7deg);  } to { transform: rotate(-1.7deg); } }
+@keyframes rosette-page-c { from { transform: rotate(-3deg);   } to { transform: rotate(3deg); } }
+body[data-mode="open"] .ground [data-band="a"],
+.ground[data-scope="page"] [data-band="a"] { animation: rosette-page-a 52s linear -17s infinite alternate; }
+body[data-mode="open"] .ground [data-band="b"],
+.ground[data-scope="page"] [data-band="b"] { animation: rosette-page-b 68s linear -43s infinite alternate; }
+body[data-mode="open"] .ground [data-band="c"],
+.ground[data-scope="page"] [data-band="c"] { animation: rosette-page-c 87s linear -61s infinite alternate; }
+
 /* ---- 7 · footer ------------------------------------------------------ */
 /* One line, like the door's. The sentence that used to sit under it — "Four
    independent stamps, not one export vintage" — is a note about how to read the
@@ -349,4 +365,8 @@ a:hover { color: var(--ink-num); text-decoration: underline 1px; text-underline-
   ::view-transition-group(*),
   ::view-transition-old(*),
   ::view-transition-new(*) { animation: none !important; }
+  /* Stated rather than left to the brake above. Crushing a duration to .01ms
+     leaves the figure holding its `to` state, which is a rosette rotated two and
+     a half degrees off true for no reason. `none` leaves it where it was drawn. */
+  [data-band] { animation: none !important; }
 }

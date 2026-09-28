@@ -53,7 +53,7 @@ const DEFAULTS = {
   drift: true,
 };
 
-/** The figure behind an inner screen: the door's, at half weight and still.
+/** The figure behind an inner screen: the door's, at half weight.
 
     Same geometry and the SAME STROKE as the door. The shared-system spec gave
     #2c333f against the door's #262d38, but it also says "the same parameters as
@@ -62,10 +62,14 @@ const DEFAULTS = {
     #262d38 at .35 to rgb(20,24,30), a difference of two levels — and it keeps
     one figure rather than two that are nearly the same.
 
-    `drift: false` because this one never moves. On the door the drift IS the
-    thing; behind a table it is a distraction with no off switch. */
+    IT DRIFTS, a third of the door's swing on longer periods (system.css). It did
+    not, and that was not a judgement about inner pages: every screen mounts
+    through here, so `drift: false` meant nothing in the app ever mounted a
+    drifting rosette and front-door.css's three keyframes were unreachable. The
+    door looked still because it WAS still. A band built with `drift: false`
+    carries `data-band="static"`, which no rule animates. */
 export function mountPageRosette(host, options = {}) {
-  return mountRosette(host, { opacity: 0.35, drift: false, ...options });
+  return mountRosette(host, { opacity: 0.35, ...options });
 }
 
 /** Builds the rosette and appends it to `host`. Returns the <svg> element. */

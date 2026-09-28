@@ -40,16 +40,27 @@ body[data-mode="open"] .door { display: none; }
 body[data-mode="door"] .ground { transform: translate(-50%, -50%) scale(1.08); opacity: 1; }
 .rosette { display: block; width: 100%; height: 100%; overflow: visible; }
 
-/* Differential drift: degrees of swing over minutes, on three periods. Fast
-   enough that the interference is perceptible within a few seconds, slow enough
-   that no single line reads as moving. */
+/* Differential drift: degrees of swing over minutes, on three periods.
+
+   LINEAR, not ease-in-out, and that is the whole difference between a figure
+   that drifts and one that looks stopped. Eased over 34 seconds, band a covers
+   0.02 of its 14 degrees in the first second and 0.21 by the third — sub-pixel
+   at the rim — because ease-in-out spends its speed in the middle of the span.
+   Linear gives a constant 0.41 deg/s, which the interference pattern shows
+   within a second or two while no single line reads as moving.
+
+   And the three start at DIFFERENT PHASES, via negative delays. Starting them
+   together put all three at an endpoint at boot, where the relative angle that
+   does the drawing is momentarily not changing at all — the one moment a visitor
+   is most likely to be looking. The periods are pairwise non-commensurate, so
+   only one band reverses at a time and the pattern does not repeat. */
 @keyframes rosette-a { from { transform: rotate(-7deg); } to { transform: rotate(7deg); } }
 @keyframes rosette-b { from { transform: rotate(5deg);  } to { transform: rotate(-5deg); } }
 @keyframes rosette-c { from { transform: rotate(-9deg); } to { transform: rotate(9deg); } }
 [data-band] { transform-origin: 500px 500px; }
-[data-band="a"] { animation: rosette-a 34s ease-in-out infinite alternate; }
-[data-band="b"] { animation: rosette-b 46s ease-in-out infinite alternate; }
-[data-band="c"] { animation: rosette-c 58s ease-in-out infinite alternate; }
+[data-band="a"] { animation: rosette-a 34s linear -11s infinite alternate; }
+[data-band="b"] { animation: rosette-b 46s linear -29s infinite alternate; }
+[data-band="c"] { animation: rosette-c 58s linear -41s infinite alternate; }
 
 /* ---- the door ---- */
 .door {

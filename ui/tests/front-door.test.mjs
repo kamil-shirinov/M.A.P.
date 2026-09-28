@@ -381,3 +381,68 @@ describe("front-door.css and the two documents", () => {
     for (const decls of rulesFor(css, ".masthead h1")) assert.doesNotMatch(decls, /text-indent/);
   });
 });
+
+describe("the ground drifts, on every screen", () => {
+  const module = read("assets/js/ui/rosette.js");
+  const doorCss = read("assets/styles/front-door.css");
+  const systemCss = read("assets/styles/system.css");
+
+  it("mounts a drifting figure, because every screen mounts through one helper", () => {
+    /* The regression this exists for: `mountPageRosette` forced `drift: false`
+       and all four pages go through it, so nothing in the app ever mounted a
+       drifting rosette and front-door.css's keyframes were unreachable. The door
+       looked still because it was. */
+    const helper = bodyOf(module, "export function mountPageRosette(");
+    assert.doesNotMatch(helper, /drift:\s*false/);
+    assert.match(helper, /opacity: 0\.35/);
+  });
+
+  it("never leaves a band on a value no rule animates", () => {
+    // A band built without drift is `data-band="static"`, and nothing styles it.
+    const produced = [...module.matchAll(/"data-band":\s*([^)]+)\)/g)].join(" ");
+    assert.match(produced, /o\.drift \? name : "static"/);
+    for (const css of [doorCss, systemCss]) {
+      assert.doesNotMatch(css, /\[data-band="static"\]/);
+    }
+    // So the app must not build one. Checked at the only call site of the option.
+    for (const page of ["search-page.js", "company.js", "runs-page.js", "results-page.js"]) {
+      assert.doesNotMatch(read(`assets/js/${page}`), /drift:\s*false/);
+    }
+  });
+
+  it("drifts linearly, so the motion is visible rather than eased into nothing", () => {
+    /* ease-in-out over 34s moves band a 0.02 of its 14 degrees in the first
+       second. That is the defect, not the duration. */
+    for (const band of ["a", "b", "c"]) {
+      assert.match(doorCss, new RegExp(`\\[data-band="${band}"\\][^}]*animation: rosette-${band} \\d+s linear`));
+      assert.match(systemCss, new RegExp(`\\[data-band="${band}"\\][^}]*animation: rosette-page-${band} \\d+s linear`));
+    }
+    assert.doesNotMatch(doorCss, /animation: rosette-[abc] \d+s ease/);
+  });
+
+  it("starts the three bands at different phases", () => {
+    // All three at an endpoint together is the one moment the relative angle is
+    // not changing, and it was the moment the page loaded.
+    const delays = [...doorCss.matchAll(/animation: rosette-[abc] \d+s linear (-\d+)s/g)].map((m) => m[1]);
+    assert.equal(delays.length, 3);
+    assert.equal(new Set(delays).size, 3);
+    const pageDelays = [...systemCss.matchAll(/animation: rosette-page-[abc] \d+s linear (-\d+)s/g)].map((m) => m[1]);
+    assert.equal(new Set(pageDelays).size, 3);
+  });
+
+  it("swings less behind a page than behind the door", () => {
+    const deg = (css, name) => {
+      const block = css.slice(css.indexOf(`@keyframes ${name} `));
+      return Math.abs(Number(block.match(/rotate\((-?[\d.]+)deg\)/)[1]));
+    };
+    for (const band of ["a", "b", "c"]) {
+      assert.ok(deg(systemCss, `rosette-page-${band}`) < deg(doorCss, `rosette-${band}`),
+        `page band ${band} should swing less than the door's`);
+    }
+  });
+
+  it("stops entirely under reduced motion, rather than holding a rotated frame", () => {
+    const reduce = systemCss.slice(systemCss.indexOf("@media (prefers-reduced-motion: reduce)"));
+    assert.match(reduce, /\[data-band\] \{ animation: none !important; \}/);
+  });
+});
