@@ -514,8 +514,8 @@ that reason: a checklist written after the work cannot fail.
 from a three-directory search.** A `docs/PHASE2_KICKOFF.md` was proposed as the
 pre-registered source of these seven criteria. It does not exist and never has: of the
 **297 distinct paths ever added on any branch**, none matches `phase` or `kickoff`, and
-the `docs/` tree — which existed before the rename to `M.A.P.-vault/` — only ever held
-`STATE.md` and `decisions/`.
+the `docs/` tree — which existed before the rename to `M.A.P.-vault/`, itself renamed to
+`notebook/` in 2026-09 — only ever held `STATE.md` and `decisions/`.
 
 The contrast is what makes the verdict meaningful rather than pedantic:
 
@@ -794,3 +794,8 @@ something other than its author ([[Findings & Incidents]] #53).
 
 **Next:** publication.
 
+---
+
+*Editorial note, 2026-09-28. `docs/PHASE2_KICKOFF.md`, cited above, was never tracked in
+this repository. What it described is recorded in this timeline's Phase 2 sections and in
+the ADRs they link.*

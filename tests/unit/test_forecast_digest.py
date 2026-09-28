@@ -61,7 +61,7 @@ def test_files_that_can_change_a_forecast_are_included(path: str) -> None:
         "src/mapf/corpus/passes.py",
         "src/mapf/data/earnings.py",
         "tests/unit/test_scorer.py",
-        "M.A.P.-vault/STATE.md",
+        "notebook/STATE.md",
         "scripts/backfill_forecast_digest.py",
         "README.md",
     ],

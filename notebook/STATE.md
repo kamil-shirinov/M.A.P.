@@ -1,6 +1,6 @@
 # STATE.md — where the project actually is
 
-> Save at `~/Desktop/M.A.P./M.A.P.-vault/STATE.md`.
+> Save at `~/Desktop/M.A.P./notebook/STATE.md`.
 >
 > **This file is the handoff between chat sessions.** A fresh Claude Code session reads
 > `CLAUDE.md` for the rules and this file for the situation. Keep it current or it
@@ -504,7 +504,7 @@ same surface that fabricated 66.3%.
 
 ## Decision log
 
-ADRs live in `M.A.P.-vault/decisions/`. Index them here as they are written.
+ADRs live in `decisions/`. Index them here as they are written.
 
 | # | Title | Status |
 |---|---|---|
@@ -618,12 +618,18 @@ needs a paragraph, it needed an ADR instead.
 
 **Ending a session** — paste this before you close the chat:
 
-> Update `M.A.P.-vault/STATE.md`: move completed items to Done, set the Next action, add any new
+> Update `notebook/STATE.md`: move completed items to Done, set the Next action, add any new
 > open questions or known issues, and append a one-line session log entry. Write ADRs for
 > any non-obvious decision we made today. Do not summarise the conversation — record only
 > what a fresh session needs in order to continue.
 
 **Starting a session** — paste this first:
 
-> Read `CLAUDE.md` and `M.A.P.-vault/STATE.md`. Tell me in five lines where the project is and what
+> Read `CLAUDE.md` and `notebook/STATE.md`. Tell me in five lines where the project is and what
 > the next action is. Do not start work until I confirm.
+
+---
+
+*Editorial note, 2026-09-28. `scratchpad/probe/variants.py`, cited above, was never
+tracked in this repository — it was working scratch on one machine. The probe it refers
+to is `src/mapf/pipeline/probe.py`.*

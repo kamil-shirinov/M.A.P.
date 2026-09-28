@@ -21,7 +21,7 @@ before it**, 120 companies, 8-K Item 2.02 exhibits, a five-session horizon, poin
 aligned so the overnight announcement gap falls outside the window.
 
 **701 forecasts completed. 8 failed** — every one an agent generating its full token
-budget and emitting no answer. All are named in `M.A.P.-vault/`.
+budget and emitting no answer. All are named in `notebook/`.
 
 > **Log score is the negative log predictive density: lower is better.** Stated because
 > "improved from −0.949 to −1.237" reads as worse to almost every reader.
@@ -904,8 +904,8 @@ belong in the file.
 | Document | What it holds |
 |---|---|
 | `CLAUDE.md` | Working agreement, hard constraints, architecture rules |
-| `M.A.P.-vault/STATE.md` | Where the project actually is. Read this second |
-| `M.A.P.-vault/decisions/` | ADRs — every non-obvious choice, with the alternatives rejected |
+| `notebook/STATE.md` | Where the project actually is. Read this second |
+| `decisions/` | ADRs — every non-obvious choice, with the alternatives rejected |
 
 ---
 

@@ -372,3 +372,11 @@ continuation option was already not executable as described.
 
 The interleave does not change that either way. Recorded here because it is adjacent
 and would otherwise be found while trying to exercise it.
+
+
+---
+
+*Editorial note, 2026-09-28. The body above is unedited. `scripts/ally_reasoning_replay.py`,
+cited in it, was removed in commit `68c4d3e` when the diagnostic was retargeted to ACGL;
+the file is recoverable from that commit's parent. Noted here rather than corrected in
+place, because an ADR records what was believed and cited when the decision was made.*

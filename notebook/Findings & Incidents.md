@@ -194,7 +194,8 @@ Failure mode if missed: CI passes with no fixtures, silently, for weeks.
 **Addendum — the same rule failing the other way.** During the vault migration, `.obsidian/workspace.json`
 was added to ignore Obsidian's per-session UI state. It silently did nothing: a pattern *containing a slash*
 is anchored to the directory holding the `.gitignore`, so it matched `./.obsidian/workspace.json` and never
-`M.A.P.-vault/.obsidian/workspace.json`. Fixed with a `**/` prefix.
+`M.A.P.-vault/.obsidian/workspace.json` — the vault's path at the time; it is `.obsidian/`
+at the repository root now. Fixed with a `**/` prefix.
 
 So the same gitignore rule produced both failure modes: **unanchored matched too much, anchored matched too
 little.** Only the first was visible by reading the pattern — the second looked exactly like a working rule

@@ -1,7 +1,8 @@
 # M.A.P. — Start Here
 
-> Open Obsidian and point a vault at `~/Desktop/M.A.P./M.A.P.-vault/`.
-> The ADRs, STATE.md and these learning notes then all live in one graph.
+> Open Obsidian and point a vault at the repository root, `~/Desktop/M.A.P./`.
+> The ADRs in `decisions/` and these notes in `notebook/` then live in one graph, and
+> every `[[wikilink]]` resolves across both.
 
 ---
 
@@ -88,6 +89,6 @@ word. Future you can fill it in; future you cannot remember what confused you.
 
 At the end of each development session, ask Claude Code:
 
-> Append to `M.A.P.-vault/Development Timeline.md`: what changed today and why, in five lines. Add
-> any new incident to `M.A.P.-vault/Findings & Incidents.md`. Add any term a reader might not
-> know to `M.A.P.-vault/Concepts.md`.
+> Append to `notebook/Development Timeline.md`: what changed today and why, in five lines. Add
+> any new incident to `notebook/Findings & Incidents.md`. Add any term a reader might not
+> know to `notebook/Concepts.md`.

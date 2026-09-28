@@ -18,7 +18,7 @@ Every design decision must be defensible from the record alone, years later, by 
 
 1. **Explain before you write.** Before creating any non-trivial module, state in ≤150 words: the problem it solves, one or two alternatives considered, and why you rejected them. Then write the code.
 2. **One module at a time.** Finish it, test it, and stop for approval before moving on. Do not generate the whole repo in a single pass.
-3. **Write an ADR** in `M.A.P.-vault/decisions/NNNN-short-title.md` for every non-obvious choice. Format: *Context / Options / Decision / Consequences*.
+3. **Write an ADR** in `decisions/NNNN-short-title.md` for every non-obvious choice. Format: *Context / Options / Decision / Consequences*.
 4. **Never add a dependency silently.** Name it, justify it, and add it to `pyproject.toml` in the same change.
 5. **Push back.** If a request is a bad idea, say so *before* implementing it. Agreeableness is not helpfulness.
 

@@ -129,3 +129,11 @@ The result is recorded either way, because it is a finding about the *method*:
 - **Some finishing inside the budget** — the runaway is probabilistic, and the repeat
   rule was the better answer, because a blanket flip would also have discarded items
   a retry would have rescued.
+
+
+---
+
+*Editorial note, 2026-09-28. The body above is unedited. `scripts/ally_reasoning_replay.py`,
+cited in it, was removed in commit `68c4d3e` when the diagnostic was retargeted to ACGL;
+the file is recoverable from that commit's parent. Noted here rather than corrected in
+place, because an ADR records what was believed and cited when the decision was made.*
