@@ -127,5 +127,6 @@ from mapf.cli.commands import (  # noqa: E402,F401
     run,
     runs,
     search,
+    serve,
     symbols,
 )
