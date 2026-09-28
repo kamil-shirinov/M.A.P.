@@ -2,7 +2,7 @@
 
    THIS IS THE ONLY SCREEN THAT CAUSES ANYTHING TO EXIST. Every other page is a
    read of a static export. Here a press of Analyze runs three models locally for
-   about six minutes and writes a permanent entry to the run journal.
+   about seven minutes and writes a permanent entry to the run journal.
 
    Which means the page has two quite different states, and the difference is not
    cosmetic:
@@ -79,7 +79,7 @@ function renderAbsence(host) {
   box.append(el("pre", null, "uv run map serve"));
   box.append(el("p", "anl-absence-foot",
     "That command serves this page and the endpoint from one origin, on your own " +
-    "machine. Each analysis takes about six minutes and is a permanent journal entry."));
+    "machine. Each analysis takes about seven minutes and is a permanent journal entry."));
   host.append(box);
 }
 
@@ -117,7 +117,7 @@ function renderAsk(host) {
     wrap.append(chromeText(period.label, "a horizon in trading sessions"));
     /* The marking is on the CONTROL, before anything runs. A reader choosing 21
        sessions should know it is uncalibrated while choosing it, not discover it
-       from the result six minutes later. */
+       from the result seven minutes later. */
     const note = el("span", "anl-period-note", period.note);
     if (period.days !== 5) note.dataset.calibration = "uncalibrated";
     wrap.append(chrome(note, "what this horizon is"));
@@ -140,7 +140,7 @@ function renderAsk(host) {
     el("p", "anl-cost",
       "One analysis reads the company's latest earnings 8-K, runs three models " +
       "locally, and writes a permanent entry to the run journal. It takes about " +
-      "six minutes and cannot be undone."),
+      "seven minutes and cannot be undone."),
     "what pressing Analyze does",
   ));
 }

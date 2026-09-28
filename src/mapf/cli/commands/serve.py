@@ -241,9 +241,8 @@ def serve(
         url = f"http://127.0.0.1:{port}/analyse.html"
         typer.secho(f"serve      {url}", fg=typer.colors.GREEN)
         typer.echo("           every analysis is a real run and a permanent journal entry")
-        typer.echo(
-            f"           a run takes about {TYPICAL_RUN_SECONDS // 60} minutes on this hardware"
-        )
+        minutes = round(TYPICAL_RUN_SECONDS / 60)
+        typer.echo(f"           a run takes about {minutes} minutes on this hardware")
         typer.echo("           ctrl-c to stop")
         if open_browser:
             webbrowser.open(url)

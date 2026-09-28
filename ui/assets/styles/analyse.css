@@ -4,7 +4,21 @@
    a claim the text already makes, so the screen reads correctly in greyscale and
    to anyone who cannot separate amber from the body colour. */
 
-.anl-page { display: grid; gap: var(--sp-7); }
+/* The page frame, as every other screen sets it. Without this the content sits
+   flush against the window edge — the same lost gutter the company and runs
+   screens each had, and it is invisible in a test because nothing about the
+   markup is wrong. */
+.anl-page,
+body > .masthead,
+.cmp-footer { max-width: var(--measure); margin-inline: auto; padding-inline: var(--gutter); }
+
+.anl-page {
+  display: grid;
+  gap: var(--sp-7);
+  padding-block: var(--sp-6);
+  position: relative;
+  z-index: 1;
+}
 .anl-section:empty { display: none; }
 
 /* ---- the ask ---- */
