@@ -55,11 +55,15 @@ function stage({ n, quoted, what, share, file, when, width, tone, prov, provWhy 
   /* The share is built from figures now rather than written as a sentence, so
      the audit sees a marked rate instead of prose that happens to hold digits.
      A stage with nothing to say about its share gets an empty line, not chrome
-     standing in for a number that was never computed. */
+     standing in for a number that was never computed.
+
+     `share` is a list of GROUPS, not of nodes: a figure and the label naming its
+     base belong together, and the separator goes between groups. Flattened, the
+     base row read "100.0% · of tickers". */
   if (share) {
-    share.forEach((part, i) => {
+    share.forEach((group, i) => {
       if (i) line.append(chromeText(" · ", "a separator between two readings of one stage"));
-      line.append(part);
+      group.forEach((part) => line.append(part));
     });
   }
   mid.append(
@@ -109,7 +113,7 @@ export function renderFunnel(host, { symbolCount, funnel }) {
      share needs a base and inventing one would be worse than an empty line. */
   const f = funnel ?? null;
   const base = f?.tickers ?? null;
-  const share = (n) => (base && Number.isFinite(n) ? [shareOf(n, base), over(" of tickers")] : null);
+  const share = (n) => (base && Number.isFinite(n) ? [[shareOf(n, base), over(" of tickers")]] : null);
 
   host.textContent = "";
   const head = el("div", "srch-head");
@@ -255,7 +259,7 @@ export function whyGroups(funnel = null) {
   const pct = (n) => `${((n / funnel.tickers) * 100).toFixed(1)}%`;
   const fill = (meta) =>
     funnel && meta in funnel
-      ? `${funnel[meta].toLocaleString("en-US")} tickers · ${pct(funnel[meta])} of tickers`
+      ? `${funnel[meta].toLocaleString("en-US")} of ${funnel.tickers.toLocaleString("en-US")} tickers · ${pct(funnel[meta])}`
       : meta in { readable_unread: 1, no_earnings_filings: 1 }
         ? "not counted in this export"
         : meta;
