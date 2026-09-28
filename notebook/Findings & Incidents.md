@@ -2589,20 +2589,57 @@ that alone, against `block_resamples`:
 | --- | --- | --- | --- |
 | development | `[1.0135, 1.4372]`, excludes 1.0 | `[1.0169, 1.4368]`, excludes 1.0 | 178 / 175 |
 | ambiguous | `[0.9945, 1.5365]`, misses by 0.0055 | `[0.9947, 1.6078]`, misses by 0.0053 | 177 / 174 |
+| ambiguous, rebuilt | `[0.9945, 1.5365]` | `[0.9933, 1.5378]` | 177 / **177** |
 
 **The verdict is the same on both bands, and the same under every reading the
-pre-registration left open.** On the ambiguous band the lower bound — the one the verdict
-turns on — is within **0.0002**. The upper bound is **0.07 apart**, which a different
-sample would explain: the recomputation runs on 174 items where the original had 177,
-three since lost to `SpotDriftError`, and the upper tail of a tail-ratio bootstrap is
-where a dropped extreme item shows most. The development band, with a difference of the
-same size, lands within 0.0034 on both bounds.
+pre-registration left open.** On the ambiguous band as persisted, the lower bound — the
+one the verdict turns on — is within **0.0002**, while the upper is **0.07 apart**. The
+development band, differing by the same three items, lands within 0.0034 on both bounds.
 
-**The development row is the one that covers the resampling.** Record 4 Part A is the only
-place a tail-ratio *interval* is recorded for a band this repository can still score, so it
-is the only check that exercises the bootstrap rather than the statistic. Its baselines'
-intervals cannot be checked: the scoring record carries baseline CRPS, log score and Brier,
-but no baseline sigma.
+### The three missing items, and what they turned out to be
+
+The first explanation offered for that upper bound was a dropped extreme, and it was
+wrong: the count past three sigma is **8 on both 177 and 174**, so none of the three was
+in the tail at all.
+
+They are all **SCCO**, at three different anchors, each refused with a drift of exactly
+**1.19%**. One uniform re-adjustment of the whole series, not three independent
+disagreements — the SCCO stratum record 13 set aside.
+
+A uniform factor scales both endpoints of a return, so the return is unchanged, and the
+original basis is still on disk in two places: the anchor is the forecast's own recorded
+`spot_price`, and the outcome is the realised-bar pin taken at first scoring. Rebuilding
+the three from those and recomputing on the full 177:
+
+| | return on the original basis | off today's re-adjusted series | z |
+| --- | --- | --- | --- |
+| SCCO 2025-04-26 | −0.035945 | −0.035945 | −0.95 |
+| SCCO 2025-07-30 | +0.048822 | +0.048822 | +1.27 |
+| SCCO 2025-10-30 | −0.020697 | −0.020697 | −0.68 |
+
+The two routes agree to **1e-8**, which is the check that makes this a reproduction rather
+than a new measurement: had the re-adjustment fallen inside any of the three windows the
+columns would differ, and the rebuild would not be admissible.
+
+**It closes the gap.** On 177 the interval is `[0.9933, 1.5378]` against the recorded
+`[0.9945, 1.5365]` — **0.0012 on the lower bound and 0.0013 on the upper**. Both bands now
+reproduce on both bounds.
+
+And the mechanism is the opposite of the one first proposed. The three are ordinary body
+items, z of −0.95, +1.27 and −0.68. Removing them does not touch the numerator's tail; it
+moves the **denominator**, the MAD-scale, from 1.1541 to 1.1455, which lifts the ratio from
+1.2346 to 1.2493 and carries the whole bootstrap distribution with it. A tail ratio is
+sensitive to its body, and three unremarkable items were enough to move the upper bound by
+0.07 while leaving the lower one — and so the verdict — where it was.
+
+This is a reproduction check and nothing more. The persisted 174-item record remains the
+re-derivable population, and the headline figures stay stated on it.
+
+**The development row covers the resampling on a band that was never disturbed.** Record 4
+Part A is the only place a tail-ratio *interval* is recorded for a band this repository can
+still score straight from its persisted record, so it exercises the bootstrap without any
+reconstruction. Its baselines' intervals cannot be checked: the scoring record carries
+baseline CRPS, log score and Brier, but no baseline sigma.
 
 **The statistic itself is pinned separately**, against figures the pre-registration does
 not contain: ADR 0032's MAD-scale `1.0864` and tail ratio `1.2267` reproduce to four
