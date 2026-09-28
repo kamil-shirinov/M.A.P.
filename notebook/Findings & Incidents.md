@@ -2554,3 +2554,98 @@ default that the test and the code each reach for independently.
 
 Related to [[#55]] in kind rather than in subject: two halves individually correct, and
 a composition that is not.
+
+---
+
+## 61 · A recorded verdict recomputes from its pre-registration; the code that produced it does not survive
+
+The Phase 2 ambiguous-band replication of the tail excess came back **PARTIAL**: the
+exceedance counts replicated emphatically, the tail ratio's interval did not clear 1.0.
+`24fbedc` (2026-09-04 19:50) recorded it with its numbers — *"the tail ratio did not (CI
+[0.9945, 1.5365], missing the registered threshold by 0.0055)"*. The Phase 3 write-up
+deleted those three lines from [[STATE]] the next day. The rounded margin has been in the
+README since 2026-09-05.
+
+**The statistic was recomputed from the pre-registration in 2026-09, four weeks later, and
+returns the same verdict.** Not from the original script: that does not exist anywhere.
+
+### What survived and what did not
+
+The **result** was committed and then removed. The **code** never was. `git log --all -S`
+finds no commit on any ref containing `mad_scale`, `tail_ratio`, `1.4826`,
+`median_abs_deviation` or `MAD_TO_SIGMA`; the only near-match is `tails_heavy`, a boolean
+on `PitTest`. No session transcript covers it either — they span 2026-08-28 onward, but
+none spans 2026-09-04 after 15:00, and the result was committed at 19:50. So the script
+that produced `[0.9945, 1.5365]` is gone, and the number was recoverable only because it
+had been written into a tracked file before being deleted from one.
+
+### What the recomputation establishes, stated exactly
+
+Records 2 and 4 fix the statistic as `RMS(z) / MAD-scale(z)` with a cluster-robust 95% CI
+from the moving-block bootstrap, 4,000 draws, seed 20260813, ten-day blocks. Rebuilt from
+that alone, against `block_resamples`:
+
+| band | recorded | recomputed | n then / now |
+| --- | --- | --- | --- |
+| development | `[1.0135, 1.4372]`, excludes 1.0 | `[1.0169, 1.4368]`, excludes 1.0 | 178 / 175 |
+| ambiguous | `[0.9945, 1.5365]`, misses by 0.0055 | `[0.9947, 1.6078]`, misses by 0.0053 | 177 / 174 |
+
+**The verdict is the same on both bands, and the same under every reading the
+pre-registration left open.** On the ambiguous band the lower bound — the one the verdict
+turns on — is within **0.0002**. The upper bound is **0.07 apart**, which a different
+sample would explain: the recomputation runs on 174 items where the original had 177,
+three since lost to `SpotDriftError`, and the upper tail of a tail-ratio bootstrap is
+where a dropped extreme item shows most. The development band, with a difference of the
+same size, lands within 0.0034 on both bounds.
+
+**The development row is the one that covers the resampling.** Record 4 Part A is the only
+place a tail-ratio *interval* is recorded for a band this repository can still score, so it
+is the only check that exercises the bootstrap rather than the statistic. Its baselines'
+intervals cannot be checked: the scoring record carries baseline CRPS, log score and Brier,
+but no baseline sigma.
+
+**The statistic itself is pinned separately**, against figures the pre-registration does
+not contain: ADR 0032's MAD-scale `1.0864` and tail ratio `1.2267` reproduce to four
+decimals on the development record, and record 4 Part A's counts and block spreads —
+11 in 7 blocks, 7 in 5 blocks, 2 past four sigma — reproduce exactly.
+
+### The wrong resampler gave the opposite answer
+
+A first attempt binned days as `day_index // 10` — non-overlapping blocks — and returned
+`[1.0062, 1.5836]`, **excluding 1.0** and so pointing at replication where the record says
+partial. That is a **different estimator**, not a failed reproduction: `block_resamples`
+draws overlapping windows anchored on occupied days and truncates to n. The disagreement is
+what located the right one, and the number is recorded here so it cannot later be mistaken
+for a second opinion about the same test.
+
+### The open choice, and why it does not matter here
+
+The pre-registration fixed the statistic, the draws, the seed and the block length. It did
+not fix the interval construction or where the MAD is centred. Measured on the ambiguous
+band: percentile misses the bar by 0.0053, the basic interval by 0.1091, and centring the
+MAD on zero instead of the median by 0.0459. **All three cover 1.0**, so no reading reaches
+a different verdict. Centring is settled by the record anyway — median-centring is what
+reproduces ADR 0032's 1.0864, and zero-centring gives 1.0911.
+
+Worth noting that the two constructions nearly coincide on development
+(`[1.0169, 1.4368]` against `[1.0165, 1.4364]`) and diverge on the ambiguous band
+(`0.9947` against `0.8909`). The ambiguous bootstrap distribution is skewed where the
+development one is not, which is consistent with the four items past four sigma it carries
+against development's two.
+
+### The shape
+
+Same family as [[#57]] — a pre-registered measure whose figures were never persisted — but
+with the opposite outcome, and the difference says which part of the practice worked.
+There, the pre-registration fixed *what* to report without fixing its *form*, and a
+sentence satisfied it with nothing behind it. Here the pre-registration fixed the
+**estimator**: the statistic, the resampler, the draws, the seed and the block length. That
+was enough to rebuild the test from a git note four weeks later and land within 0.0002 of
+the bound the verdict turns on.
+
+**The practical rule:** a pre-registration that names its estimator precisely enough to be
+re-implemented is worth more than the script that first ran it, and costs four extra lines
+to write. What was avoidable was the other half — a statistic reported in a write-up and
+implemented only in a scratch file has no way back, and deleting the write-up's own lines
+in the next commit nearly closed that route too. The statistic now lives in
+`mapf.eval.aggregate` with tests, which is where it should have been on 2026-09-04.

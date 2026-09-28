@@ -80,12 +80,16 @@ so the excess is M.A.P.'s rather than the market's. It was pre-registered as a t
 second band before any of that band was scored, requiring **both** the counts and a tail
 ratio whose interval excludes 1.0.
 
-**The counts replicated and the ratio did not.** On the ambiguous band, 11 items exceed
-2.5 (about 5× expectation) and 8 exceed 3.0 (about 17×, against a predicted 10–15×),
-spread over six blocks. The ratio did not clear its bar, so the verdict was recorded as
-**PARTIAL** and stayed partial when the whole corpus was re-derived on one price vintage.
-Adopting a Student-t predictive distribution was triggered on full replication, so
-**it was not adopted** — on the trigger, not on a later judgement.
+**The counts replicated and the ratio did not.** On the 177 ambiguous items scored at the
+time, 11 exceeded 2.5 and 8 exceeded 3.0 — against 0.48 expected, so 16.7×, over six
+distinct blocks, above the predicted 10–15× — while the tail ratio's interval reached down
+to 0.9945 and so missed excluding 1.0 by 0.0055. The verdict was recorded as **PARTIAL**
+and stayed partial when the whole corpus was re-derived on one price vintage. Recomputing
+the test from its pre-registration four weeks later, on the 174 items the scoring record
+still holds, gives the same verdict: 8 past three sigma against 0.47 expected, 17.0×, and
+a lower bound of 0.9947 ([Findings #61](notebook/Findings%20&%20Incidents.md)). Adopting a
+Student-t predictive distribution was triggered on full replication, so **it was not
+adopted** — on the trigger, not on a later judgement.
 
 **4. One finding did replicate cleanly, out of sample: volatility compression.**
 M.A.P. states too narrow a *range* of volatilities across companies — roughly right in

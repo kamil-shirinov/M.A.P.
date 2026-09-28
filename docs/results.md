@@ -144,10 +144,14 @@ attenuation-corrected slope near 0.4 where 1.0 is correct, with every registered
 prediction met and the effect monotone across three cut depths. This is the project's
 only finding established out of sample.
 
-**Heavier-than-normal tails: partial.** The exceedance counts replicated emphatically;
-the tail ratio's interval missed excluding 1.0 by 0.005. Registered in advance as a
-possible split outcome, and reported as a miss rather than rounded. The Student-t
-successor it would have triggered stays unadopted.
+**Heavier-than-normal tails: partial.** On the 177 ambiguous items scored at the time the
+exceedance counts replicated emphatically — 8 past three sigma against 0.48 expected,
+16.7×, over six distinct blocks — while the tail ratio's interval reached down to 0.9945
+and so missed excluding 1.0 by 0.0055. Registered in advance as a possible split outcome,
+with the disagreeing pair named. Recomputed from the pre-registration four weeks later on
+the 174 items still persisted, it gives the same verdict under every reading the record
+left open: 17.0× against 0.47 expected, and a lower bound of 0.9947. The Student-t
+successor it would have triggered stays unadopted. See Findings #61.
 
 ### Phase 4 — what a reader can verify without re-running anything
 
