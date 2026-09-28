@@ -29,7 +29,7 @@ learn *why* from the manifest rather than infer it from a gap. The same discipli
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -228,6 +228,7 @@ def export(
         symbols_db = settings.data.sec.symbols_db
         index = build_symbol_index(settings)
         names: dict[str, str] = {}
+        symbol_rows: list[dict[str, object]] = []
         synced_on: date | None = None
         if _require(
             symbols_db,
@@ -235,10 +236,11 @@ def export(
             "Run `map symbols sync` once to build it.",
             partial=allow_partial,
         ):
-            rows = [
+            symbol_rows = [
                 {"ticker": s.ticker, "name": s.name, "exchange": s.exchange, "cik": s.cik}
                 for s in index
             ]
+            rows = symbol_rows
             names = {str(r["ticker"]): str(r["name"]) for r in rows}
             synced_on = index.synced_on()
             # Lazy: 10,398 rows the front end needs only once someone types. The
@@ -461,8 +463,14 @@ def export(
             # so the vintages travel as the set they are rather than as one date.
             "filers": {
                 "rows": len(filers),
+                # Rows are not filers. Three CIKs appear twice — a failed pre-screen
+                # request followed by the retry that succeeded — so 8,001 rows carry
+                # 7,998 distinct filers, and a page that prints one base has to know
+                # which of the two it has.
+                "distinct": len({r.get("cik") for r in filers}),
                 "vintages": sorted({str(r.get("fetched_on")) for r in filers}),
             },
+            "funnel": _funnel(symbol_rows, filers, companies),
             "scores": {"records": records, "absent": [holdout]},
             "absent": absent,
             "files": dict(sorted(sizes.items())),
@@ -477,6 +485,60 @@ def export(
             _print_absence(gap)
     except MapError as err:
         raise handle(err) from err
+
+
+def _funnel(
+    symbols: Sequence[Mapping[str, Any]],
+    filers: Sequence[Mapping[str, Any]],
+    corpus: Sequence[Mapping[str, Any]],
+) -> dict[str, int]:
+    """The search screen's funnel, counted here rather than in the browser.
+
+    Counted at export time because the alternative is a pass over filers.json at
+    1.2 MB on every page load, which is the eager cost the two-file split exists
+    to avoid. The exporter already holds both files open, so it counts once and
+    the page reads integers.
+
+    ONE BASE — tickers, because a ticker is what gets typed into the box. The
+    filer-side rates that used to sit beside them were a second base, and two
+    rates on one line read as one figure reported twice: a single filer can carry
+    thirteen tickers, so the two weight the same world differently.
+
+    Every part is COUNTED, none subtracted. `readable_unread` is the tickers on an
+    earnings filer that the freeze did not take, not `earnings_filer` minus
+    `frozen` — a subtraction would still balance if a corpus ticker were missing
+    from the index, and then the screen would report a drop that never happened.
+    `unscreened` exists so the four parts sum to the base rather than nearly.
+    """
+    # The LAST row for a CIK wins, which is the retry rather than the failure that
+    # preceded it. Ordered input, so this is the pre-screen's own final answer.
+    by_cik = {r.get("cik"): r for r in filers}
+    frozen = {str(c["ticker"]) for c in corpus}
+    counts = dict.fromkeys(
+        (
+            "tickers",
+            "earnings_filer",
+            "frozen",
+            "readable_unread",
+            "no_earnings_filings",
+            "unscreened",
+        ),
+        0,
+    )
+    counts["tickers"] = len(symbols)
+    for row in symbols:
+        filer = by_cik.get(row.get("cik"))
+        if filer is None or filer.get("status") != "ok":
+            counts["unscreened"] += 1
+        elif filer.get("item_202_in_recent"):
+            counts["earnings_filer"] += 1
+            if str(row["ticker"]) in frozen:
+                counts["frozen"] += 1
+            else:
+                counts["readable_unread"] += 1
+        else:
+            counts["no_earnings_filings"] += 1
+    return counts
 
 
 def _widest(prices: Any, cache_dir: Path, ticker: str, vintage: date) -> Any:

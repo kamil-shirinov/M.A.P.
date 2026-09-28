@@ -1,18 +1,27 @@
 /* The funnel, and the one disclosure.
 
    Three counts, three files, three moments — that is the spine, and the two
-   drops between them mean different things. What the export can and cannot
-   count is part of the reading:
+   drops between them mean different things.
 
      120     counted at boot from universe.json.
      10,398  counted the moment symbols.json is open.
-     5,309   NOT IN THE EXPORT. No file states it and the manifest does not
-             carry it; it comes from the export contract's own funnel. So it is
-             not a figure and is not rendered as one — it is marked as chrome
-             naming where it came from. Counting it here would mean a pass over
-             filers.json's ticker lists, which this page does not make. */
+     5,309   counted at EXPORT time and carried in the manifest.
 
-import { DERIVED, chrome, chromeText, figure, renderFigure } from "../lib/figure.js";
+   The middle number used to be quoted from the export contract, because counting
+   it in the browser means a pass over filers.json at 1.2 MB and this page opens
+   that file only when a hit falls outside the corpus. So the count moved to where
+   both files are already open: `map export` walks them once and writes the
+   funnel into the manifest, and the page reads integers at boot. All three stages
+   are now counted, and none is quoted.
+
+   ONE BASE, and it is TICKERS. The middle stage carried two rates — 51.1% of
+   symbols beside 54.1% of filers — and two rates on one line read as one figure
+   reported twice. They are not: a single filer can carry thirteen tickers, so the
+   two weight the same world differently. A ticker is what gets typed into the
+   box, so every share on this screen is over 10,398 and the filer count appears
+   only in the disclosure, as the note explaining why the choice matters. */
+
+import { DERIVED, MEASURED, chrome, chromeText, derive, figure, renderFigure } from "../lib/figure.js";
 
 /* See search-box.js: prose carrying digits is marked with the reason they are
    there, because the audit cannot tell a citation or a quoted count from a
@@ -28,6 +37,12 @@ const el = (tag, className, text) => {
 
 const count = (n) => renderFigure(figure(n, DERIVED, "int"));
 
+/* The manifest's funnel, read from the file rather than computed here, so the
+   stage counts are MEASURED and the rates over them are DERIVED. */
+const measured = (n) => figure(n, MEASURED, "int");
+const shareOf = (n, base) =>
+  renderFigure(derive(n / base, "pct", measured(n), measured(base)));
+
 function stage({ n, quoted, what, share, file, when, width, tone, prov, provWhy }) {
   const row = el("div", "srch-stage");
   row.dataset.tone = tone;
@@ -36,9 +51,20 @@ function stage({ n, quoted, what, share, file, when, width, tone, prov, provWhy 
   big.append(n === null ? chromeText(quoted, provWhy) : count(n));
 
   const mid = el("div", "srch-stage-mid");
+  const line = el("div", "srch-stage-share");
+  /* The share is built from figures now rather than written as a sentence, so
+     the audit sees a marked rate instead of prose that happens to hold digits.
+     A stage with nothing to say about its share gets an empty line, not chrome
+     standing in for a number that was never computed. */
+  if (share) {
+    share.forEach((part, i) => {
+      if (i) line.append(chromeText(" · ", "a separator between two readings of one stage"));
+      line.append(part);
+    });
+  }
   mid.append(
     prose(el("div", "srch-stage-what", what), "the stage label; any digits are a form designation"),
-    prose(el("div", "srch-stage-share", share), "shares and counts quoted from the export contract"),
+    line,
   );
 
   const src = el("div", "srch-stage-src");
@@ -74,7 +100,17 @@ function drop(nText, why) {
   return prose(d, "explanatory prose; its digits are a form designation and a quoted drop");
 }
 
-export function renderFunnel(host, { symbolCount }) {
+/** The label beside a rate, so a bare percentage never floats without its base. */
+const over = (text) => chromeText(text, "names the base a share is taken over");
+
+export function renderFunnel(host, { symbolCount, funnel }) {
+  /* No funnel block means an export written before `map export` counted one. The
+     stages still render from what this page can see; the shares do not, because a
+     share needs a base and inventing one would be worse than an empty line. */
+  const f = funnel ?? null;
+  const base = f?.tickers ?? null;
+  const share = (n) => (base && Number.isFinite(n) ? [shareOf(n, base), over(" of tickers")] : null);
+
   host.textContent = "";
   const head = el("div", "srch-head");
   head.append(
@@ -94,7 +130,8 @@ export function renderFunnel(host, { symbolCount }) {
       // The sentence about preferred lines, ADRs and dual classes is in the
       // disclosure: it explains why the number is larger than a count of
       // companies, which is a note rather than a reading of the bar.
-      share: "",
+      // The base is its own 100%, which is worth stating rather than implying.
+      share: share(base),
       file: "symbols.json · 864 KB",
       when: "on first keystroke",
       width: "100%",
@@ -103,35 +140,37 @@ export function renderFunnel(host, { symbolCount }) {
     }),
   );
   host.append(
-    drop("−5,089", "no Item 2.02 in the recent block"),
+    drop(f ? `−${f.no_earnings_filings.toLocaleString("en-US")}` : "−5,089",
+      "no Item 2.02 in the recent block"),
   );
   host.append(
     stage({
-      n: null,
-      quoted: "5,309",
-      provWhy: "from the export contract's funnel; no file in this export states it",
+      n: f?.earnings_filer ?? null,
+      quoted: "not counted",
+      provWhy: "this export carries no funnel block, so the count is not available",
       what: "on a filer that publishes earnings 8-Ks",
-      share: "51.1% of symbols · 4,325 of 7,998 filers · 54.1%",
+      share: share(f?.earnings_filer),
       file: "filers.json · 1.2 MB",
-      when: "on first outside hit",
-      width: "51.1%",
+      when: "counted at export",
+      width: base ? `${((f.earnings_filer / base) * 100).toFixed(1)}%` : "51.1%",
       tone: "mid",
-      prov: "quoted",
+      prov: f ? "counted" : "not counted",
     }),
   );
   host.append(
-    drop("−5,189", "publish it, not read"),
+    drop(f ? `−${f.readable_unread.toLocaleString("en-US")}` : "−5,189",
+      "publish it, not read"),
   );
   host.append(
     stage({
-      n: 120,
+      n: f?.frozen ?? 120,
       quoted: "",
       provWhy: "counted from universe.json, which loads at boot",
       what: "in the frozen corpus",
-      share: "1.2% of symbols · 709 filings, 779 runs",
+      share: share(f?.frozen ?? 120),
       file: "universe.json · 7.5 KB",
       when: "at boot",
-      width: "1.2%",
+      width: base ? `${(((f.frozen ?? 120) / base) * 100).toFixed(1)}%` : "1.2%",
       tone: "bottom",
       prov: "counted",
     }),
@@ -154,8 +193,8 @@ const RESOLUTIONS = [
   },
   {
     title: "Files earnings, and M.A.P. has not read it",
-    meta: "5,189 tickers, quoted from the contract",
-    metaWhy: "from the export contract's funnel; no file in this export states it",
+    meta: "readable_unread",
+    metaWhy: "counted at export from filers.json and the symbol index",
     paras: [
       "Item 2.02 is the document M.A.P. reads, so a filer carrying one is readable. It has not been " +
         "read: the corpus was frozen and this company is not in it.",
@@ -170,8 +209,8 @@ const RESOLUTIONS = [
   },
   {
     title: "No earnings filings to read",
-    meta: "3,673 of 7,998 filers · 45.9%",
-    metaWhy: "from the export contract's funnel; no file in this export states it",
+    meta: "no_earnings_filings",
+    metaWhy: "counted at export from filers.json and the symbol index",
     paras: [
       "The count of Item 2.02 filings in the recent block is zero and there is no most-recent date. " +
         "M.A.P. reads earnings 8-Ks, so for this filer there is nothing to read rather than something " +
@@ -209,7 +248,17 @@ const REFUSALS = [
     Content is unchanged from the card layout this replaces. What changed is that
     it is now one disclosure on every screen rather than a different one per
     screen with a different name. */
-export function whyGroups() {
+export function whyGroups(funnel = null) {
+  /* The three resolution metas are counts over the ticker base, so they come from
+     the manifest rather than from a string written when the numbers were quoted.
+     A meta naming a funnel key is filled here; anything else is literal. */
+  const pct = (n) => `${((n / funnel.tickers) * 100).toFixed(1)}%`;
+  const fill = (meta) =>
+    funnel && meta in funnel
+      ? `${funnel[meta].toLocaleString("en-US")} tickers · ${pct(funnel[meta])} of tickers`
+      : meta in { readable_unread: 1, no_earnings_filings: 1 }
+        ? "not counted in this export"
+        : meta;
   return [
     {
       title: "Find a company",
@@ -233,7 +282,7 @@ export function whyGroups() {
     },
     ...RESOLUTIONS.map((r) => ({
       title: r.title,
-      meta: r.meta,
+      meta: fill(r.meta),
       metaWhy: r.metaWhy,
       notes: r.paras,
     })),
@@ -248,25 +297,38 @@ export function whyGroups() {
         "10,398 is every listed symbol, including preferred lines, ADRs and dual classes. It is " +
           "not a count of companies, which is why it is larger than any count of companies you " +
           "will see elsewhere.",
-        "−5,089: tickers whose filer has no Item 2.02 in its recent block. Nothing for M.A.P. to " +
-          "read, and no run would change that.",
-        "−5,189: tickers that publish the document and have not been read. Readable, outside the " +
-          "freeze, and not queued for anything.",
+        "The first drop is the tickers whose filer has no Item 2.02 in its recent block. Nothing " +
+          "for M.A.P. to read, and no run would change that.",
+        "The second is the tickers that publish the document and have not been read. Readable, " +
+          "outside the freeze, and not queued for anything.",
       ],
     },
     {
       title: "Reading the three counts",
       notes: [
-        "51.1% of tickers, 54.1% of filers. The two rates are not one figure reported twice. A " +
-          "single filer can carry many tickers: Connecticut Light & Power files under one CIK and " +
-          "appears in the index thirteen times, as preferred lines. Counting tickers weights those " +
-          "thirteen; counting filers counts them once. The search box counts tickers, because a " +
-          "ticker is what gets typed into it.",
-        "The middle number is the expensive one. The corpus count is read at boot from a 7.5 KB " +
-          "file. The index count is known the moment the index lands. The readable count needs " +
-          "filers.json at 1.2 MB, which this page opens only when a hit falls outside the corpus — " +
-          "and even then it answers one ticker at a time, so the total is quoted from the export " +
-          "contract rather than counted here.",
+        "Every share on this screen is over one base: tickers, all 10,398 of them, because a " +
+          "ticker is what gets typed into the box. The stages used to carry a second base beside " +
+          "it — 51.1% of symbols next to 54.1% of filers — and two rates on one line read as one " +
+          "figure reported twice. They are not. A single filer can carry many tickers: " +
+          "Connecticut Light & Power files under one CIK and appears in the index thirteen times, " +
+          "as preferred lines. Counting tickers weights those thirteen; counting filers counts " +
+          "them once.",
+        "The filer-side numbers, for anyone who wants them: 4,325 of 7,998 filers publish Item " +
+          "2.02, which is 54.1%. That is a different question from the one this screen answers, " +
+          "and it is stated here rather than on a bar so the two cannot be read as one.",
+        "Filers are not rows. filers.json holds 8,001 rows over 7,998 distinct filers: three CIKs " +
+          "appear twice, a pre-screen request that failed followed by the retry that succeeded. " +
+          "The last row for a CIK is the one that counts, and all three retries came back with no " +
+          "Item 2.02 in the block.",
+        "All three stage counts are counted, none quoted. The middle one is the expensive one — it " +
+          "needs filers.json at 1.2 MB, which this page opens only when a hit falls outside the " +
+          "corpus, and even then one ticker at a time. So it is counted where both files are " +
+          "already open: `map export` walks them once and writes the funnel into the manifest, and " +
+          "this page reads integers at boot.",
+        "None of the parts is a subtraction. The tickers a freeze did not take are counted as " +
+          "such, not as the readable count minus 120 — a subtraction would still balance if a " +
+          "corpus ticker were missing from the index, and the screen would report a drop that " +
+          "never happened. The four parts sum to the base exactly.",
       ],
     },
   ];

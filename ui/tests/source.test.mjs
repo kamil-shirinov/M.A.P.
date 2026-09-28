@@ -390,3 +390,64 @@ describe("a missing price series says which absence it is", () => {
     assert.match(missing.why, /AAPL/, "and it names the company");
   });
 });
+
+describe("the funnel comes counted, over one base", () => {
+  const read = (name) => JSON.parse(readFileSync(new URL(name, EXPORT), "utf8"));
+
+  itNeedsExport("carries the funnel in the manifest so the page loads no extra file", () => {
+    /* It used to be quoted from the export contract, because counting it in the
+       browser means a pass over filers.json at 1.2 MB and this page opens that
+       file only when a hit falls outside the corpus. */
+    const { funnel } = read("manifest.json");
+    assert.ok(funnel, "the manifest carries a funnel block");
+    for (const key of ["tickers", "earnings_filer", "frozen", "readable_unread",
+      "no_earnings_filings", "unscreened"]) {
+      assert.equal(typeof funnel[key], "number", key);
+    }
+  });
+
+  itNeedsExport("has one base, and every part accounted for against it", () => {
+    const { funnel: f } = read("manifest.json");
+    assert.equal(f.tickers, read("symbols.json").length);
+    assert.equal(f.earnings_filer + f.no_earnings_filings + f.unscreened, f.tickers);
+    assert.equal(f.frozen + f.readable_unread, f.earnings_filer);
+  });
+
+  itNeedsExport("agrees with the files it was counted from", () => {
+    // Recounted here from the same two files, so a stale manifest cannot pass.
+    const filers = read("filers.json");
+    const byCik = new Map(filers.map((r) => [r.cik, r]));
+    const frozen = new Set(read("universe.json").map((c) => c.ticker));
+    const tally = { earnings_filer: 0, no_earnings_filings: 0, unscreened: 0, frozen: 0, readable_unread: 0 };
+    for (const row of read("symbols.json")) {
+      const filer = byCik.get(row.cik);
+      if (!filer || filer.status !== "ok") tally.unscreened += 1;
+      else if (filer.item_202_in_recent) {
+        tally.earnings_filer += 1;
+        if (frozen.has(row.ticker)) tally.frozen += 1;
+        else tally.readable_unread += 1;
+      } else tally.no_earnings_filings += 1;
+    }
+    const { funnel } = read("manifest.json");
+    for (const [key, value] of Object.entries(tally)) assert.equal(funnel[key], value, key);
+  });
+
+  itNeedsExport("distinguishes filer ROWS from filers", () => {
+    /* 8,001 rows over 7,998 filers: three CIKs carry a failed pre-screen request
+       and the retry that succeeded. A screen printing one base has to know which
+       of the two it has. */
+    const filers = read("filers.json");
+    const { filers: stated } = read("manifest.json");
+    assert.equal(stated.rows, filers.length);
+    assert.equal(stated.distinct, new Set(filers.map((r) => r.cik)).size);
+    const repeated = filers.length - stated.distinct;
+    assert.ok(repeated >= 0);
+    // Every repeat is a failure followed by a retry, never two conflicting answers.
+    const seen = new Map();
+    for (const row of filers) {
+      if (seen.has(row.cik)) assert.equal(seen.get(row.cik).status, "request_failed",
+        `cik ${row.cik} repeats without a failed first attempt`);
+      seen.set(row.cik, row);
+    }
+  });
+});

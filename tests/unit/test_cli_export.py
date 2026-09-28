@@ -22,7 +22,7 @@ import typer
 from typer.testing import CliRunner, Result
 
 from mapf.cli.app import EXIT_DATA, app
-from mapf.cli.commands.export import UI_EXPORT, export
+from mapf.cli.commands.export import UI_EXPORT, _funnel, export
 from tests.unit.test_cli import _config
 from tests.unit.test_cli_corpus import _frozen
 from tests.unit.test_journal import VINTAGE, _write_run
@@ -438,7 +438,7 @@ def test_the_manifest_carries_each_sources_own_stamp_not_one_invented_date(
     assert manifest["export_version"] == "1.2.0"
     # The pre-screen's own stamps, as the set they are: every row carries its
     # `fetched_on` and a resumed walk spans days.
-    assert manifest["filers"] == {"rows": 2, "vintages": ["2026-09-09"]}
+    assert manifest["filers"] == {"rows": 2, "distinct": 2, "vintages": ["2026-09-09"]}
     # UTC, matching what the export stamps. See test_cli_runs for why.
     assert manifest["exported_at"] == datetime.now(UTC).date().isoformat()
 
@@ -945,3 +945,136 @@ def test_prices_are_exported_by_default(tmp_path: Path) -> None:
     absence = next(a for a in manifest["absent"] if a["what"] == "prices")
     assert "have no window" in absence["reason"]
     assert "were not exported" not in absence["reason"]
+
+
+# --- the funnel, counted at export over one base -------------------------------
+
+
+def test_the_funnel_is_counted_and_its_parts_sum_to_the_base(tmp_path: Path) -> None:
+    """Counted here rather than in the browser, because counting it there means a
+    pass over filers.json at 1.2 MB on every page load.
+
+    The sum is the property worth asserting: a funnel whose parts do not add up to
+    its base is a screen reporting a drop that did not happen."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    result = _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    assert result.exit_code == 0, result.output
+    funnel = _read(tmp_path, "manifest.json")["funnel"]
+    parts = ("earnings_filer", "no_earnings_filings", "unscreened")
+    assert sum(funnel[k] for k in parts) == funnel["tickers"]
+    assert funnel["frozen"] + funnel["readable_unread"] == funnel["earnings_filer"]
+
+
+def test_the_frozen_count_is_counted_not_subtracted(tmp_path: Path) -> None:
+    """`readable_unread` is the tickers an earnings filer holds that the freeze did
+    not take, counted as such. Subtracting 120 from the readable count would still
+    balance if a corpus ticker were missing from the index, and the screen would
+    then report a drop that never happened."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    funnel = _read(tmp_path, "manifest.json")["funnel"]
+    universe = _read(tmp_path, "universe.json")
+    symbols = {r["ticker"] for r in _read(tmp_path, "symbols.json")}
+    # Only corpus tickers the index actually carries can be counted as frozen.
+    assert funnel["frozen"] == sum(1 for c in universe if c["ticker"] in symbols)
+
+
+def test_a_filer_whose_screen_failed_is_not_counted_as_having_no_filings(
+    tmp_path: Path,
+) -> None:
+    """`status != ok` means the flag was never read, which is a different fact from
+    reading it and finding nothing. Conflating them would move a ticker into the
+    "nothing to read" stage on the strength of a failed HTTP request."""
+    _symbols(tmp_path)
+    path = _filers(tmp_path)
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    rows[1] = {**rows[1], "status": "request_failed", "item_202_in_recent": None, "count": None}
+    path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    run_id = _write_run(tmp_path / "runs")
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    funnel = _read(tmp_path, "manifest.json")["funnel"]
+    assert funnel["unscreened"] >= 1
+    assert (
+        sum(funnel[k] for k in ("earnings_filer", "no_earnings_filings", "unscreened"))
+        == funnel["tickers"]
+    )
+
+
+def test_a_retried_filer_counts_once_and_the_retry_wins(tmp_path: Path) -> None:
+    """The real export has 8,001 rows over 7,998 filers: three CIKs carry a failed
+    request followed by the retry that succeeded. The LAST row for a CIK is the
+    pre-screen's final answer, and the manifest states both numbers so a page
+    printing one base knows which it has."""
+    _symbols(tmp_path)
+    path = _filers(tmp_path)
+    rows = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    failed = {**rows[0], "status": "request_failed", "item_202_in_recent": None, "count": None}
+    # The failure first, the success after it — the order the walk writes them in.
+    path.write_text("\n".join(json.dumps(r) for r in [failed, *rows]) + "\n")
+    run_id = _write_run(tmp_path / "runs")
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    manifest = _read(tmp_path, "manifest.json")
+    assert manifest["filers"]["rows"] == manifest["filers"]["distinct"] + 1
+    # The retry's answer stands, so AAPL is still counted on an earnings filer.
+    assert manifest["funnel"]["earnings_filer"] >= 1
+    # And the failed attempt moved nothing: the only unscreened tickers are the
+    # ones whose CIK the pre-screen never covered at all.
+    screened = {r["cik"] for r in _read(tmp_path, "filers.json")}
+    symbols = _read(tmp_path, "symbols.json")
+    assert manifest["funnel"]["unscreened"] == sum(1 for r in symbols if r["cik"] not in screened)
+
+
+def test_the_funnel_partitions_a_hand_built_index() -> None:
+    """`_funnel` directly, because the CLI fixtures cannot reach every arm: the
+    six-symbol test index has no ticker that sits on an earnings filer outside the
+    corpus, which is the largest stage of the real funnel at 5,189 of 10,398."""
+    symbols = [
+        {"ticker": "AAPL", "cik": 1},  # earnings filer, frozen
+        {"ticker": "MSFT", "cik": 1},  # same filer, NOT frozen
+        {"ticker": "NVDA", "cik": 2},  # earnings filer, not frozen
+        {"ticker": "ADX", "cik": 3},  # filer with no Item 2.02
+        {"ticker": "BXRLY", "cik": 4},  # screen failed
+        {"ticker": "ZZQ", "cik": 9},  # no filer row at all
+    ]
+    filers = [
+        {"cik": 1, "status": "ok", "item_202_in_recent": True},
+        {"cik": 2, "status": "ok", "item_202_in_recent": True},
+        {"cik": 3, "status": "ok", "item_202_in_recent": False},
+        {"cik": 4, "status": "request_failed", "item_202_in_recent": None},
+    ]
+
+    funnel = _funnel(symbols, filers, [{"ticker": "AAPL"}])
+
+    assert funnel == {
+        "tickers": 6,
+        "earnings_filer": 3,
+        "frozen": 1,
+        "readable_unread": 2,
+        "no_earnings_filings": 1,
+        "unscreened": 2,
+    }
+    # One filer, three tickers: the reason the screen has one base rather than two.
+    assert funnel["earnings_filer"] > len({f["cik"] for f in filers if f["item_202_in_recent"]})
+
+
+def test_the_last_row_for_a_filer_is_the_one_the_funnel_reads() -> None:
+    """A failed attempt followed by its retry, which is what the three repeated
+    CIKs in the real export are. The retry is the pre-screen's final answer."""
+    symbols = [{"ticker": "BXRLY", "cik": 4}]
+    failed = {"cik": 4, "status": "request_failed", "item_202_in_recent": None}
+    retried = {"cik": 4, "status": "ok", "item_202_in_recent": False}
+
+    assert _funnel(symbols, [failed, retried], [])["no_earnings_filings"] == 1
+    assert _funnel(symbols, [failed, retried], [])["unscreened"] == 0
+    # And with no retry it stays unscreened rather than being read as a negative.
+    assert _funnel(symbols, [failed], [])["unscreened"] == 1

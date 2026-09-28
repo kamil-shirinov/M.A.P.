@@ -87,6 +87,9 @@ const state = {
   query: "",
   corpus: [],
   symbolCount: null,
+  // The export's counted funnel, read once at boot. Null on an export written
+  // before `map export` counted one.
+  funnel: null,
   matched: 0,
   screened: 0,
   groups: {},
@@ -201,7 +204,7 @@ function paint() {
     groups: state.groups,
     matched: state.matched,
   });
-  renderFunnel($("funnel"), { symbolCount: state.symbolCount });
+  renderFunnel($("funnel"), { symbolCount: state.symbolCount, funnel: state.funnel });
   applyPageProvenance();
   enforce();
   /* Last, and here rather than at the end of onQuery. A view transition
@@ -242,7 +245,8 @@ async function boot() {
 
   renderMastheadVintage($("masthead-vintage"), exportState.manifest);
   renderFooter($("footer"), exportState.manifest);
-  renderPageWhy($("why"), { groups: whyGroups() });
+  state.funnel = exportState.manifest?.funnel ?? null;
+  renderPageWhy($("why"), { groups: whyGroups(state.funnel) });
 
   mountMastheadNav($("masthead-nav"), { current: "search" });
   box = mountBox($("box"), { onQuery });
