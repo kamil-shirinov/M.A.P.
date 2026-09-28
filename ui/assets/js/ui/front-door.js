@@ -52,6 +52,9 @@ export function mountMastheadNav(host, { current }) {
     // and its controls, and "scores" is the word the export uses for the records
     // themselves — several of which the screen deliberately does not show.
     { key: "results", label: "results", href: "results.html" },
+    // The only screen that makes something rather than reading it. Last, because
+    // it is the one that costs six minutes and a permanent journal entry.
+    { key: "analyse", label: "live analysis", href: "analyse.html" },
   ];
   /* Every item is a link, including the current one. The current screen is
      marked with `aria-current`, which the stylesheet draws as a rule rather than

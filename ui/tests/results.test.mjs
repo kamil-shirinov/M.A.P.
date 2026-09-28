@@ -528,10 +528,15 @@ describe("the page, its nav and its files", () => {
     const { mountMastheadNav } = await load("ui/front-door.js");
     const host = new Node("div");
     const nav = mountMastheadNav(host, { current: "results" });
-    assert.deepEqual(nav.children.map((c) => c.textContent), ["find a company", "runs", "results"]);
+    assert.deepEqual(
+      nav.children.map((c) => c.textContent),
+      ["find a company", "runs", "results", "live analysis"],
+    );
     assert.equal(nav.children.filter((c) => c.attrs["aria-current"]).length, 1);
-    assert.equal(nav.children.at(-1).attrs["aria-current"], "page");
-    for (const page of ["index.html", "company.html", "runs.html", "results.html"]) {
+    // Results is third now that live analysis sits last: it is the only screen
+    // that makes something rather than reading it, so it goes at the end.
+    assert.equal(nav.children[2].attrs["aria-current"], "page");
+    for (const page of ["index.html", "company.html", "runs.html", "results.html", "analyse.html"]) {
       assert.match(file(page), /<div id="masthead-nav"><\/div>/, `${page} has a nav host`);
     }
   });

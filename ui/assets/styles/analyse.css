@@ -1,0 +1,125 @@
+/* Live analysis.
+
+   The marking is a stroke and a word, never a colour alone: `--uncal` reinforces
+   a claim the text already makes, so the screen reads correctly in greyscale and
+   to anyone who cannot separate amber from the body colour. */
+
+.anl-page { display: grid; gap: var(--sp-7); }
+.anl-section:empty { display: none; }
+
+/* ---- the ask ---- */
+.anl-ask {
+  display: grid;
+  gap: var(--sp-5);
+  grid-template-columns: minmax(12rem, 20rem) 1fr auto;
+  align-items: end;
+  padding: var(--sp-5);
+  background: var(--sunken);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+}
+.anl-field { display: grid; gap: var(--sp-2); }
+.anl-label { font: var(--mono-sm); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.anl-input {
+  font: var(--mono-lg);
+  color: var(--ink-1);
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.anl-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.anl-periods { display: grid; gap: var(--sp-2); border: 0; padding: 0; margin: 0; }
+.anl-periods legend {
+  font: var(--mono-sm); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+  padding: 0; margin-bottom: var(--sp-2);
+}
+.anl-period { display: flex; align-items: baseline; gap: var(--sp-3); font: var(--mono-md); }
+.anl-period-note { font: var(--mono-sm); color: var(--ink-3); }
+/* The marking on the control, before anything runs. */
+.anl-period-note[data-calibration="uncalibrated"] {
+  color: var(--uncal);
+  border-bottom: 1px dashed var(--uncal);
+}
+
+.anl-go {
+  font: var(--mono-md);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-6);
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.anl-go:hover { background: var(--accent-strong, var(--accent)); }
+.anl-go:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.anl-cost { margin-top: var(--sp-4); max-width: 62ch; color: var(--ink-3); font: var(--sans-sm); }
+.anl-absence-foot { color: var(--ink-3); font: var(--sans-sm); }
+
+/* ---- progress ---- */
+.anl-progress {
+  display: grid; gap: var(--sp-2);
+  padding: var(--sp-5);
+  border-left: 2px solid var(--rule-2);
+  font: var(--mono-md);
+  color: var(--ink-2);
+}
+.anl-step:last-child { color: var(--ink-1); }
+
+/* ---- the result ---- */
+.anl-result-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-4); margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--rule-1); padding-bottom: var(--sp-3);
+}
+.anl-result-head h3 { margin: 0; font: var(--serif-lg); }
+
+.anl-marking {
+  padding: var(--sp-4) var(--sp-5);
+  border-left: 2px solid var(--rule-2);
+  max-width: 68ch;
+}
+.anl-marking[data-calibration="uncalibrated"] {
+  border-left-color: var(--uncal);
+  background: var(--uncal-soft);
+}
+.anl-mark-head { margin: 0 0 var(--sp-3); font: var(--mono-md); letter-spacing: .06em; text-transform: uppercase; }
+.anl-marking[data-calibration="uncalibrated"] .anl-mark-head { color: var(--uncal); }
+.anl-marking p { margin: 0 0 var(--sp-3); font: var(--sans-sm); color: var(--ink-2); }
+.anl-mark-caveat { color: var(--ink-3); }
+.anl-reasons { margin: 0; padding-left: var(--sp-5); font: var(--sans-sm); color: var(--ink-2); }
+.anl-reasons li { margin-bottom: var(--sp-2); }
+
+.anl-chart { margin-top: var(--sp-6); }
+.anl-fan { display: block; width: 100%; height: auto; }
+.anl-grid { stroke: var(--rule-1); stroke-width: 1; }
+.anl-anchor { stroke: var(--rule-2); stroke-width: 1; }
+.anl-spot { fill: var(--ink-1); }
+.anl-path { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+/* A raw fan is drawn in the marking colour, so the picture itself carries the
+   claim rather than relying on the note above it. */
+.anl-fan[data-calibration="uncalibrated"] .anl-path { stroke: var(--uncal); }
+.anl-ytick { fill: var(--ink-3); font: var(--mono-sm); text-anchor: end; }
+.anl-plabel { fill: var(--ink-3); font: var(--mono-sm); }
+
+.anl-table { width: 100%; border-collapse: collapse; margin-top: var(--sp-5); font: var(--mono-md); }
+.anl-table th {
+  text-align: right; font: var(--mono-sm); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-1);
+}
+.anl-table th:first-child, .anl-table .anl-name { text-align: left; }
+.anl-table td { text-align: right; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-1); }
+
+@media (max-width: 720px) {
+  .anl-ask { grid-template-columns: 1fr; }
+}

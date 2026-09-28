@@ -288,7 +288,7 @@ describe("wiring in search-page.js", () => {
 });
 
 describe("masthead nav", () => {
-  it("offers three sections and never a company", async () => {
+  it("offers four sections and never a company", async () => {
     const doc = stubDocument({ api: false });
     const { mountMastheadNav } = await import("../assets/js/ui/front-door.js");
     const host = { children: [], append(...k) { this.children.push(...k); } };
@@ -304,12 +304,12 @@ describe("masthead nav", () => {
     };
     const nav = mountMastheadNav(host, { current: "search" });
     const labels = nav.children.map((c) => c.textContent);
-    assert.deepEqual(labels, ["find a company", "runs", "results"]);
+    assert.deepEqual(labels, ["find a company", "runs", "results", "live analysis"]);
     assert.ok(!labels.some((l) => /company$/.test(l) && l !== "find a company"));
     // A detail page marks neither section rather than inventing a third.
     const none = mountMastheadNav(host, { current: null });
     assert.equal(none.children.filter((c) => c.attrs["aria-current"]).length, 0);
-    for (const current of ["search", "runs", "results"]) {
+    for (const current of ["search", "runs", "results", "analyse"]) {
       assert.equal(mountMastheadNav(host, { current }).children.filter((c) => c.attrs["aria-current"]).length, 1, `${current} marks itself`);
     }
   });

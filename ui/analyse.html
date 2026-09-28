@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.A.P. — live analysis</title>
+<link rel="stylesheet" href="assets/styles/tokens.css">
+<link rel="stylesheet" href="assets/styles/base.css">
+<link rel="stylesheet" href="assets/styles/components.css">
+<link rel="stylesheet" href="assets/styles/company.css">
+<link rel="stylesheet" href="assets/styles/front-door.css">
+<link rel="stylesheet" href="assets/styles/analyse.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
+</head>
+<body>
+  <div class="ground" id="ground" data-scope="page"></div>
+
+  <header class="masthead">
+    <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
+    <div id="masthead-nav"></div>
+    <div class="masthead-vintage" id="masthead-vintage"></div>
+  </header>
+
+  <main class="anl-page" id="analyse-page">
+    <h2 class="page-title">Live analysis</h2>
+    <!-- Filled by the module, or replaced wholesale by the stated absence when
+         no server is behind these files. Nothing here is markup a hosted copy
+         would render as a control that cannot work. -->
+    <section id="ask"      class="anl-section"></section>
+    <section id="progress" class="anl-section"></section>
+    <section id="result"   class="anl-section"></section>
+    <section id="why"></section>
+  </main>
+
+  <footer class="cmp-footer" id="footer"></footer>
+
+  <script type="module" src="assets/js/analyse-page.js"></script>
+</body>
+</html>
