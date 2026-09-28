@@ -561,6 +561,12 @@ def _check(tmp_path: Path, *args: str) -> Result:
             str(_frozen(tmp_path)),
             "--ledger-path",
             str(tmp_path / "ledger.jsonl"),
+            # Isolated like every other path the helper passes. It was not, and
+            # nothing noticed because nothing read it until the run counts joined
+            # the identities `--check` compares (ADR 0036 §5) — at which point the
+            # check was reading the repository's own 779 runs.
+            "--runs-dir",
+            str(tmp_path / "runs"),
             "--filers-path",
             str(tmp_path / "item_202.jsonl"),
             "--snapshot",
@@ -609,7 +615,11 @@ def test_check_names_the_input_that_moved(tmp_path: Path) -> None:
     result = _check(tmp_path, "--ledger-path", str(ledger))
 
     assert "moved      ledger.items_settled: 1 -> 2" in result.output
-    assert "1 of 7 inputs have moved" in result.output
+    # Two, and they are different facts: the ledger settled another item, and a run
+    # directory appeared. Reported separately, which is the whole point of carrying
+    # a count per source rather than a total (ADR 0036 §5).
+    assert "moved      runs.corpus: 1 -> 2" in result.output
+    assert "2 of 11 inputs have moved" in result.output
 
 
 def test_check_writes_nothing(tmp_path: Path) -> None:
@@ -1078,3 +1088,85 @@ def test_the_last_row_for_a_filer_is_the_one_the_funnel_reads() -> None:
     assert _funnel(symbols, [failed, retried], [])["unscreened"] == 0
     # And with no retry it stays unscreened rather than being read as a negative.
     assert _funnel(symbols, [failed], [])["unscreened"] == 1
+
+
+# --- ADR 0036 §5: a live run moves the EDGAR count and nothing else ------------
+
+
+def _identities(tmp_path: Path) -> dict[str, tuple[object, object]]:
+    """What `--check` compares: the export's stamps against this checkout's."""
+    from mapf.cli.commands.export import _exported_identity, _live_identity
+
+    from mapf.settings.loader import load
+
+    manifest = _read(tmp_path, "manifest.json")
+    settings = load([_config(tmp_path)])
+    live = _live_identity(
+        settings,
+        frozen=tmp_path / "frozen.json",
+        ledger_path=tmp_path / "ledger.jsonl",
+        vintage=VINTAGE,
+        runs_dir=tmp_path / "runs",
+    )
+    was = _exported_identity(manifest)
+    return {key: (was[key], live[key]) for key in live}
+
+
+def test_the_check_reports_run_counts_by_source_not_a_total(tmp_path: Path) -> None:
+    """A total would hide WHICH source moved, which is the only thing worth knowing
+    when a run appears under an export."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    compared = _identities(tmp_path)
+    for source in ("corpus", "edgar", "news", "unknown"):
+        assert f"runs.{source}" in compared, source
+    assert "runs.total" not in compared
+
+
+def test_a_live_run_moves_the_edgar_count_and_nothing_else(tmp_path: Path) -> None:
+    """ADR 0036 §5. A live run writes one directory whose `document_source` is
+    `edgar`. The freeze, the code, the ledger, the symbol vintage and the price
+    snapshot are untouched — and if one of them ever moves, something has written
+    into the corpus and this is the check that says so before an export carries it."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+    before = _identities(tmp_path)
+    assert not [k for k, (was, now) in before.items() if was != now], before
+
+    # The live run, exactly as `map run --from-edgar` records one.
+    _write_run(tmp_path / "runs", ticker="MSFT", source="edgar")
+
+    after = _identities(tmp_path)
+    moved = {k for k, (was, now) in after.items() if was != now}
+    assert moved == {"runs.edgar"}, moved
+    assert after["runs.edgar"] == (0, 1)
+
+
+def test_a_run_written_into_the_corpus_source_is_visible_as_such(tmp_path: Path) -> None:
+    """The negative case the previous test exists to catch. A run recorded as a
+    corpus item moves a different key, and `--check` names it rather than reporting
+    one undifferentiated count."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    _write_run(tmp_path / "runs", ticker="MSFT", source="corpus")
+
+    moved = {k for k, (was, now) in _identities(tmp_path).items() if was != now}
+    assert moved == {"runs.corpus"}
+
+
+def test_run_counts_are_absent_rather_than_zero_with_no_runs_directory(
+    tmp_path: Path,
+) -> None:
+    """Zero runs and no journal at all are different facts. Reporting `0` for a
+    directory that does not exist would say the journal was read and found empty."""
+    from mapf.cli.commands.export import _run_counts
+
+    counts = _run_counts(tmp_path / "nowhere")
+    assert set(counts) == {"runs.corpus", "runs.edgar", "runs.news", "runs.unknown"}
+    assert all(value is None for value in counts.values())

@@ -173,7 +173,14 @@ def export(
         settings = load([config] if config else None)
         vintage = date.fromisoformat(snapshot)
         if check:
-            _check(out, settings, frozen=frozen, ledger_path=ledger_path, vintage=vintage)
+            _check(
+                out,
+                settings,
+                frozen=frozen,
+                ledger_path=ledger_path,
+                vintage=vintage,
+                runs_dir=runs_dir,
+            )
             return
         absent: list[dict[str, object]] = []
         sizes: dict[str, int] = {}
@@ -570,7 +577,7 @@ def _widest(prices: Any, cache_dir: Path, ticker: str, vintage: date) -> Any:
 
 
 def _live_identity(
-    settings: Any, *, frozen: Path, ledger_path: Path, vintage: date
+    settings: Any, *, frozen: Path, ledger_path: Path, vintage: date, runs_dir: Path
 ) -> dict[str, object]:
     """What an export written from this checkout right now would stamp.
 
@@ -589,7 +596,19 @@ def _live_identity(
         ),
         "symbols.synced_on": _synced_on(settings),
         "prices.snapshot": vintage.isoformat(),
+        # `snapshot=None` is the cheap read: it groups the forecasts by source and
+        # asks no price question, because grouping never needed one. Counted through
+        # `read_journal` rather than by walking the directories here, so a run is
+        # classified in exactly one place.
+        **_run_counts(runs_dir),
     }
+
+
+def _run_counts(runs_dir: Path) -> dict[str, object]:
+    if not runs_dir.is_dir():
+        return dict.fromkeys((f"runs.{source}" for source in SOURCES), None)
+    journal = read_journal(runs_dir, snapshot=None, today=datetime.now(UTC).date())
+    return {f"runs.{source}": len(journal.of(source)) for source in SOURCES}
 
 
 def _synced_on(settings: Any) -> str | None:
@@ -609,10 +628,25 @@ def _exported_identity(manifest: dict[str, Any]) -> dict[str, object]:
         "ledger.items_settled": manifest.get("ledger", {}).get("items_settled"),
         "symbols.synced_on": manifest.get("symbols", {}).get("synced_on"),
         "prices.snapshot": manifest.get("prices", {}).get("snapshot"),
+        # One key per source rather than a total. A live run moves exactly one of
+        # these and nothing else (ADR 0036 §5); a total would hide which, which is
+        # the only thing worth knowing when a run appears under an export.
+        **{
+            f"runs.{source}": manifest.get("runs", {}).get("rows", {}).get(source)
+            for source in SOURCES
+        },
     }
 
 
-def _check(out: Path, settings: Any, *, frozen: Path, ledger_path: Path, vintage: date) -> None:
+def _check(
+    out: Path,
+    settings: Any,
+    *,
+    frozen: Path,
+    ledger_path: Path,
+    vintage: date,
+    runs_dir: Path = Path("runs"),
+) -> None:
     """Report what has moved under an export since it was written.
 
     Staleness is the cost of a copy, and a date alone does not make it visible: a
@@ -639,7 +673,9 @@ def _check(out: Path, settings: Any, *, frozen: Path, ledger_path: Path, vintage
     typer.secho(f"exported   {manifest.get('exported_at')}", fg=typer.colors.GREEN)
     was, now = (
         _exported_identity(manifest),
-        _live_identity(settings, frozen=frozen, ledger_path=ledger_path, vintage=vintage),
+        _live_identity(
+            settings, frozen=frozen, ledger_path=ledger_path, vintage=vintage, runs_dir=runs_dir
+        ),
     )
     moved = {key: (was[key], now[key]) for key in now if was[key] != now[key]}
     for key in sorted(now):
