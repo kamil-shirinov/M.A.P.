@@ -173,26 +173,67 @@ describe("the marking says which state it is and why", () => {
 describe("the page, its markup and its rules", () => {
   it("marks the uncalibrated horizons on the control, before anything runs", () => {
     /* A reader choosing 21 sessions should know it is uncalibrated while
-       choosing it, not discover it from a result six minutes later. */
-    const page = read("assets/js/analyse-page.js");
-    assert.match(page, /days: 10, label: "10 sessions", note: "uncalibrated"/);
-    assert.match(page, /days: 21, label: "21 sessions", note: "uncalibrated"/);
-    assert.match(page, /days: 5, label: "5 sessions", note: "the fitted horizon"/);
-    assert.match(page, /note\.dataset\.calibration = "uncalibrated"/);
+       choosing it, not discover it from a result seven minutes later. In the
+       shared module, so every screen that offers a run marks them identically. */
+    const offer = read("assets/js/ui/analyse-offer.js");
+    assert.match(offer, /days: 10, label: "10 sessions", note: "uncalibrated"/);
+    assert.match(offer, /days: 21, label: "21 sessions", note: "uncalibrated"/);
+    assert.match(offer, /days: 5, label: "5 sessions", note: "the fitted horizon"/);
+    assert.match(offer, /note\.dataset\.calibration = "uncalibrated"/);
   });
 
   it("states one absence rather than disabling a control per row", () => {
-    const page = read("assets/js/analyse-page.js");
-    assert.match(page, /No analysis server/);
-    assert.match(page, /nothing pending/);
-    assert.doesNotMatch(page, /\.disabled = true/);
+    const offer = read("assets/js/ui/analyse-offer.js");
+    assert.match(offer, /No analysis server/);
+    assert.match(offer, /nothing is pending/);
+    // Nowhere, on any screen that can offer a run.
+    for (const file of ["analyse-page.js", "search-page.js", "ui/analyse-offer.js", "ui/search-box.js"]) {
+      assert.doesNotMatch(read(`assets/js/${file}`), /\.disabled = true/, file);
+    }
+  });
+
+  it("gives every screen the same absence, in the same words", () => {
+    /* One module, so the three screens that can offer a run cannot drift into
+       three different explanations of the same missing thing. */
+    const offer = read("assets/js/ui/analyse-offer.js");
+    assert.equal((offer.match(/No analysis server/g) ?? []).length, 1);
+    for (const file of ["analyse-page.js", "search-page.js"]) {
+      assert.match(read(`assets/js/${file}`), /renderNoServer\(/, file);
+      assert.doesNotMatch(read(`assets/js/${file}`), /No analysis server/, file);
+    }
   });
 
   it("asks whether a server is there without being able to start a run", () => {
-    // `/health` with GET. A speculative POST would cost six minutes to find out.
-    const probe = read("assets/js/analyse-page.js");
-    const body = probe.slice(probe.indexOf("async function serverPresent()"));
+    // `health` with GET. A speculative POST would cost seven minutes to find out.
+    const offer = read("assets/js/ui/analyse-offer.js");
+    const body = offer.slice(offer.indexOf("export function serverPresent()"));
     assert.match(body.slice(0, 300), /fetch\("health", \{ method: "GET" \}\)/);
+  });
+
+  it("probes once per page, not once per row", () => {
+    /* A screen with forty readable rows must ask once. A row is never the thing
+       that decides whether the feature exists. */
+    const offer = read("assets/js/ui/analyse-offer.js");
+    assert.match(offer, /probe \?\?= fetch/);
+    assert.match(read("assets/js/search-page.js"), /state\.canAnalyse = await serverPresent\(\)/);
+    assert.doesNotMatch(read("assets/js/ui/search-box.js"), /serverPresent/);
+  });
+
+  it("hands a ticker over as a link rather than posting from the row", () => {
+    /* The run belongs to the screen built to show one. Starting seven minutes of
+       work from a search row would leave the reader with nowhere to put it. */
+    const offer = read("assets/js/ui/analyse-offer.js");
+    assert.match(offer, /link\.href = `analyse\.html\?ticker=/);
+    assert.doesNotMatch(offer, /method: "POST"/);
+  });
+
+  it("seeds an arriving ticker without starting a run", () => {
+    const page = read("assets/js/analyse-page.js");
+    const boot = page.slice(page.indexOf("async function boot()"));
+    assert.match(boot, /params\.get\("ticker"\)/);
+    assert.match(boot, /\.anl-input"\)\.value = seeded/);
+    // The seeded value fills the box; nothing calls analyse() from boot.
+    assert.doesNotMatch(boot, /analyse\(seeded/);
   });
 
   it("reads the stream as it arrives rather than buffering it", () => {

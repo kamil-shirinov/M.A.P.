@@ -140,10 +140,18 @@ describe("the door's strip", () => {
     const { node, block, parts } = strip({ companies, runsBySource, finding: source.devScoringRecordExported(manifest) });
 
     const rowsInFiles = source.SOURCES.reduce((n, s) => n + exported(`runs/by_source/${s}.json`).length, 0);
+    /* Computed from the export rather than written down, because the strip gains
+       a clause when any run is outside the corpus — and whether one is depends on
+       whether `map serve` has been used. A hardcoded list would pass on a clean
+       checkout and fail the first time someone ran a live analysis. */
+    const outside = ["edgar", "news"].reduce((n, s) => n + exported(`runs/by_source/${s}.json`).length, 0);
     assert.deepEqual(parts, [
       String(companies), " companies", "·",
       // The run count is one part now: a link to the screen it names.
-      `${rowsInFiles.toLocaleString("en-US")} runs`, "·",
+      `${rowsInFiles.toLocaleString("en-US")} runs recorded`,
+      // Two parts: the figure is marked and the label is chrome, as everywhere else.
+      ...(outside ? ["·", outside.toLocaleString("en-US"), " outside the corpus"] : []),
+      "·",
       "does not beat a plain random walk or GARCH on the development companies",
     ]);
     const [companyFig, , , runLink] = node.children;
@@ -151,9 +159,18 @@ describe("the door's strip", () => {
     assert.equal(runLink.href, "runs.html", "the count is the way in to the runs screen");
     const runFig = runLink.children[0];
     assert.equal(runFig.dataset.prov, "derived", "a sum of four read counts is computed here, not read");
+    /* Every part carries its own account of itself: a figure with a provenance,
+       chrome saying why it holds digits, a separator, or the link. Checked by
+       KIND rather than by index, which was hardcoded to 0 and 3 and broke the
+       moment the strip gained a fifth part. */
     for (const [i, child] of node.children.entries()) {
-      if (i === 0 || i === 3) continue;
-      assert.ok(child.dataset.chrome !== undefined || child.className === "door-dot", `part ${i} is marked`);
+      assert.ok(
+        child.dataset.prov !== undefined
+          || child.dataset.chrome !== undefined
+          || child.className === "door-dot"
+          || child.className === "door-runs",
+        `part ${i} is marked`,
+      );
     }
     assert.ok(block.children.some((c) => c.className === "door-box"), "the box goes into the static block");
   });
@@ -164,7 +181,7 @@ describe("the door's strip", () => {
     const runsBySource = { corpus: 2, edgar: 1, news: 0, unknown: 4 };
     for (const k of Object.keys(runsBySource)) runsBySource[k] = figure(runsBySource[k], "measured", "int");
     const { parts } = strip({ companies: 120, runsBySource, finding: false });
-    assert.equal(parts[3], "7 runs");
+    assert.equal(parts[3], "7 runs recorded");
   });
 
   itNeedsExport("states a missing run count instead of reading an old export as zero", async () => {

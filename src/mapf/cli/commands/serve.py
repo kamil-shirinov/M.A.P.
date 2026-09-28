@@ -108,7 +108,7 @@ def serve(
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Open the app on start."),
     config: Path | None = typer.Option(None, help="Config file to use instead of the default."),
 ) -> None:
-    """Serve the app and `POST /analyze` from one loopback origin.
+    """Serve the app and `POST /analyse` from one loopback origin.
 
     Every analysis is a real run: it costs minutes of local inference and writes a
     permanent entry to the journal. There is no discard.

@@ -199,7 +199,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         if not self._checked():
             return
-        if urlsplit(self.path).path != "/analyze":
+        if urlsplit(self.path).path != "/analyse":
             self._refuse(404, "no_such_endpoint", "This server exposes one endpoint.")
             return
         try:

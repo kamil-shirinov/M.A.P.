@@ -145,7 +145,7 @@ def test_the_app_and_the_endpoint_share_one_origin(served: tuple[str, httpx.Clie
     _base, client = served
     assert client.get("/").status_code == 200
     assert client.get("/assets/app.css").status_code == 200
-    assert client.post("/analyze", json={"ticker": "AAPL"}).status_code == 200
+    assert client.post("/analyse", json={"ticker": "AAPL"}).status_code == 200
 
 
 def test_a_cross_origin_post_is_refused_before_anything_runs(
@@ -153,7 +153,7 @@ def test_a_cross_origin_post_is_refused_before_anything_runs(
 ) -> None:
     _base, client = served
     response = client.post(
-        "/analyze", json={"ticker": "AAPL"}, headers={"Origin": "http://evil.example"}
+        "/analyse", json={"ticker": "AAPL"}, headers={"Origin": "http://evil.example"}
     )
     assert response.status_code == 403
     assert response.json()["refused"] == "cross_origin"
@@ -161,14 +161,14 @@ def test_a_cross_origin_post_is_refused_before_anything_runs(
 
 def test_a_rebound_host_is_refused(served: tuple[str, httpx.Client]) -> None:
     _base, client = served
-    response = client.post("/analyze", json={"ticker": "AAPL"}, headers={"Host": "evil.example"})
+    response = client.post("/analyse", json={"ticker": "AAPL"}, headers={"Host": "evil.example"})
     assert response.status_code == 421
     assert response.json()["refused"] == "host_not_loopback"
 
 
 def test_the_stream_is_newline_delimited_json(served: tuple[str, httpx.Client]) -> None:
     _base, client = served
-    body = client.post("/analyze", json={"ticker": "AAPL", "horizon_days": 10}).text
+    body = client.post("/analyse", json={"ticker": "AAPL", "horizon_days": 10}).text
     events = [json.loads(line) for line in body.splitlines() if line.strip()]
     assert events[0]["stage"] == "filing"
     assert events[-1] == {"event": "result", "horizon_days": 10, "marking": "settled"}
@@ -187,7 +187,7 @@ def test_a_failing_analysis_ends_the_stream_with_a_reason(tmp_path: Path) -> Non
     thread.start()
     try:
         with httpx.Client(base_url=f"http://127.0.0.1:{PORT + 1}", timeout=10.0) as client:
-            body = client.post("/analyze", json={"ticker": "AAPL"}).text
+            body = client.post("/analyse", json={"ticker": "AAPL"}).text
     finally:
         server.shutdown()
         server.server_close()
@@ -215,7 +215,7 @@ def test_a_request_the_server_will_not_act_on_is_named(
     served: tuple[str, httpx.Client], payload: dict[str, object], kind: str
 ) -> None:
     _base, client = served
-    response = client.post("/analyze", json=payload)
+    response = client.post("/analyse", json=payload)
     assert response.status_code == 400
     assert response.json()["refused"] == kind
 
@@ -226,7 +226,7 @@ def test_the_three_offered_horizons_are_accepted(served: tuple[str, httpx.Client
     _base, client = served
     for horizon in (5, 10, 21):
         assert (
-            client.post("/analyze", json={"ticker": "AAPL", "horizon_days": horizon}).status_code
+            client.post("/analyse", json={"ticker": "AAPL", "horizon_days": horizon}).status_code
             == 200
         )
 
@@ -236,7 +236,7 @@ def test_an_oversized_body_is_refused_before_it_is_parsed(
 ) -> None:
     _base, client = served
     response = client.post(
-        "/analyze", content=b"x" * 9000, headers={"Content-Type": "application/json"}
+        "/analyse", content=b"x" * 9000, headers={"Content-Type": "application/json"}
     )
     assert response.status_code == 413
 
@@ -286,7 +286,7 @@ def test_an_unreadable_content_length_is_refused(served: tuple[str, httpx.Client
     a bad one — so a client-based test could not reach this branch at all."""
     _base, _client = served
     request = (
-        "POST /analyze HTTP/1.1\r\n"
+        "POST /analyse HTTP/1.1\r\n"
         f"Host: 127.0.0.1:{PORT}\r\n"
         "Content-Length: twelve\r\n"
         "Connection: close\r\n\r\n"

@@ -8,7 +8,7 @@ Until now every screen has been a read. `map export` writes flat JSON, four page
 and nothing in the browser can cause a forecast to exist. That boundary is why the hosted
 copy is safe to publish and why the journal cannot compute a score.
 
-Live analysis breaks it deliberately: type a ticker, press Analyze, and watch a forecast
+Live analysis breaks it deliberately: type a ticker, press Analyse, and watch a forecast
 being produced from the company's latest Item 2.02. The pipeline for this already exists
 — `map run --from-edgar` discovers the filer's most recent earnings 8-K, runs the three
 agents, and writes a run directory whose manifest carries `document_source: "edgar"`. What
@@ -97,9 +97,9 @@ page telling the data layer what it found.
 
 ### 3. Host and Origin are checked, and the app and the endpoint share one server
 
-`POST /analyze` refuses unless the `Host` header names a loopback address the server is
+`POST /analyse` refuses unless the `Host` header names a loopback address the server is
 actually bound to, and unless `Origin`, when present, matches the server's own origin. The
-app and `/analyze` are served by **one** server so that same-origin is the normal case and
+app and `/analyse` are served by **one** server so that same-origin is the normal case and
 a cross-origin request is always wrong.
 
 Binding to loopback is kept as well, but it is not the check. It stops a machine on the

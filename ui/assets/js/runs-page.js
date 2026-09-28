@@ -37,6 +37,37 @@ const $ = (id) => document.getElementById(id);
 /* The notes this screen used to print beside its numbers. They are the three
    readings that go wrong on this page if nobody says otherwise, plus what the
    journal is not. Section names match the sections above, in page order. */
+/* What the empty files mean depends on whether they are still empty, so this is
+   a sentence the page computes rather than one it carries.
+
+   It used to read "the three empty files are empty by fact ... every run here
+   predates the field, so no run can be filed under one", which was true when it
+   was written and became false the first time `map serve` produced a run. A note
+   about a count has to be a function of that count. */
+let POPULATION_STATE =
+  "An empty file is empty by fact, not by failure: it was read and holds [].";
+
+function describePopulations(counts) {
+  const filled = source.SOURCES.filter((s) => s !== "unknown" && counts[s] > 0);
+  const empty = source.SOURCES.filter((s) => s !== "unknown" && counts[s] === 0);
+  const parts = [];
+  if (filled.length) {
+    parts.push(
+      `${filled.join(" and ")} now hold runs made after the document-source field existed — ` +
+      "live analysis writes into edgar, and those runs are outside the corpus, unscored, and " +
+      "never pooled with it.",
+    );
+  }
+  if (empty.length) {
+    parts.push(
+      `The ${empty.length === 1 ? "one empty file is" : `${empty.length} empty files are`} ` +
+      `empty by fact, not by failure: ${empty.length === 1 ? "it was" : "each was"} read and ` +
+      `${empty.length === 1 ? "holds" : "each holds"} []. The count is zero, not unknown.`,
+    );
+  }
+  return parts.join(" ");
+}
+
 const WHY = [
   {
     title: "What a row is",
@@ -55,11 +86,10 @@ const WHY = [
       "One file per document source, and the export never concatenates them. corpus holds runs " +
         "whose document came from the frozen corpus itself; edgar, runs whose document was " +
         "fetched from EDGAR; news, runs whose document was a news item.",
-      "unknown holds every run in this export. That is not a claim about where the documents " +
-        "came from: the field was added after these runs were made.",
-      "The three empty files are empty by fact, not by failure. All three were read and each " +
-        "holds []. A run's document source is recorded when it is made, and every run here " +
-        "predates the field, so no run can be filed under one. The count is zero, not unknown.",
+      "unknown holds every run that predates the field. That is not a claim about where those " +
+        "documents came from: the source is recorded when a run is made, and the field was " +
+        "added after most of these were.",
+      POPULATION_STATE,
     ],
   },
   {
@@ -305,6 +335,7 @@ async function boot() {
   }
   renderMastheadVintage($("masthead-vintage"), state.manifest);
   renderFooter($("footer"), state.manifest);
+  POPULATION_STATE = describePopulations(state.counts);
   renderPageWhy($("why"), { groups: WHY });
   paint();
 

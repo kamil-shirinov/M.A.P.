@@ -1,13 +1,13 @@
 /* Composition root for live analysis.
 
    THIS IS THE ONLY SCREEN THAT CAUSES ANYTHING TO EXIST. Every other page is a
-   read of a static export. Here a press of Analyze runs three models locally for
+   read of a static export. Here a press of Analyse runs three models locally for
    about seven minutes and writes a permanent entry to the run journal.
 
    Which means the page has two quite different states, and the difference is not
    cosmetic:
 
-     with a server   `map serve` is running, `/analyze` answers, and the button
+     with a server   `map serve` is running, `/analyse` answers, and the button
                      does what it says.
      without one     these files are a static record. Nothing is queued, pending
                      or retrying, because there is nothing behind them to accept
@@ -27,17 +27,15 @@ import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { mountPageRosette } from "./ui/rosette.js";
 import { mountMastheadNav } from "./ui/front-door.js";
 import { chrome, chromeText } from "./lib/figure.js";
+import {
+  DEFAULT_HORIZON,
+  PERIODS,
+  renderHorizons,
+  renderNoServer,
+  serverPresent,
+} from "./ui/analyse-offer.js";
 
 const $ = (id) => document.getElementById(id);
-
-/* The horizons this screen offers, and what each one is. Five is the only one
-   anything was fitted at; the other two exist because a reader asking "and over
-   a month?" deserves an answer that is marked rather than withheld. */
-const PERIODS = [
-  { days: 5, label: "5 sessions", note: "the fitted horizon" },
-  { days: 10, label: "10 sessions", note: "uncalibrated" },
-  { days: 21, label: "21 sessions", note: "uncalibrated" },
-];
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -46,42 +44,7 @@ const el = (tag, className, text) => {
   return node;
 };
 
-const state = { horizon: 5, running: false, started: null, typical: null };
-
-/** Is there a server behind these files? One request, once, at boot.
-
-    `/health` rather than a speculative POST: asking the question must not be
-    able to start a run. */
-async function serverPresent() {
-  try {
-    const response = await fetch("health", { method: "GET" });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** The one stated absence. Replaces the whole interactive region rather than
-    disabling parts of it. */
-function renderAbsence(host) {
-  host.textContent = "";
-  const box = el("div", "cmp-empty");
-  box.dataset.chrome = "no analysis server is present; nothing here is a figure";
-  box.append(el("h1", null, "No analysis server"));
-  box.append(el("p", null,
-    "Live analysis runs three models on the machine serving this page, and these " +
-    "files are a static record with nothing behind them. There is no queue and " +
-    "nothing pending: the request cannot be made at all, rather than being made " +
-    "and not answered."));
-  box.append(el("p", null,
-    "Everything already forecast is on the other screens, which are reads of an " +
-    "export and need no server."));
-  box.append(el("pre", null, "uv run map serve"));
-  box.append(el("p", "anl-absence-foot",
-    "That command serves this page and the endpoint from one origin, on your own " +
-    "machine. Each analysis takes about seven minutes and is a permanent journal entry."));
-  host.append(box);
-}
+const state = { horizon: DEFAULT_HORIZON, running: false, started: null, typical: null };
 
 function renderAsk(host) {
   host.textContent = "";
@@ -99,33 +62,14 @@ function renderAsk(host) {
   field.append(input);
   form.append(field);
 
-  const periods = el("fieldset", "anl-periods");
-  periods.append(chrome(el("legend", null, "Horizon"), "a form label"));
-  for (const period of PERIODS) {
-    const wrap = el("label", "anl-period");
-    const radio = el("input");
-    radio.type = "radio";
-    radio.name = "horizon";
-    radio.value = String(period.days);
-    radio.checked = period.days === state.horizon;
-    radio.addEventListener("change", () => {
-      state.horizon = period.days;
-      renderAsk(host);
-      host.querySelector(".anl-input").value = input.value;
-    });
-    wrap.append(radio);
-    wrap.append(chromeText(period.label, "a horizon in trading sessions"));
-    /* The marking is on the CONTROL, before anything runs. A reader choosing 21
-       sessions should know it is uncalibrated while choosing it, not discover it
-       from the result seven minutes later. */
-    const note = el("span", "anl-period-note", period.note);
-    if (period.days !== 5) note.dataset.calibration = "uncalibrated";
-    wrap.append(chrome(note, "what this horizon is"));
-    periods.append(wrap);
-  }
+  const periods = el("div", "anl-periods-host");
+  renderHorizons(periods, {
+    selected: state.horizon,
+    onPick: (days) => { state.horizon = days; },
+  });
   form.append(periods);
 
-  const go = el("button", "anl-go", "Analyze");
+  const go = el("button", "anl-go", "Analyse");
   go.type = "submit";
   form.append(go);
 
@@ -141,7 +85,7 @@ function renderAsk(host) {
       "One analysis reads the company's latest earnings 8-K, runs three models " +
       "locally, and writes a permanent entry to the run journal. It takes about " +
       "seven minutes and cannot be undone."),
-    "what pressing Analyze does",
+    "what pressing Analyse does",
   ));
 }
 
@@ -168,7 +112,7 @@ async function analyse(ticker, horizon) {
   renderProgress(progress, [{ label: `Asking for ${ticker}…`, detail: "" }]);
 
   try {
-    const response = await fetch("analyze", {
+    const response = await fetch("analyse", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ticker, horizon_days: horizon }),
@@ -256,9 +200,20 @@ async function boot() {
   }
 
   if (await serverPresent()) {
+    /* A ticker in the URL is a handover from the search rows or a company page.
+       It seeds the box and the horizon; it does NOT start a run. A link that
+       spends seven minutes and writes a permanent journal entry on arrival would
+       make the back button expensive. */
+    const params = new URLSearchParams(location.search);
+    const seeded = (params.get("ticker") ?? "").trim().toUpperCase();
+    const horizon = Number(params.get("horizon"));
+    if (PERIODS.some((p) => p.days === horizon)) state.horizon = horizon;
     renderAsk($("ask"));
+    if (seeded) $("ask").querySelector(".anl-input").value = seeded;
   } else {
-    renderAbsence($("ask"));
+    renderNoServer($("ask"), {
+      where: "This screen exists to run a forecast on demand.",
+    });
   }
 
   renderPageWhy($("why"), { groups: whyGroups() });

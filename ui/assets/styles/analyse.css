@@ -137,3 +137,40 @@ body > .masthead,
 @media (max-width: 720px) {
   .anl-ask { grid-template-columns: 1fr; }
 }
+
+/* ---- offering a run from another screen ---- */
+/* The offer is a link that reads as an action, not a button competing with the
+   row's own information. On a search row it replaces the "no page" verdict, so
+   it sits where the reader's eye already ends. */
+.anl-offer {
+  font: var(--mono-sm);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: 2px var(--sp-3);
+  white-space: nowrap;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.anl-offer:hover { border-color: var(--accent); background: var(--accent-soft); }
+.anl-offer:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* The one stated absence, shared by every screen that would otherwise offer a
+   run. Not amber: nothing here is an unsettled measurement — it is a capability
+   that is absent, which the words carry. */
+.anl-absent {
+  padding: var(--sp-5);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  background: var(--sunken);
+  max-width: 68ch;
+}
+.anl-absent-head { margin: 0 0 var(--sp-3); font: var(--mono-md); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.anl-absent p { margin: 0 0 var(--sp-3); font: var(--sans-sm); color: var(--ink-2); }
+.anl-absent pre { margin: 0 0 var(--sp-3); font: var(--mono-md); color: var(--ink-1); }
+.anl-absent-foot { color: var(--ink-3); }
+
+/* ---- the company page's live section ---- */
+.cmp-live { display: grid; gap: var(--sp-4); }
+.cmp-live-row { display: flex; align-items: end; gap: var(--sp-5); flex-wrap: wrap; }

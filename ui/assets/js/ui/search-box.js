@@ -21,6 +21,7 @@ import { DERIVED, chrome, chromeText, figure, renderFigure } from "../lib/figure
    provenance-stamped instead. */
 const prose = (node, why) => chrome(node, why);
 import { isAbsent } from "../data/source.js";
+import { analyseLink } from "./analyse-offer.js";
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -158,6 +159,12 @@ function corpusRow(row) {
     *recent block*, which is a slice of filing history and not a calendar window
     — CNTX answers true with a most-recent date in 2023. The row prints the date
     it has and lets the reader judge it. */
+/* Set once per render by `renderResults`, from the page's single probe. A module
+   flag rather than a parameter threaded through `GROUPS`: the row functions are
+   referenced by the group table, and adding an argument to every one of them to
+   carry a page-wide fact would be the wrong shape. */
+let offerAnalysis = false;
+
 function filerRow(row, kind) {
   const div = el("div", `srch-row srch-row--${kind}`);
   const screen = row.screen;
@@ -181,8 +188,17 @@ function filerRow(row, kind) {
     nameNode(row.name),
     exchangeNode(row.exchange),
     detail,
-    el("span", "srch-verdict", kind === "earnings" ? "no page" : "nothing to read"),
   );
+  /* A readable filer the freeze did not take is the one row an analysis can be
+     started from — and only when a server is there. Without one the row keeps
+     the verdict it always had, and the PAGE states the absence once (ADR 0036
+     §4). A disabled control here would assert, forty times a screen, that the
+     feature is temporarily unavailable. */
+  if (kind === "earnings" && offerAnalysis) {
+    div.append(analyseLink(row.ticker));
+  } else {
+    div.append(el("span", "srch-verdict", kind === "earnings" ? "no page" : "nothing to read"));
+  }
   return div;
 }
 
@@ -219,7 +235,8 @@ const GROUPS = [
 
 const PER_GROUP = 4;
 
-export function renderResults(host, { phase, query, groups, matched }) {
+export function renderResults(host, { phase, query, groups, matched, canAnalyse = false }) {
+  offerAnalysis = canAnalyse;
   host.textContent = "";
   if (!query.trim()) return;
 

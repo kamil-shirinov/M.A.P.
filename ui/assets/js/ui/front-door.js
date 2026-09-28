@@ -120,9 +120,30 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding }) {
     link.title = "Every run in the export";
     link.append(
       renderFigure(total),
-      chromeText(" runs", "every run recorded, summed here across the four document sources"),
+      chromeText(" runs recorded", "every run recorded, summed here across the four document sources"),
     );
     strip.append(link);
+
+    /* "N runs" alone was fine while every run came from the corpus. It is not
+       now: live analysis writes runs that are outside the frozen corpus, and a
+       reader who sees one number next to "120 companies" will read it as work on
+       those companies. So when any run has a source other than the panel's, the
+       door names how many and what they are — from the manifest's own per-source
+       counts, not by subtracting one number from another. */
+    const outside = ["edgar", "news"]
+      .map((key) => runsBySource[key])
+      .filter((figure) => figure && figure.value > 0);
+    if (outside.length) {
+      const sum = derive(outside.reduce((n, f) => n + f.value, 0), "int", ...outside);
+      strip.append(dot());
+      strip.append(
+        renderFigure(sum),
+        chromeText(
+          " outside the corpus",
+          "runs whose document was not a frozen corpus exhibit, counted per source in the manifest",
+        ),
+      );
+    }
   }
 
   /* Stated for the development companies only, because that is the half an
