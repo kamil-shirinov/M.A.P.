@@ -30,6 +30,52 @@ import { renderNoExport } from "./ui/no-export.js";
 
 const $ = (id) => document.getElementById(id);
 
+/* THE QUERY LIVES IN THE URL, as `?q=`. The box mirrors it rather than owning it,
+   which is what makes the three ways back to a result behave the same way: the
+   nav link, the back button and a reload all just re-read `?q=`.
+
+   Keystrokes REPLACE the entry rather than pushing one. Pushing per keystroke
+   would bury the page you arrived from under one entry per letter, so "apple"
+   typed then left would need five presses of Back to escape. The crest pushes,
+   because going home is the one in-page move worth being able to undo — and it
+   is what "back keeps the search" means in practice.
+
+   Cross-document transitions are already on (`@view-transition { navigation:
+   auto }`), so arriving at `?q=apple` from a company page animates; within the
+   document `mode.sync` owns the flip and animates it the same way. */
+const QUERY_PARAM = "q";
+
+function queryFromLocation() {
+  try {
+    return new URL(window.location.href).searchParams.get(QUERY_PARAM) ?? "";
+  } catch {
+    return ""; // no URL to read: a file:// engine without searchParams, or a stub
+  }
+}
+
+function writeQueryToLocation(query, push = false) {
+  if (!window.history?.replaceState) return;
+  let url;
+  try {
+    url = new URL(window.location.href);
+  } catch {
+    return;
+  }
+  const term = query.trim();
+  if (term) url.searchParams.set(QUERY_PARAM, term);
+  else url.searchParams.delete(QUERY_PARAM);
+  const next = url.pathname + url.search + url.hash;
+  // An identical URL is not pushed. Otherwise the crest, clicked twice on an
+  // already-empty box, would stack entries that do nothing when visited.
+  if (next === window.location.pathname + window.location.search + window.location.hash) return;
+  if (push) window.history.pushState({ [QUERY_PARAM]: term }, "", next);
+  else window.history.replaceState({ [QUERY_PARAM]: term }, "", next);
+}
+
+/* The one move that earns a history entry. Named, so the click handler reads as
+   what it does and the entry cannot be pushed by accident from anywhere else. */
+const pushQueryToLocation = (query) => writeQueryToLocation(query, true);
+
 /* How many matches get the filer pre-screen. A screen is a scan of filers.json
    per ticker (the data boundary offers no ticker -> filer map), and group
    membership is not known until a row is screened, so the cap is on screening
@@ -164,6 +210,12 @@ function paint() {
      path out of onQuery that changes the screen comes through paint, including
      the empty box — which is the way back to the door, and which an early
      return skipped when the call sat at the end of the handler. */
+  /* Before the flip, and from paint rather than from onQuery, for the same reason
+     the flip is here: every path that changes the screen comes through paint, and
+     the URL is part of the screen. Before rather than after because the URL is not
+     rendered, so it is not in the transition's snapshot, and `mode.sync` has to
+     stay the last thing a paint does. */
+  writeQueryToLocation(state.query);
   mode.sync(state.query);
 }
 
@@ -209,10 +261,31 @@ async function boot() {
   document.querySelector(".masthead h1 a").addEventListener("click", (event) => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
+    // Pushed before the repaint, so the entry Back returns to is the query that
+    // was on screen and not the empty box that replaces it.
+    pushQueryToLocation("");
     onQuery("");
   });
 
-  paint();
+  /* Back and forward within the document. Only the crest pushes, so this fires
+     for that one move — but it also catches a forward press and an entry restored
+     from the session, and going through onQuery means the rows are rebuilt rather
+     than assumed to still match the URL. */
+  window.addEventListener("popstate", () => {
+    onQuery(queryFromLocation());
+  });
+
+  /* An arriving `?q=` is a query typed on some earlier visit, so it goes through
+     onQuery exactly as a keystroke does — including the index request, which a
+     seeded query needs as much as a typed one. `mode.sync` inside that paint
+     opens the page, so a link to `?q=apple` lands on results and not the door. */
+  const seeded = queryFromLocation();
+  if (seeded) {
+    box.input.value = seeded;
+    await onQuery(seeded);
+  } else {
+    paint();
+  }
   mode.focus();
 }
 

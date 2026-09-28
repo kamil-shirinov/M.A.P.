@@ -235,6 +235,56 @@ describe("wiring in search-page.js", () => {
     assert.match(boot, /mode\.focus\(\)/);
     assert.doesNotMatch(boot, /box\.focus\(\)/);
   });
+
+  it("keeps the query in the URL, and writes it from paint", () => {
+    // The URL is part of the screen, so it is written where the screen is.
+    const body = bodyOf(page, "function paint()");
+    assert.match(body, /writeQueryToLocation\(state\.query\)/);
+    assert.doesNotMatch(bodyOf(page, "async function onQuery("), /writeQueryToLocation/);
+    // The URL is not rendered, so it is not in the transition's snapshot and the
+    // flip stays last. Written after the rows, though: paint is one unit.
+    assert.ok(body.indexOf("renderResults(") < body.indexOf("writeQueryToLocation("));
+    assert.ok(body.indexOf("writeQueryToLocation(") < body.indexOf("mode.sync("));
+  });
+
+  it("replaces on a keystroke and pushes only for the crest", () => {
+    // One entry per letter would bury the page you arrived from.
+    const write = bodyOf(page, "function writeQueryToLocation(");
+    assert.match(write, /if \(push\) window\.history\.pushState/);
+    assert.match(write, /else window\.history\.replaceState/);
+    assert.match(bodyOf(page, "function paint()"), /writeQueryToLocation\(state\.query\);/);
+    const handler = page.slice(page.indexOf('querySelector(".masthead h1 a")'));
+    const body = handler.slice(0, handler.indexOf("});"));
+    assert.match(body, /pushQueryToLocation\(""\)/);
+    // Pushed BEFORE the repaint, or Back returns to the empty box it replaced.
+    assert.ok(body.indexOf("pushQueryToLocation") < body.indexOf('onQuery("")'));
+  });
+
+  it("does not push an identical URL", () => {
+    assert.match(bodyOf(page, "function writeQueryToLocation("), /if \(next === window\.location/);
+  });
+
+  it("re-reads the URL on back and forward, through onQuery", () => {
+    const boot = bodyOf(page, "async function boot()");
+    assert.match(boot, /addEventListener\("popstate"/);
+    const listener = boot.slice(boot.indexOf('addEventListener("popstate"'));
+    assert.match(listener.slice(0, 200), /onQuery\(queryFromLocation\(\)\)/);
+  });
+
+  it("seeds an arriving ?q= through onQuery, so the index is still requested", () => {
+    const boot = bodyOf(page, "async function boot()");
+    assert.match(boot, /const seeded = queryFromLocation\(\)/);
+    assert.match(boot, /await onQuery\(seeded\)/);
+    // And the plain arrival still paints, or the door would never render.
+    assert.match(boot, /\} else \{\s*paint\(\);\s*\}/);
+  });
+
+  it("survives an engine with no history or no parseable URL", () => {
+    // These files open over file:// as well as over http, and the tests drive the
+    // module with a stub document. Neither may have history.
+    assert.match(bodyOf(page, "function writeQueryToLocation("), /if \(!window\.history\?\.replaceState\) return/);
+    assert.match(bodyOf(page, "function queryFromLocation()"), /catch \{/);
+  });
 });
 
 describe("masthead nav", () => {
