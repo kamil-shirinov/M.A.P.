@@ -26,7 +26,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.stats import kstest
+from scipy.stats import kstest, norm
 
 from mapf.core.errors import MapError
 from mapf.eval.power import block_resamples, moving_block_bootstrap, occupied_blocks
@@ -273,6 +273,150 @@ def calibration_interval(
     tail = (1.0 - confidence) / 2.0 * 100.0
     lower, upper = np.percentile(np.asarray(ratios, dtype=np.float64), [tail, 100.0 - tail])
     return Calibration(ratio=point, lower=float(lower), upper=float(upper), n=int(stated.size))
+
+
+# The consistency constant that makes the median absolute deviation an estimator of
+# sigma for a Gaussian: 1 / Phi^-1(0.75). Spelled out rather than imported so the
+# published tail ratio does not change if a dependency changes its own rounding.
+MAD_TO_SIGMA = 1.4826
+
+
+def z_from_pit(pit: Floats) -> NDArray[np.float64]:
+    """`z = Phi^-1(PIT)` — the project's tail definition, pre-registered on ad71b13.
+
+    Named once because the obvious alternative, `realised_return / sigma`, is a
+    DIFFERENT statistic and not a different route to this one: it ignores the
+    forecast's own centre, and on the development half the two give 11 and 13
+    exceedances past 2.5. The front end pins that gap in a test; this is the Python
+    side of the same guard.
+    """
+    values = np.asarray(pit, dtype=np.float64)
+    if values.size == 0:
+        raise AggregationError("z needs at least one PIT value")
+    z: NDArray[np.float64] = np.asarray(norm.ppf(values), dtype=np.float64)
+    if not np.all(np.isfinite(z)):
+        # A PIT of exactly 0 or 1 sends z to infinity, which would quietly poison an
+        # RMS. Refusing beats clipping: clipping invents a largest-possible outcome
+        # and the tail statistics are precisely what would be read off it.
+        bad = int(np.count_nonzero(~np.isfinite(z)))
+        raise AggregationError(
+            f"{bad} PIT value(s) are exactly 0 or 1, so z is not finite; "
+            "the tail statistics are undefined on this sample"
+        )
+    return z
+
+
+def mad_scale(z: Floats) -> float:
+    """The MAD of `z` rescaled to a sigma, centred on the MEDIAN.
+
+    Centring is a real choice — about the median or about zero — and it is settled
+    by the record rather than by taste: on the 175-item development record this
+    returns 1.0864, which is the MAD-scale ADR 0032 pre-registered its success
+    condition against. Centring on zero gives 1.0911 and would not reproduce it.
+    """
+    series = np.asarray(z, dtype=np.float64)
+    if series.size == 0:
+        raise AggregationError("MAD-scale needs at least one item")
+    spread = float(np.median(np.abs(series - np.median(series))))
+    if spread <= 0.0:
+        raise AggregationError("more than half of z is at the median; MAD-scale is zero")
+    return MAD_TO_SIGMA * spread
+
+
+def tail_ratio(z: Floats) -> float:
+    """`RMS(z) / MAD-scale(z)` — how much heavier the tails are than the body.
+
+    One for a Gaussian, above one when the extremes carry more of the dispersion
+    than a normal distribution would put there. Scale-invariant by construction:
+    both parts divide by any common factor, so the ratio is a statement about SHAPE
+    and cannot be moved by a forecaster simply being uniformly too narrow. That is
+    also why a location-and-scale correction provably cannot change it.
+    """
+    series = np.asarray(z, dtype=np.float64)
+    rms = float(np.sqrt(np.mean(series**2)))
+    return rms / mad_scale(series)
+
+
+@dataclass(frozen=True)
+class TailRatio:
+    """The tail ratio with an interval, on the same blocks as everything else."""
+
+    ratio: float
+    lower: float
+    upper: float
+    n: int
+    date_clusters: int
+
+    @property
+    def verdict(self) -> str:
+        """`heavier than normal` only when the interval clears 1.0.
+
+        The pre-registered bar is the INTERVAL excluding 1.0, not the point estimate
+        landing above it, so a ratio of 1.25 whose interval reaches down to 0.99 is
+        reported here as undetermined and not as heavy tails.
+        """
+        if self.lower > 1.0:
+            return "heavier-tailed than normal"
+        if self.upper < 1.0:
+            return "lighter-tailed than normal"
+        return "indistinguishable from normal-tailed"
+
+
+def tail_ratio_interval(
+    z: Floats,
+    day_index: Ints,
+    *,
+    horizon_days: int = 5,
+    draws: int = 4000,
+    seed: int = 20260813,
+    confidence: float = 0.95,
+    method: str = "percentile",
+) -> TailRatio:
+    """`tail_ratio` with a calendar-clustered interval, as record 2 pre-registered it.
+
+    The draws, the seed and the ten-day blocks are not defaults chosen here; they are
+    the ones fixed in the git note on ad71b13 before any ambiguous-band number
+    existed, and they are spelled out as defaults so a caller cannot reproduce the
+    pre-registered test while quietly changing one of them.
+
+    `method` is the one thing the pre-registration left open. `percentile` is the
+    house convention -- it is what `calibration_interval` beside this uses, so the
+    two intervals rest on one convention as well as one resampling.
+    """
+    series = np.asarray(z, dtype=np.float64)
+    days = np.asarray(day_index, dtype=np.int64)
+    if series.size != days.size:
+        raise AggregationError(f"tail inputs disagree in length: z={series.size}, days={days.size}")
+    if method not in {"percentile", "basic"}:
+        raise AggregationError(f"unknown interval method {method!r}")
+    point = tail_ratio(series)
+    ratios: list[float] = []
+    rng = np.random.default_rng(seed)
+    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2):
+        try:
+            ratios.append(tail_ratio(series[index]))
+        except AggregationError:
+            # A resample in which the MAD collapses to zero has no defined ratio.
+            # Dropping it is the only option that does not invent one, and if every
+            # draw is like that the interval is refused below rather than widened.
+            continue
+    if not ratios:
+        raise AggregationError("no bootstrap resample produced a defined tail ratio")
+    tail = (1.0 - confidence) / 2.0 * 100.0
+    drawn = np.asarray(ratios, dtype=np.float64)
+    lower, upper = np.percentile(drawn, [tail, 100.0 - tail])
+    if method == "basic":
+        # Reflect the draws through the point estimate. Reported alongside because a
+        # bound that sits within 0.006 of the bar should not rest on an unexamined
+        # convention.
+        lower, upper = 2.0 * point - upper, 2.0 * point - lower
+    return TailRatio(
+        ratio=point,
+        lower=float(lower),
+        upper=float(upper),
+        n=int(series.size),
+        date_clusters=occupied_blocks(days, horizon_days * 2),
+    )
 
 
 # The asymptotic 5% point of A-squared against a FULLY SPECIFIED uniform. The null

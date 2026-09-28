@@ -16,14 +16,19 @@ from mapf.eval.aggregate import (
     AggregationError,
     Calibration,
     PitTest,
+    TailRatio,
     anderson_darling_uniform,
     calibration_interval,
     calibration_ratio,
     compare,
     leakage,
+    mad_scale,
     pit_histogram,
     pit_uniformity,
     summarise,
+    tail_ratio,
+    tail_ratio_interval,
+    z_from_pit,
 )
 from mapf.eval.scoring import pit, pit_deviation
 
@@ -435,3 +440,214 @@ def test_pit_values_at_the_boundary_do_not_make_the_statistic_infinite() -> None
 def test_anderson_darling_refuses_an_empty_sample() -> None:
     with pytest.raises(AggregationError, match="at least one item"):
         anderson_darling_uniform([])
+
+
+# --- the tail ratio: RMS(z) over MAD-scale(z) ----------------------------------
+#
+# Pre-registered in the git note on ad71b13, record 2, before any ambiguous-band
+# number existed. These tests guard the two things a later reader could quietly
+# change and still get a plausible number out: which centring the MAD uses, and
+# whether the verdict is read off the interval or off the point estimate.
+
+
+def _heavy(rng: np.random.Generator, n: int) -> np.ndarray:
+    """A normal mixture: a body plus a rare wide component. Heavier tails than
+    Gaussian with the body's scale left alone, which is exactly the shape the ratio
+    is supposed to be sensitive to."""
+    wide = rng.random(n) < 0.05
+    return np.where(wide, rng.normal(0.0, 5.0, n), rng.normal(0.0, 1.0, n))
+
+
+def test_a_gaussian_sample_has_a_tail_ratio_near_one() -> None:
+    rng = np.random.default_rng(101)
+    assert 0.9 < tail_ratio(rng.normal(0.0, 1.0, 4000)) < 1.1
+
+
+def test_a_heavy_tailed_sample_has_a_ratio_above_one() -> None:
+    rng = np.random.default_rng(102)
+    assert tail_ratio(_heavy(rng, 4000)) > 1.3
+
+
+def test_the_ratio_is_scale_invariant() -> None:
+    """The load-bearing property, and the reason ADR 0033 could predict in advance
+    that the calibration correction would not move this number: RMS and MAD-scale
+    both divide by any common factor, so `z -> z / b` leaves the ratio alone."""
+    rng = np.random.default_rng(103)
+    z = _heavy(rng, 500)
+    assert tail_ratio(z) == pytest.approx(tail_ratio(z * 7.5), rel=1e-12)
+    assert tail_ratio(z) == pytest.approx(tail_ratio(z / 1.3305), rel=1e-12)
+
+
+def test_mad_scale_is_centred_on_the_median_not_on_zero() -> None:
+    """Centring is a choice the pre-registration did not spell out, and it is settled
+    by the record: median-centring is what reproduces ADR 0032's 1.0864. A series
+    with a deliberate offset makes the two answers differ, so a change of centring
+    cannot pass this suite quietly."""
+    z = np.array([4.0, 5.0, 6.0, 7.0, 8.0])
+    assert mad_scale(z) == pytest.approx(1.4826 * 1.0)
+    about_zero = 1.4826 * float(np.median(np.abs(z)))
+    assert about_zero == pytest.approx(1.4826 * 6.0)
+    assert mad_scale(z) != pytest.approx(about_zero)
+
+
+def test_mad_scale_recovers_sigma_for_a_gaussian() -> None:
+    rng = np.random.default_rng(104)
+    assert mad_scale(rng.normal(0.0, 3.0, 20000)) == pytest.approx(3.0, rel=0.05)
+
+
+def test_a_degenerate_body_refuses_rather_than_dividing_by_zero() -> None:
+    with pytest.raises(AggregationError, match="MAD-scale is zero"):
+        tail_ratio([0.0, 0.0, 0.0, 0.0, 9.0])
+
+
+def test_the_mad_scale_needs_data() -> None:
+    with pytest.raises(AggregationError, match="at least one item"):
+        mad_scale([])
+
+
+def test_z_from_pit_is_the_inverse_normal_and_not_the_other_definition() -> None:
+    """`realised / sigma` is a different statistic, not a different route to this
+    one -- it drops the forecast's own centre. The front end pins the gap between
+    them; this is the Python side of the same guard."""
+    assert z_from_pit([0.5])[0] == pytest.approx(0.0)
+    assert z_from_pit([0.975])[0] == pytest.approx(1.959964, abs=1e-6)
+    assert z_from_pit([0.025])[0] == pytest.approx(-1.959964, abs=1e-6)
+
+
+def test_a_pit_of_exactly_zero_or_one_refuses_rather_than_clipping() -> None:
+    """Clipping would invent a largest-possible outcome, and the tail statistics are
+    precisely what a reader would then take off it."""
+    with pytest.raises(AggregationError, match="not finite"):
+        z_from_pit([0.4, 1.0])
+    with pytest.raises(AggregationError, match="not finite"):
+        z_from_pit([0.0, 0.6])
+
+
+def test_z_from_pit_needs_data() -> None:
+    with pytest.raises(AggregationError, match="at least one PIT"):
+        z_from_pit([])
+
+
+def test_the_tail_interval_finds_a_known_heavy_tail() -> None:
+    rng = np.random.default_rng(105)
+    result = tail_ratio_interval(_heavy(rng, 600), _clustered_days(600), draws=400)
+    assert result.ratio > 1.3
+    assert result.lower > 1.0
+    assert result.verdict == "heavier-tailed than normal"
+    assert result.n == 600
+
+
+def test_a_gaussian_panel_is_not_called_heavy_tailed() -> None:
+    rng = np.random.default_rng(106)
+    result = tail_ratio_interval(rng.normal(0.0, 1.0, 600), _clustered_days(600), draws=400)
+    assert result.lower <= 1.0 <= result.upper
+    assert result.verdict == "indistinguishable from normal-tailed"
+
+
+def test_the_tail_verdict_reads_the_interval_and_not_the_point() -> None:
+    """The pre-registered bar is the interval excluding 1.0. A ratio of 1.25 whose
+    lower bound reaches 0.9945 is the actual recorded outcome on the ambiguous band,
+    and it is undetermined rather than heavy."""
+    near = TailRatio(ratio=1.2493, lower=0.9945, upper=1.5365, n=174, date_clusters=24)
+    assert near.verdict == "indistinguishable from normal-tailed"
+    clear = TailRatio(ratio=1.2064, lower=1.0135, upper=1.4372, n=178, date_clusters=24)
+    assert clear.verdict == "heavier-tailed than normal"
+    light = TailRatio(ratio=0.9, lower=0.7, upper=0.98, n=50, date_clusters=8)
+    assert light.verdict == "lighter-tailed than normal"
+
+
+def test_the_tail_interval_is_reproducible_from_the_registered_seed() -> None:
+    """The seed, the draws and the ten-day blocks are the pre-registration, not
+    defaults chosen for convenience. Two calls must agree to the digit."""
+    rng = np.random.default_rng(107)
+    z = _heavy(rng, 300)
+    days = _clustered_days(300)
+    first = tail_ratio_interval(z, days, draws=200)
+    again = tail_ratio_interval(z, days, draws=200)
+    assert (first.lower, first.upper) == (again.lower, again.upper)
+
+
+def test_the_registered_defaults_are_the_ones_in_the_note() -> None:
+    import inspect
+
+    defaults = inspect.signature(tail_ratio_interval).parameters
+    assert defaults["draws"].default == 4000
+    assert defaults["seed"].default == 20260813
+    assert defaults["horizon_days"].default == 5
+    assert defaults["method"].default == "percentile"
+
+
+def test_a_tail_concentrated_in_time_gets_the_wider_interval() -> None:
+    """Why the bootstrap is clustered on dates at all. Both panels here hold the same
+    240 z, the same twelve extreme values and the same occupied days; only WHEN the
+    extremes fall differs. Concentrated in one ten-day block they are effectively one
+    observation, because a block resample takes them all or none, and the interval
+    has to say so. The naive version of this test -- grouping i.i.d. draws -- proves
+    nothing, since grouping alone does not inflate variance."""
+    rng = np.random.default_rng(108)
+    days = [i // 10 * 10 for i in range(240)]
+    base = rng.normal(0.0, 1.0, 240)
+    extremes = rng.normal(0.0, 6.0, 12)
+
+    concentrated = base.copy()
+    concentrated[:12] = extremes
+    spread_out = base.copy()
+    spread_out[[i * 20 for i in range(12)]] = extremes
+
+    together = tail_ratio_interval(concentrated, days, draws=800)
+    apart = tail_ratio_interval(spread_out, days, draws=800)
+
+    assert together.date_clusters == apart.date_clusters == 24
+    assert (together.upper - together.lower) > (apart.upper - apart.lower)
+    # And the consequence that matters: the same tail, concentrated, stops clearing
+    # the bar by nearly as much.
+    assert together.lower < apart.lower
+
+
+def test_the_block_count_is_reported_on_the_same_convention_as_the_rest() -> None:
+    result = tail_ratio_interval([1.0, -2.0, 0.5, 3.0], [0, 3, 11, 12], draws=50)
+    assert result.date_clusters == 2
+
+
+def test_the_basic_interval_is_available_and_reflects_the_draws() -> None:
+    """Offered because the pre-registration fixed the resampling and not the interval
+    construction, and a bound within 0.006 of the bar should not rest on an
+    unexamined convention."""
+    rng = np.random.default_rng(109)
+    z = _heavy(rng, 400)
+    days = _clustered_days(400)
+    pct = tail_ratio_interval(z, days, draws=300)
+    basic = tail_ratio_interval(z, days, draws=300, method="basic")
+    assert pct.ratio == basic.ratio
+    assert basic.lower == pytest.approx(2 * pct.ratio - pct.upper)
+    assert basic.upper == pytest.approx(2 * pct.ratio - pct.lower)
+
+
+def test_an_unknown_interval_method_refuses() -> None:
+    with pytest.raises(AggregationError, match="unknown interval method"):
+        tail_ratio_interval([1.0, 2.0], [0, 1], method="bca")
+
+
+def test_mismatched_tail_inputs_refuse() -> None:
+    with pytest.raises(AggregationError, match="disagree in length"):
+        tail_ratio_interval([1.0, 2.0], [0])
+
+
+def test_a_tail_interval_with_no_surviving_draw_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reachable when the panel has a defined ratio but every resample lands on a
+    body with no spread. Driven directly, because contriving it through the sampler
+    would take a panel so degenerate it would be testing the fixture. It refuses
+    rather than reporting an interval built from whichever draws happened to
+    survive."""
+    # The whole panel has a defined MAD; the ten items the sampler is made to pick
+    # do not. That is the only shape in which this branch is reachable.
+    z = [0.0] * 10 + [float(i) for i in range(1, 11)]
+    assert mad_scale(z) > 0.0
+    monkeypatch.setattr(
+        "mapf.eval.aggregate.block_resamples",
+        lambda *a, **k: iter([np.arange(10)] * 5),
+    )
+    with pytest.raises(AggregationError, match="no bootstrap resample"):
+        tail_ratio_interval(z, list(range(20)), draws=5)
