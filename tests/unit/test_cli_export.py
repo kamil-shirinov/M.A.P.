@@ -116,10 +116,15 @@ def _filers(tmp_path: Path) -> Path:
 
 
 def _export(tmp_path: Path, *args: str, out: Path | None = None) -> Result:
+    # The ledger is isolated like every other path. Left to its default it read
+    # the checkout's own `var/corpus/ledger.jsonl`, which is gitignored, so two tests
+    # passed here and failed in a clean clone (Findings #67).
+    ledger = () if "--ledger-path" in args else ("--ledger-path", str(tmp_path / "no-ledger.jsonl"))
     return runner.invoke(
         app,
         [
             "export",
+            *ledger,
             "--out",
             str(out or tmp_path / "export"),
             "--frozen",
@@ -925,7 +930,7 @@ def test_no_prices_omits_the_series_and_the_exporter_states_the_absence(tmp_path
     """
     _ready(tmp_path)
 
-    result = _export(tmp_path, "--no-prices")
+    result = _export(tmp_path, "--no-prices", "--allow-partial")
 
     assert result.exit_code == 0, result.output
     assert not (tmp_path / "export" / "prices").exists(), "no series were written"
@@ -952,7 +957,7 @@ def test_prices_are_exported_by_default(tmp_path: Path) -> None:
     """
     _ready(tmp_path)
 
-    result = _export(tmp_path)
+    result = _export(tmp_path, "--allow-partial")
 
     assert result.exit_code == 0, result.output
     manifest = _read(tmp_path, "manifest.json")

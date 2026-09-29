@@ -2923,6 +2923,10 @@ from inside pytest against the recorded reasoning in `test_definition_of_done.py
 Until one of those happens, the contracts hold only because they are run by hand
 before each push.
 
+**Resolved 2026-09-29:** CI, on every push, running the whole gate (ADR 0037). The hand-run
+gate stays, and now includes ruff and mypy, which had let 47 errors reach `main` the same
+way. Setting it up found a further class the hand-run gate cannot see (#67).
+
 ---
 
 ## 66 · The one finding that replicated kept its verdict and lost its numbers
@@ -3094,3 +3098,37 @@ three intervals exclude zero. On the second band, the registered test, both base
 monotone. On the populations the scoring records hold today (175 and 174) nothing changes:
 the second band is negative, excluding zero and monotone on both baselines, and development
 against GARCH is still out of order by 0.0006.
+
+---
+
+## 67 · Three tests that passed only on the machine that wrote them
+
+Setting up CI (ADR 0037) meant running the gate on a clean clone first, and three tests
+failed there that had never failed here.
+
+- **Two export tests read the real ledger.** `test_no_prices_omits_the_series_and_the_exporter_states_the_absence`
+  and `test_prices_are_exported_by_default` called the export helper without
+  `--ledger-path`, which therefore defaulted to `var/corpus/ledger.jsonl`, the
+  checkout's own 734-line ledger. It is gitignored. Here it exists and the tests passed;
+  in a clone the export refused with "the corpus ledger is missing" and both failed.
+- **One front-end test read the export unguarded.** "and the two really do differ in
+  this export" opened `ui/assets/export/runs/by_source/corpus.json` with a plain `it`.
+  Every other export-reading test uses `itNeedsExport`, which skips with a reason when the
+  export is absent, so a clone reported 100 passed, 117 skipped and this one crashed.
+
+The fixes are the ones the suites were already designed around. The export helper now
+passes a temporary `--ledger-path` unless a test names its own, and the two tests say
+`--allow-partial` like their siblings; they pass with the real ledger moved aside. The
+front-end test uses `itNeedsExport`.
+
+Same family as [[#62]], which was the same defect one path over: a helper that isolated
+six paths of seven and let the seventh default to the repository's real data. #62 fixed
+`--runs-dir` and left `--ledger-path`, because the fix was to the path that had been seen
+rather than to the helper's rule. The rule is now in the helper: every path is isolated
+unless the test supplies one.
+
+**The practical rule:** a test that passes in the repository it was written in has shown
+only that. Gitignored data is exactly what a hand-run gate on one machine can never be
+missing, so only a clean checkout finds this class. That is the case for CI that #65 did
+not make — #65 was about a check nobody ran, and this is about a check that ran every time
+on the one machine where it could not fail.

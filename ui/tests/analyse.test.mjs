@@ -385,7 +385,7 @@ describe("the door counts live runs, which is not the same set as outside_corpus
     assert.doesNotMatch(door, /chromeText\(\s*" outside the corpus"/);
   });
 
-  it("and the two really do differ in this export", () => {
+  itNeedsExport("and the two really do differ in this export", () => {
     const rows = ["corpus", "edgar", "news", "unknown"]
       .flatMap((s) => exported(`runs/by_source/${s}.json`).map((e) => [s, e.corpus_relation]));
     const live = rows.filter(([s]) => s === "edgar" || s === "news").length;
