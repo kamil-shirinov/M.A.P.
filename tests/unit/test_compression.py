@@ -14,7 +14,16 @@ import numpy as np
 import pytest
 
 from mapf.eval.aggregate import AggregationError
-from mapf.eval.compression import Compression, compression_interval, slope
+from mapf.eval.compression import (
+    CUT_FRACTIONS,
+    Compression,
+    MoveCut,
+    compression_interval,
+    cut_size,
+    largest_move_cuts,
+    monotone,
+    slope,
+)
 
 
 def _days(n: int) -> list[int]:
@@ -243,4 +252,126 @@ def test_an_interval_with_no_surviving_draw_refuses(monkeypatch: pytest.MonkeyPa
             [0, 1, 2, 3],
             reference_sigma=[0.12, 0.2, 0.35, 0.4],
             draws=5,
+        )
+
+
+# --- S3: where the narrowness sits ---------------------------------------------
+
+
+def _moves(
+    rng: np.random.Generator, n: int, *, true_slope: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """A panel whose realised moves are drawn at each name's true volatility."""
+    truth = rng.normal(np.log(0.04), 0.5, n)
+    base = truth + rng.normal(0.0, 0.1, n)
+    model = true_slope * truth + (1.0 - true_slope) * np.log(0.04)
+    moves = rng.normal(0.0, 1.0, n) * np.exp(truth)
+    return np.exp(model), np.exp(base), moves
+
+
+def test_the_cut_sizes_are_developments_counts_as_fractions() -> None:
+    """Record 6 expressed 11, 18 and 36 of 178 as 6%, 10% and 20%."""
+    assert CUT_FRACTIONS == (0.06, 0.10, 0.20)
+    assert [cut_size(f, 178) for f in CUT_FRACTIONS] == [11, 18, 36]
+    assert [cut_size(f, 177) for f in CUT_FRACTIONS] == [11, 18, 35]
+    assert cut_size(0.5, 5) == 3
+
+
+def test_a_compressed_model_is_narrowest_on_the_largest_moves() -> None:
+    """The prediction record 6 registered: every cut negative, excluding zero, and
+    deeper cuts more negative."""
+    rng = np.random.default_rng(301)
+    model, base, moves = _moves(rng, 900, true_slope=0.3)
+    cuts = largest_move_cuts(model, base, moves, _days(900), draws=300)
+    assert [c.k for c in cuts] == [54, 90, 180]
+    for cut in cuts:
+        assert cut.difference < 0.0
+        assert cut.upper < 0.0
+        assert cut.top_median < cut.rest_median
+    assert monotone(cuts)
+
+
+def test_a_well_spread_model_shows_no_contrast() -> None:
+    rng = np.random.default_rng(302)
+    model, base, moves = _moves(rng, 900, true_slope=1.0)
+    cuts = largest_move_cuts(model, base, moves, _days(900), draws=300)
+    assert any(c.lower < 0.0 < c.upper for c in cuts)
+
+
+def test_membership_is_chosen_once_on_the_whole_panel(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Record 5's intervals reproduce only this way. The resample here draws item 0
+    twice and items 3 and 4 once. Items 0 and 1 are the top two of the whole panel, so
+    the top side is item 0 twice even though, among what was drawn, item 3 has the
+    second-largest move. Re-choosing inside the resample would have taken item 3."""
+    sigma_map = [0.1, 0.2, 0.3, 0.4, 0.5]
+    sigma_base = [1.0, 1.0, 1.0, 1.0, 1.0]
+    moves = [0.09, 0.08, 0.01, 0.05, 0.02]
+    drawn = np.array([0, 0, 3, 4, 3])
+    monkeypatch.setattr("mapf.eval.compression.block_resamples", lambda *a, **k: iter([drawn] * 3))
+    (cut,) = largest_move_cuts(
+        sigma_map, sigma_base, moves, [0, 1, 2, 3, 4], fractions=(0.4,), draws=3
+    )
+    assert cut.k == 2
+    assert (cut.top_median, cut.rest_median) == pytest.approx((0.15, 0.4))
+    # Top side drawn: item 0 twice → 0.1. Rest drawn: items 3, 4, 3 → median 0.4.
+    assert (cut.lower, cut.upper) == pytest.approx((0.1 - 0.4, 0.1 - 0.4))
+
+
+def test_each_cut_starts_from_the_seed_afresh() -> None:
+    """Also what reproduces record 5: asking for one cut alone gives the interval it
+    has among three."""
+    rng = np.random.default_rng(303)
+    model, base, moves = _moves(rng, 300, true_slope=0.3)
+    days = _days(300)
+    together = largest_move_cuts(model, base, moves, days, draws=200)
+    alone = largest_move_cuts(model, base, moves, days, fractions=(0.20,), draws=200)
+    assert alone[0] == together[2]
+
+
+def test_the_registered_defaults_for_the_cuts() -> None:
+    defaults = inspect.signature(largest_move_cuts).parameters
+    assert defaults["draws"].default == 4000
+    assert defaults["seed"].default == 20260813
+    assert defaults["fractions"].default == CUT_FRACTIONS
+
+
+def test_monotone_reads_the_differences_by_depth() -> None:
+    def cut(fraction: float, difference: float) -> MoveCut:
+        return MoveCut(fraction, 1, 0.5, 0.5 - difference, difference, -1.0, 0.0)
+
+    assert monotone((cut(0.20, -0.29), cut(0.06, -0.39), cut(0.10, -0.33)))
+    # GARCH on development: 6% and 10% within a thousandth, the wrong way round.
+    assert not monotone((cut(0.06, -0.2742), cut(0.10, -0.2745), cut(0.20, -0.2388)))
+
+
+def test_a_cut_with_nothing_either_side_refuses() -> None:
+    with pytest.raises(AggregationError, match="leaving no contrast"):
+        largest_move_cuts([0.1, 0.2, 0.3], [0.1, 0.2, 0.3], [0.1, 0.2, 0.3], [0, 1, 2])
+    with pytest.raises(AggregationError, match="leaving no contrast"):
+        largest_move_cuts(
+            [0.1, 0.2, 0.3], [0.1, 0.2, 0.3], [0.1, 0.2, 0.3], [0, 1, 2], fractions=(1.0,)
+        )
+
+
+def test_mismatched_cut_inputs_refuse() -> None:
+    with pytest.raises(AggregationError, match="cut inputs disagree"):
+        largest_move_cuts([0.1, 0.2, 0.3], [0.1, 0.2, 0.3], [0.1, 0.2], [0, 1, 2])
+
+
+def test_a_missing_return_refuses() -> None:
+    with pytest.raises(AggregationError, match="finite"):
+        largest_move_cuts(
+            [0.1, 0.2, 0.3], [0.1, 0.2, 0.3], [0.1, float("nan"), 0.3], [0, 1, 2], fractions=(0.5,)
+        )
+
+
+def test_a_cut_no_resample_can_contrast_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every resample draws only the top item, so no draw has a rest side."""
+    monkeypatch.setattr(
+        "mapf.eval.compression.block_resamples",
+        lambda *a, **k: iter([np.zeros(3, dtype=np.int64)] * 4),
+    )
+    with pytest.raises(AggregationError, match="drew both sides"):
+        largest_move_cuts(
+            [0.1, 0.2, 0.3], [0.1, 0.2, 0.3], [0.9, 0.2, 0.3], [0, 1, 2], fractions=(0.3,), draws=4
         )

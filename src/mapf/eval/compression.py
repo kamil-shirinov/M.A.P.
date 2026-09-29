@@ -17,10 +17,15 @@ the correction: it is conservative against the compression claim.
 **The claim is an interval, not a point.** Record 8 made the replication criterion
 the widest defensible interval — the forward slope's lower bound to the reverse
 slope's upper — excluding 1.0, because every source of uncertainty is stacked in it.
+
+**Where the narrowness sits** is record 6's S3: the σ ratio on the largest realised
+moves against the rest. The cut is on the realised return, which neither model
+produced, so selecting on it cannot manufacture a small σ the way a cut on z would.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -178,3 +183,111 @@ def compression_interval(
         n=int(log_map.size),
         date_clusters=occupied_blocks(days, horizon_days * 2),
     )
+
+
+# Record 6: the development cuts of 11, 18 and 36 of 178, as fractions so they scale
+# with whatever n a band yields.
+CUT_FRACTIONS = (0.06, 0.10, 0.20)
+
+
+def cut_size(fraction: float, n: int) -> int:
+    """Items in a cut: the nearest whole number, halves rounded up.
+
+    Record 6 fixed the fractions and not the rounding. Nearest is the reading that
+    gives 11, 18 and 36 on development's 178, where the counts came from; rounding up
+    gives the same there, and 36 rather than 35 at 20% of the second band's 177,
+    which changes no verdict (Findings #66).
+    """
+    return math.floor(fraction * n + 0.5)
+
+
+@dataclass(frozen=True)
+class MoveCut:
+    """Median σ ratio on the largest moves against the rest, with the difference's
+    clustered interval."""
+
+    fraction: float
+    k: int
+    top_median: float
+    rest_median: float
+    difference: float
+    lower: float
+    upper: float
+
+
+def largest_move_cuts(
+    map_sigma: Floats,
+    baseline_sigma: Floats,
+    realised_return: Floats,
+    day_index: Ints,
+    *,
+    fractions: tuple[float, ...] = CUT_FRACTIONS,
+    horizon_days: int = 5,
+    draws: int = 4000,
+    seed: int = 20260813,
+    confidence: float = 0.95,
+) -> tuple[MoveCut, ...]:
+    """Record 6's S3: median σ(M.A.P.)/σ(baseline) on the top cut by |realised
+    return| against the rest, at each fraction.
+
+    Membership is decided once, on the whole panel, and each resample takes the
+    medians of whichever members it drew. Re-choosing the top k inside every resample
+    is the other reading; it is the one that does NOT reproduce record 5's development
+    intervals, where this one does to four decimals. Each cut starts the generator
+    from the seed afresh, which is also what reproduces them.
+
+    Record 5 ran at 2,000 draws; record 6 registered the replication at 4,000, so the
+    default is 4,000 and development's figures are reproduced by asking for 2,000.
+    """
+    ratio = np.exp(
+        _log_sigma(map_sigma, "map_sigma") - _log_sigma(baseline_sigma, "baseline_sigma")
+    )
+    moves = np.abs(np.asarray(realised_return, dtype=np.float64))
+    days = np.asarray(day_index, dtype=np.int64)
+    if not (ratio.size == moves.size == days.size):
+        raise AggregationError(
+            f"cut inputs disagree in length: sigma={ratio.size}, "
+            f"returns={moves.size}, days={days.size}"
+        )
+    if not np.all(np.isfinite(moves)):
+        raise AggregationError("every realised return must be finite")
+    order = np.argsort(-moves, kind="stable")
+    tail = (1.0 - confidence) / 2.0 * 100.0
+    cuts: list[MoveCut] = []
+    for fraction in fractions:
+        k = cut_size(fraction, ratio.size)
+        if not 0 < k < ratio.size:
+            raise AggregationError(
+                f"a {fraction:.0%} cut of {ratio.size} items holds {k}, leaving no contrast"
+            )
+        top = np.zeros(ratio.size, dtype=bool)
+        top[order[:k]] = True
+        differences: list[float] = []
+        rng = np.random.default_rng(seed)
+        for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2):
+            drawn_top, drawn_rest = ratio[index][top[index]], ratio[index][~top[index]]
+            if drawn_top.size and drawn_rest.size:
+                differences.append(float(np.median(drawn_top) - np.median(drawn_rest)))
+            # A resample that drew no member of one side has no contrast to offer.
+        if not differences:
+            raise AggregationError(f"no bootstrap resample drew both sides of the {k}-item cut")
+        lower, upper = np.percentile(np.asarray(differences), [tail, 100.0 - tail])
+        top_median, rest_median = float(np.median(ratio[top])), float(np.median(ratio[~top]))
+        cuts.append(
+            MoveCut(
+                fraction=fraction,
+                k=k,
+                top_median=top_median,
+                rest_median=rest_median,
+                difference=top_median - rest_median,
+                lower=float(lower),
+                upper=float(upper),
+            )
+        )
+    return tuple(cuts)
+
+
+def monotone(cuts: tuple[MoveCut, ...]) -> bool:
+    """Record 6's shape: the deeper the cut, the more negative the difference."""
+    ordered = sorted(cuts, key=lambda cut: cut.fraction)
+    return all(a.difference < b.difference for a, b in zip(ordered, ordered[1:], strict=False))
