@@ -52,7 +52,12 @@ from mapf.settings import load
 # to refuse a shape it does not know, and a version it can compare is the only way
 # it can. Distinct from every vintage in the manifest, which describe the DATA.
 # 1.2.0 added `runs.rows` to the manifest; nothing was removed or renamed.
-EXPORT_VERSION = "1.2.0"
+EXPORT_VERSION = "1.3.0"
+
+# The one recorded live run the hosted copy replays. PINNED by id, in source,
+# where changing it is a visible edit — "the newest one" would republish whatever
+# happened locally, and would have published the accidental run of Findings #63.
+REPLAY_RUN_ID = "b8748710-c5e8-439c-8983-a582d982e609"
 
 # The Item 2.02 pre-screen. Written by scripts/edgar_prescreen.py, untracked like
 # every other computed input.
@@ -352,6 +357,7 @@ def export(
                     "bars": [[b.date.isoformat(), b.close] for b in series.bars],
                 },
             )
+        replay_file = _write_replay(out, journal, sizes)
         sizes["corpus.json"] = _write(out / "corpus.json", companies)
         sizes["universe.json"] = _write(
             out / "universe.json",
@@ -488,6 +494,11 @@ def export(
                 "vintages": sorted({str(r.get("fetched_on")) for r in filers}),
             },
             "funnel": _funnel(symbol_rows, filers, companies),
+            # PINNED, not newest. "The newest live run" would make the published
+            # page change whenever a run happens locally, which is a live claim by
+            # another route — and it would have published the accidental run of
+            # Findings #63. One run id, named here, changed on purpose or not at all.
+            "replay": {"run_id": REPLAY_RUN_ID, "exported_as": replay_file},
             "scores": {"records": records, "absent": [holdout]},
             "absent": absent,
             "files": dict(sorted(sizes.items())),
@@ -502,6 +513,26 @@ def export(
             _print_absence(gap)
     except MapError as err:
         raise handle(err) from err
+
+
+def _write_replay(out: Path, journal: Any, sizes: dict[str, int]) -> str | None:
+    """One recorded live run, for the copy that has no models behind it.
+
+    A visitor who cannot run an analysis otherwise meets an absence where the most
+    interesting screen should be, and never sees what the marking, the band or the
+    relation tag look like. This is that run, static and dated.
+
+    IT IS THE FORECAST AS RECORDED. The band is recomputed from the run's own
+    scenarios by the same `simulate` the scorer uses, so anyone with this
+    repository can reproduce it without the models — the expensive part was
+    producing the scenarios, and those are on disk.
+    """
+    entry = next((e for e in journal.of("edgar") if str(e.run_id) == REPLAY_RUN_ID), None)
+    if entry is None:
+        return None
+    name = "live/replay.json"
+    sizes[name] = _write(out / "live" / "replay.json", as_dict(entry))
+    return name
 
 
 def _funnel(

@@ -222,6 +222,92 @@ function renderResult(host, event) {
   enforce();
 }
 
+/** A recorded run, drawn by the same view and labelled so it cannot read as live.
+
+    No replayed progress and no elapsed counter: those would be theatre, and the
+    whole posture of this project is against making a record look like an event.
+    A banner, a date, and the result. */
+async function renderReplay(host, banner) {
+  const row = await source.getReplay();
+  if (source.isAbsent(row)) {
+    banner.textContent = "";
+    return;
+  }
+  banner.textContent = "";
+  const note = el("div", "anl-replay-note");
+  note.append(chrome(el("strong", null, "A recorded run, not a live one."), "what this is"));
+  note.append(chromeText(
+    ` ${row.ticker} on ${row.anchor_date}, kept so this page shows what an analysis `
+    + "produces. Nothing here was computed just now, and pressing Analyse above is "
+    + "not possible on this copy.",
+    "when the recorded run was made and why it is shown",
+  ));
+  banner.append(note);
+
+  /* Rebuilt into the shape the result view takes. The scenarios are the run's own,
+     off disk; the band is recomputed from them by the same mixture the scorer
+     simulates, so it is reproducible from this repository without the models. */
+  renderResult(host, {
+    event: "result",
+    run_id: row.run_id,
+    ticker: row.ticker,
+    anchor: row.anchor_date,
+    price_date: row.anchor_date,
+    spot: row.anchor_spot,
+    horizon_days: row.horizon_days,
+    corpus_relation: row.corpus_relation,
+    scenarios: row.scenarios.map((s) => ({
+      name: s.name,
+      weight: s.probability_weight,
+      price_return: s.price_return,
+      annualised_vol: s.annualised_vol,
+    })),
+    band: bandFrom(row),
+    marking: "uncalibrated",
+    corrected: false,
+    reasons: [
+      "this is a recorded run, replayed from the export — the correction is "
+      + "applied when a run is made, and this one was not eligible for it",
+    ],
+    correction: null,
+  });
+}
+
+/** The band, from the run's own scenarios.
+
+    A normal mixture sampled the way `mapf.eval.montecarlo` samples it, at the
+    same seed, so the shaded region here is the one the scorer would score. Done
+    in the browser because the alternative is the exporter shipping numbers the
+    reader cannot check; these come from three weights and three volatilities that
+    are printed on the same screen. */
+function bandFrom(row) {
+  const draws = [];
+  let seed = 20260813;
+  const rand = () => {
+    // xorshift32, so the picture is the same on every visit and in every browser.
+    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+    return ((seed >>> 0) % 1e6) / 1e6;
+  };
+  const gauss = () => {
+    const u = Math.max(rand(), 1e-9);
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
+  };
+  const years = row.horizon_days / 252;
+  for (const s of row.scenarios) {
+    const n = Math.round(s.probability_weight * 20000);
+    const drift = Math.log(1 + s.price_return);
+    const vol = s.annualised_vol * Math.sqrt(years);
+    for (let i = 0; i < n; i++) draws.push(drift - (vol * vol) / 2 + vol * gauss());
+  }
+  if (!draws.length) return [];
+  draws.sort((a, b) => a - b);
+  const at = (q) => draws[Math.min(draws.length - 1, Math.floor(q * draws.length))];
+  return [0.1, 0.25, 0.75, 0.9].map((level) => ({
+    level,
+    price: row.anchor_spot * Math.exp(at(level)),
+  }));
+}
+
 async function boot() {
   mountPageRosette($("ground"));
   mountMastheadNav($("masthead-nav"), { current: "analyse" });
@@ -247,6 +333,12 @@ async function boot() {
     renderNoServer($("ask"), {
       where: "This screen exists to run a forecast on demand.",
     });
+    /* And then show one that already happened. A visitor who cannot run the
+       models otherwise meets an absence where the most interesting screen should
+       be, and never sees what the marking, the band or the relation tag look
+       like. It is pinned in the exporter by run id, so this is the same run every
+       time and never whatever was run locally most recently. */
+    await renderReplay($("result"), $("progress"));
   }
 
   renderPageWhy($("why"), {

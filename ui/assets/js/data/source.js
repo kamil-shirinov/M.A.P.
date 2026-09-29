@@ -816,6 +816,23 @@ export function runCountsBySource(manifest) {
   return Object.fromEntries(SOURCES.map((s) => [s, figure(rows[s], MEASURED, "int")]));
 }
 
+/** The one recorded live run the hosted copy replays, or a named absence.
+
+    Pinned in the exporter by run id, so this file changes only when someone edits
+    that id — never because a run happened locally. */
+export async function getReplay() {
+  const state = await getExportState();
+  const named = state?.manifest?.replay?.exported_as;
+  if (!named) {
+    return absent(NOT_APPLICABLE, "this export carries no recorded run to replay");
+  }
+  const row = await readJson(named);
+  if (row === null) {
+    return absent(NOT_COMPUTED, `${named} is named in the manifest and is not in the export`);
+  }
+  return row;
+}
+
 /** Whether the export carries a development scoring record. The one finding a
     page states in prose about baselines is backed by that file and by nothing
     else — the holdout's comparison was never persisted (M.A.P. Findings #57) —

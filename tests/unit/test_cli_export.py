@@ -437,7 +437,7 @@ def test_the_manifest_carries_each_sources_own_stamp_not_one_invented_date(
     assert manifest["freeze"]["digest"]
     assert manifest["prices"]["snapshot"] == VINTAGE.isoformat()
     assert manifest["ledger"]["items_settled"] == 1
-    assert manifest["export_version"] == "1.2.0"
+    assert manifest["export_version"] == "1.3.0"
     # The pre-screen's own stamps, as the set they are: every row carries its
     # `fetched_on` and a resumed walk spans days.
     assert manifest["filers"] == {"rows": 2, "distinct": 2, "vintages": ["2026-09-09"]}
@@ -1172,3 +1172,53 @@ def test_run_counts_are_absent_rather_than_zero_with_no_runs_directory(
     counts = _run_counts(tmp_path / "nowhere")
     assert set(counts) == {"runs.corpus", "runs.edgar", "runs.news", "runs.unknown"}
     assert all(value is None for value in counts.values())
+
+
+def test_the_replay_is_pinned_by_id_and_absent_when_that_run_is_not_here(
+    tmp_path: Path,
+) -> None:
+    """The hosted copy replays ONE recorded run, named in source. "The newest live
+    run" would republish whatever happened locally — a live claim by another route,
+    and it would have published the accidental run of Findings #63.
+
+    A fixture export holds no such run, so the manifest names it and the file is
+    absent. That is the honest pair: the pin is stated, and what it points at is
+    not invented."""
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs")
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    manifest = _read(tmp_path, "manifest.json")
+    from mapf.cli.commands.export import REPLAY_RUN_ID
+
+    assert manifest["replay"]["run_id"] == REPLAY_RUN_ID
+    assert manifest["replay"]["exported_as"] is None
+    assert "live/replay.json" not in manifest["files"]
+
+
+def test_the_replay_is_written_when_the_pinned_run_is_present(tmp_path: Path) -> None:
+    from mapf.cli.commands.export import REPLAY_RUN_ID
+
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs", ticker="KO", source="edgar")
+    # Rename the directory to the pinned id, which is what the exporter looks for.
+    (tmp_path / "runs" / run_id).rename(tmp_path / "runs" / REPLAY_RUN_ID)
+    import json as _json
+
+    forecast = tmp_path / "runs" / REPLAY_RUN_ID / "forecast.json"
+    body = _json.loads(forecast.read_text())
+    body["run_id"] = REPLAY_RUN_ID
+    forecast.write_text(_json.dumps(body))
+    manifest_path = tmp_path / "runs" / REPLAY_RUN_ID / "manifest.json"
+    stored = _json.loads(manifest_path.read_text())
+    stored["run_id"] = REPLAY_RUN_ID
+    manifest_path.write_text(_json.dumps(stored))
+
+    _export(tmp_path, "--ledger-path", str(_ledger(tmp_path, run_id)))
+
+    manifest = _read(tmp_path, "manifest.json")
+    assert manifest["replay"]["exported_as"] == "live/replay.json"
+    row = _read(tmp_path, "live/replay.json")
+    assert row["run_id"] == REPLAY_RUN_ID
+    assert row["document_source"] == "edgar"

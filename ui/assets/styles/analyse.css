@@ -183,3 +183,15 @@ body > .masthead,
 .anl-fan[data-calibration="uncalibrated"] .anl-band { fill: var(--uncal); }
 
 .anl-band-key { margin: var(--sp-3) 0 0; font: var(--sans-sm); color: var(--ink-3); }
+
+/* The recorded-run banner. Not amber: nothing here is an unsettled measurement —
+   it is a real result, shown after the fact, and the words carry that. */
+.anl-replay-note {
+  padding: var(--sp-4) var(--sp-5);
+  border-left: 2px solid var(--rule-2);
+  background: var(--sunken);
+  font: var(--sans-sm);
+  color: var(--ink-2);
+  max-width: 68ch;
+}
+.anl-replay-note strong { color: var(--ink-1); }

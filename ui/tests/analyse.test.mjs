@@ -476,3 +476,54 @@ describe("the shaded region is named", () => {
     assert.doesNotMatch(host.textContent, /Shaded:/);
   });
 });
+
+describe("the hosted copy replays one recorded run", () => {
+  itNeedsExport("pins it by run id in the manifest, never the newest", () => {
+    /* "The newest live run" would republish whatever happened locally, which is a
+       live claim by another route — and it would have published the accidental
+       run of Findings #63. */
+    const manifest = JSON.parse(readFileSync(new URL("../assets/export/manifest.json", import.meta.url), "utf8"));
+    assert.equal(manifest.replay.run_id, "b8748710-c5e8-439c-8983-a582d982e609");
+    assert.equal(manifest.replay.exported_as, "live/replay.json");
+  });
+
+  itNeedsExport("exports the run as the journal recorded it", () => {
+    const row = JSON.parse(readFileSync(new URL("../assets/export/live/replay.json", import.meta.url), "utf8"));
+    assert.equal(row.run_id, "b8748710-c5e8-439c-8983-a582d982e609");
+    assert.equal(row.document_source, "edgar");
+    assert.equal(row.corpus_relation, "outside_corpus");
+    assert.equal(row.scenarios.length, 3);
+  });
+
+  it("labels it as recorded and offers no theatre", () => {
+    /* No replayed progress stream, no elapsed counter. Making a record look like
+       an event is the one thing this page must not do. */
+    const page = read("assets/js/analyse-page.js");
+    const fn = page.slice(page.indexOf("async function renderReplay"), page.indexOf("function bandFrom"));
+    assert.match(fn, /A recorded run, not a live one/);
+    assert.match(fn, /Nothing here was computed just now/);
+    assert.doesNotMatch(fn, /setInterval|setTimeout|requestAnimationFrame/);
+  });
+
+  it("shows it only when there is no server", () => {
+    const page = read("assets/js/analyse-page.js");
+    const boot = page.slice(page.indexOf("async function boot()"));
+    const branch = boot.slice(boot.indexOf("} else {"));
+    assert.match(branch, /renderReplay/);
+    assert.doesNotMatch(boot.slice(0, boot.indexOf("} else {")), /renderReplay/);
+  });
+
+  it("marks the replayed fan uncalibrated, like any other raw one", () => {
+    const page = read("assets/js/analyse-page.js");
+    const fn = page.slice(page.indexOf("async function renderReplay"), page.indexOf("function bandFrom"));
+    assert.match(fn, /marking: "uncalibrated"/);
+    assert.match(fn, /corrected: false/);
+  });
+
+  it("rebuilds the band deterministically, so every visit draws the same one", () => {
+    const page = read("assets/js/analyse-page.js");
+    const fn = page.slice(page.indexOf("function bandFrom"));
+    assert.match(fn, /let seed = 20260813/);
+    assert.match(fn, /xorshift32/);
+  });
+});
