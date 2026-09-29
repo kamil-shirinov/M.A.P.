@@ -35,17 +35,22 @@ from pathlib import Path
 from typing import Any
 
 import typer
+from pydantic import ValidationError
 
 from mapf.bootstrap import build_price_snapshot, build_symbol_index
 from mapf.cli.app import app, fail, handle
 from mapf.cli.commands.evaluate import HOLDOUT_LEDGER, SCORES_DIR, SCORING_VINTAGE
 from mapf.cli.commands.runs import FROZEN, LEDGER, as_dict
 from mapf.core.errors import MapError
+from mapf.core.models import Forecast
 from mapf.core.provenance import code_version, freeze_digest
 from mapf.corpus.ledger import Ledger
 from mapf.corpus.record import load_frozen
 from mapf.corpus.selection import Corpus
+from mapf.data.sessions import session_has_closed
 from mapf.eval.journal import SOURCES, LedgerItem, read_journal
+from mapf.eval.montecarlo import simulate
+from mapf.serve.analyse import BAND_LEVELS, band_prices
 from mapf.settings import load
 
 # The export's own format version. A front end that reads these files is entitled
@@ -357,7 +362,7 @@ def export(
                     "bars": [[b.date.isoformat(), b.close] for b in series.bars],
                 },
             )
-        replay_file = _write_replay(out, journal, sizes)
+        replay_file = _write_replay(out, journal, sizes, runs_dir)
         sizes["corpus.json"] = _write(out / "corpus.json", companies)
         sizes["universe.json"] = _write(
             out / "universe.json",
@@ -515,7 +520,7 @@ def export(
         raise handle(err) from err
 
 
-def _write_replay(out: Path, journal: Any, sizes: dict[str, int]) -> str | None:
+def _write_replay(out: Path, journal: Any, sizes: dict[str, int], runs_dir: Path) -> str | None:
     """One recorded live run, for the copy that has no models behind it.
 
     A visitor who cannot run an analysis otherwise meets an absence where the most
@@ -530,8 +535,40 @@ def _write_replay(out: Path, journal: Any, sizes: dict[str, int]) -> str | None:
     entry = next((e for e in journal.of("edgar") if str(e.run_id) == REPLAY_RUN_ID), None)
     if entry is None:
         return None
+    record = dict(as_dict(entry))
+    forecast = runs_dir / REPLAY_RUN_ID / "forecast.json"
+    band: list[dict[str, float]] = []
+    kind = "unknown"
+    try:
+        stored = Forecast.model_validate_json(forecast.read_text(encoding="utf-8"))
+        # WHAT THE PRICE ACTUALLY WAS, from the run's own recorded instant. This
+        # run was made at 15:52 in New York, eight minutes before the bell, so its
+        # anchor is an intraday quote on an unfinished bar and not a close. The run
+        # is not edited — it is a record of what happened — but nothing downstream
+        # has to repeat its claim.
+        kind = (
+            "close" if session_has_closed(stored.as_of, session=entry.anchor_date) else "intraday"
+        )
+        record["price_taken_at"] = stored.as_of.isoformat()
+        # ONE implementation of the band. The page used to sample its own in
+        # JavaScript, which is a second estimator of the same quantity — the
+        # quickest way to have two answers and no way to tell which is the one the
+        # scorer would score.
+        simulation = simulate(stored.scenarios, horizon_days=stored.horizon_days)
+        band = band_prices(
+            stored.spot_price,
+            simulation.quantiles(BAND_LEVELS),
+            mean=simulation.mean,
+            sigma=simulation.sigma,
+        )
+    except (OSError, ValidationError, MapError):
+        # A replay without a band is a smaller page, not a broken one.
+        pass
+    record["price_kind"] = kind
+    record["band"] = band
+
     name = "live/replay.json"
-    sizes[name] = _write(out / "live" / "replay.json", as_dict(entry))
+    sizes[name] = _write(out / "live" / "replay.json", record)
     return name
 
 

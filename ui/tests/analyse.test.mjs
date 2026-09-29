@@ -520,10 +520,35 @@ describe("the hosted copy replays one recorded run", () => {
     assert.match(fn, /corrected: false/);
   });
 
-  it("rebuilds the band deterministically, so every visit draws the same one", () => {
+  it("draws the exported band rather than sampling a second one", () => {
+    /* The page used to sample its own in JavaScript. Two estimators of one
+       quantity is the quickest way to have two answers and no way to say which
+       is the one a score would be computed against — they agreed to 0.6% here,
+       which is a property of large samples and not a guarantee. */
     const page = read("assets/js/analyse-page.js");
-    const fn = page.slice(page.indexOf("function bandFrom"));
-    assert.match(fn, /let seed = 20260813/);
-    assert.match(fn, /xorshift32/);
+    assert.doesNotMatch(page, /bandFrom/);
+    assert.doesNotMatch(page, /xorshift/);
+    assert.match(page, /band: row\.band \?\? \[\]/);
+  });
+
+  itNeedsExport("and that band came from simulate(), with the run's own scenarios", () => {
+    const row = JSON.parse(readFileSync(new URL("../assets/export/live/replay.json", import.meta.url), "utf8"));
+    assert.equal(row.band.length, 4);
+    assert.deepEqual(row.band.map((b) => b.level), [0.1, 0.25, 0.75, 0.9]);
+    const prices = row.band.map((b) => b.price);
+    assert.deepEqual(prices, [...prices].sort((a, b) => a - b));
+    // Wider than the three scenarios, which is the reason it is drawn.
+    const ends = row.scenarios.map((s) => row.anchor_spot * (1 + s.price_return));
+    assert.ok(prices[0] < Math.min(...ends) && prices[3] > Math.max(...ends));
+  });
+
+  itNeedsExport("says the pinned run's price was intraday, not a close", () => {
+    /* It was taken at 15:52 in New York, eight minutes before the bell. Saying
+       "at that day's close" on a public page would be false about a real
+       company's price. */
+    const row = JSON.parse(readFileSync(new URL("../assets/export/live/replay.json", import.meta.url), "utf8"));
+    assert.equal(row.price_kind, "intraday");
+    assert.match(row.price_taken_at, /^2026-09-28T19:52/);
+    assert.match(read("assets/js/analyse-page.js"), /price taken during that session/);
   });
 });

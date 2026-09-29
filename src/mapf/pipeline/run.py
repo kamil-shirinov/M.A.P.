@@ -27,7 +27,7 @@ from mapf.agents.analyst import AnalystAgent, AnalystRequest
 from mapf.agents.base import LLMAgent
 from mapf.agents.intake import IntakeAgent, IntakeRequest
 from mapf.agents.structuralist import StructuralistAgent, StructuralistRequest
-from mapf.core.errors import OutputTruncatedError
+from mapf.core.errors import MarketDataError, OutputTruncatedError
 from mapf.core.fidelity import measure as measure_fidelity
 from mapf.core.hashing import new_run_id
 from mapf.core.models import (
@@ -41,6 +41,7 @@ from mapf.core.models import (
 from mapf.core.ports import DividendSource, MarketDataProvider
 from mapf.core.provenance import code_version
 from mapf.core.quality import check as check_quality
+from mapf.data.sessions import settled
 from mapf.pipeline.manifest import AgentRecord, PriceProvenance, RunManifest
 from mapf.pipeline.trace import CountingTrace
 from mapf.render.chart import write_chart
@@ -128,6 +129,29 @@ def _cap_of(agents: Agents, stage: str) -> int:
     return spec.sampling.max_tokens or 0
 
 
+def settled_window(window: PriceWindow, *, as_of: datetime) -> PriceWindow:
+    """The window with any unfinished session dropped, or a refusal.
+
+    A bar for a session still in progress is NOT a close. Providers return one and
+    keep updating it as the day runs, so a run made before 16:00 in New York
+    anchored on an intraday quote while every artifact around it said "close" —
+    87.33 on the run that caught this, against a settled 87.18 for the same
+    session, in a forecast whose scenarios spanned 2%.
+
+    Named rather than inlined so the refusal can be exercised without standing up
+    a whole pipeline: a test that re-raises the error it is checking for is not a
+    test of anything.
+    """
+    trimmed = window.model_copy(update={"bars": settled(window.bars, now=as_of)})
+    if not trimmed.bars:
+        raise MarketDataError(
+            f"{window.ticker}: no completed trading session on or before "
+            f"{as_of.date()}. The most recent bar is for a session that has not "
+            "closed yet, and a forecast must not anchor on one."
+        )
+    return trimmed
+
+
 def execute(
     request: RunRequest,
     *,
@@ -162,6 +186,7 @@ def execute(
     # 1. Prices. `last_trading_date` — never a wall clock — is what reaches prompts.
     end = as_of.date()
     window = market.get_ohlcv(request.ticker, end - timedelta(days=request.history_days), end)
+    window = settled_window(window, as_of=as_of)
     as_of_date = window.last_trading_date
     spot = window.last_close
 

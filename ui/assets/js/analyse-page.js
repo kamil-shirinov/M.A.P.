@@ -208,6 +208,15 @@ function renderResult(host, event) {
       ` · price is the ${event.price_date} close`,
       "the session the anchor price is the close of",
     ));
+  } else if (event.price_kind === "intraday") {
+    /* Not a close at all. A run made before the bell anchors on whatever the
+       provider's unfinished bar said at that moment, and calling it a close on a
+       published page would be a false statement about a real company's price. */
+    const at = (event.price_taken_at ?? "").slice(11, 16);
+    when.append(chromeText(
+      ` · price taken during that session${at ? `, ${at} UTC` : ""} — not a close`,
+      "the anchor price was an intraday quote, not a settled close",
+    ));
   } else if (event.price_date) {
     when.append(chromeText(" · at that day's close", "the session the anchor price is the close of"));
   }
@@ -258,6 +267,12 @@ async function renderReplay(host, banner) {
     ticker: row.ticker,
     anchor: row.anchor_date,
     price_date: row.anchor_date,
+    // What the price ACTUALLY was. This run was made at 15:52 in New York, eight
+    // minutes before the bell, so its anchor is an intraday quote on an
+    // unfinished bar. The run is a record and is not edited; the export works
+    // this out from its recorded instant and the page stops calling it a close.
+    price_kind: row.price_kind,
+    price_taken_at: row.price_taken_at,
     spot: row.anchor_spot,
     horizon_days: row.horizon_days,
     corpus_relation: row.corpus_relation,
@@ -267,7 +282,13 @@ async function renderReplay(host, banner) {
       price_return: s.price_return,
       annualised_vol: s.annualised_vol,
     })),
-    band: bandFrom(row),
+    /* The band as `map export` computed it, from the same `simulate()` the
+       scorer runs. The page used to sample its own in JavaScript — a second
+       estimator of one quantity, which is the quickest way to have two answers
+       and no way to say which is the one a score would be computed against. The
+       two agreed to 0.6% on the 80% width, which is a property of large samples
+       rather than a guarantee. */
+    band: row.band ?? [],
     marking: "uncalibrated",
     corrected: false,
     reasons: [
@@ -276,41 +297,6 @@ async function renderReplay(host, banner) {
     ],
     correction: null,
   });
-}
-
-/** The band, from the run's own scenarios.
-
-    A normal mixture sampled the way `mapf.eval.montecarlo` samples it, at the
-    same seed, so the shaded region here is the one the scorer would score. Done
-    in the browser because the alternative is the exporter shipping numbers the
-    reader cannot check; these come from three weights and three volatilities that
-    are printed on the same screen. */
-function bandFrom(row) {
-  const draws = [];
-  let seed = 20260813;
-  const rand = () => {
-    // xorshift32, so the picture is the same on every visit and in every browser.
-    seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
-    return ((seed >>> 0) % 1e6) / 1e6;
-  };
-  const gauss = () => {
-    const u = Math.max(rand(), 1e-9);
-    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rand());
-  };
-  const years = row.horizon_days / 252;
-  for (const s of row.scenarios) {
-    const n = Math.round(s.probability_weight * 20000);
-    const drift = Math.log(1 + s.price_return);
-    const vol = s.annualised_vol * Math.sqrt(years);
-    for (let i = 0; i < n; i++) draws.push(drift - (vol * vol) / 2 + vol * gauss());
-  }
-  if (!draws.length) return [];
-  draws.sort((a, b) => a - b);
-  const at = (q) => draws[Math.min(draws.length - 1, Math.floor(q * draws.length))];
-  return [0.1, 0.25, 0.75, 0.9].map((level) => ({
-    level,
-    price: row.anchor_spot * Math.exp(at(level)),
-  }));
 }
 
 async function boot() {

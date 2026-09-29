@@ -1222,3 +1222,39 @@ def test_the_replay_is_written_when_the_pinned_run_is_present(tmp_path: Path) ->
     row = _read(tmp_path, "live/replay.json")
     assert row["run_id"] == REPLAY_RUN_ID
     assert row["document_source"] == "edgar"
+
+
+def test_a_replay_whose_forecast_cannot_be_read_still_exports_the_row(
+    tmp_path: Path,
+) -> None:
+    """A replay without a band is a smaller page, not a broken one. The journal row
+    is what makes the page work; the band is what makes it informative.
+
+    Driven through `_write_replay` with a runs directory that does not hold the
+    forecast, because the journal and the band read the same file — so the only
+    way one succeeds and the other fails is for them to be looking in different
+    places, which is exactly what a moved or partially copied `runs/` gives you.
+    """
+    from datetime import UTC, datetime
+
+    from mapf.cli.commands.export import REPLAY_RUN_ID, _write_replay
+    from mapf.eval.journal import read_journal
+
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs", ticker="KO", source="edgar")
+    (tmp_path / "runs" / run_id).rename(tmp_path / "runs" / REPLAY_RUN_ID)
+    for name in ("forecast.json", "manifest.json"):
+        path = tmp_path / "runs" / REPLAY_RUN_ID / name
+        body = json.loads(path.read_text())
+        body["run_id"] = REPLAY_RUN_ID
+        path.write_text(json.dumps(body))
+
+    journal = read_journal(tmp_path / "runs", snapshot=None, today=datetime.now(UTC).date())
+    sizes: dict[str, int] = {}
+    name = _write_replay(tmp_path / "out", journal, sizes, tmp_path / "elsewhere")
+
+    assert name == "live/replay.json"
+    row = json.loads((tmp_path / "out" / "live" / "replay.json").read_text())
+    assert row["run_id"] == REPLAY_RUN_ID
+    assert row["band"] == []
+    assert row["price_kind"] == "unknown"

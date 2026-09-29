@@ -2793,3 +2793,69 @@ It stays. It is a real run of real code over a real document, and the journal is
 of what happened rather than of what was intended — the same reason a dirty-tree scoring
 record was kept beside its clean twin rather than deleted. Both KO runs are counted, the
 door says `2 live runs`, and this note is why the second one exists.
+
+---
+
+## 64 · A price that said "close" and was a live quote
+
+The first live run anchored KO at **87.33**. The second, made the next morning on
+the same document, anchored at **87.18**. Both manifests record
+`last_trading_date: 2026-09-28`. Both forecasts carry the number in a field called
+`spot_price`, which ADR 0012 defines as the close a forecast is scored against.
+
+The first run was made at **15:52 in New York — eight minutes before the bell.**
+
+A price provider returns a daily bar for the session in progress and keeps
+updating it. It has the same shape as a settled bar, the same fields, and a
+`close` that is simply the last trade so far. `PriceWindow.last_close` takes
+`bars[-1].close`, so a run made during market hours anchors on a live quote while
+every artifact around it says close.
+
+**The 0.15 gap is not the point; the label is.** The scenarios on that run span
+2%, so a 0.17% error in the anchor changes nothing anyone would notice. What it
+changes is what the record means: `spot_price` is the number every later
+comparison is measured from, and `SpotDriftError` exists precisely to refuse a
+scoring run whose recorded spot has moved from the series by more than 1e-4
+relative. An intraday anchor **is** that drift, present from the moment the
+forecast was written, and the guard cannot see it because the guard compares the
+recorded spot against the series the forecast itself was produced from.
+
+### It reached a public page before it was caught
+
+The hosted replay had just been built, pinned to that run, and the result head
+read *"anchored 2026-09-28 · at that day's close"* — a false statement about a
+real company's price, on a page meant for people who cannot run the models and
+therefore cannot check.
+
+Three reviews of that screen did not catch it. It was found by asking why two runs
+of the same document anchored at different prices, which is a question about the
+data rather than about the code.
+
+### The repair, in two halves
+
+**Forward:** `settled_window` drops a bar whose session has not closed, judged on
+the exchange's own clock — 16:00 America/New_York, via `zoneinfo` rather than a
+fixed offset, because a fixed offset is wrong for five months a year and fails in
+a way that only appears twice. A window with nothing but an unfinished session
+refuses rather than anchoring.
+
+**Backward:** the two runs are not edited. They are a record of what happened, and
+editing a run to make a later page truthful would be the wrong repair to the wrong
+artifact. Instead `map export` works out what the price actually was, from the
+run's own recorded instant, and writes `price_kind` and `price_taken_at` beside
+it. The page now reads *"price taken during that session, 19:52 UTC — not a
+close."*
+
+### The shape
+
+**An artifact can be internally consistent and still describe something that did
+not happen.** Nothing in either run contradicts anything else in it. The manifest,
+the forecast and the trace all agree, and they agree on a wrong thing, because
+they all inherited it from one upstream read that nobody thought to question.
+`fetched_on` in [[#39]] was the same shape: 701 manifests carrying a date on which
+no price was ever fetched, consistent everywhere, false everywhere.
+
+**The practical rule:** a value copied from a provider is a claim about the
+provider's state at a moment, and a moment is part of the value. Where the claim
+is "this is a close", the check is not on the number — it is on whether the thing
+that produces closes had finished producing that one.

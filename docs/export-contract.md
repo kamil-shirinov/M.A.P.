@@ -8,7 +8,7 @@ uv run map export --out ./export          # write it
 uv run map export --out ./export --check  # has anything moved since?
 ```
 
-`export_version` is **1.2.0**. It is the shape of these files, not the age of the data
+`export_version` is **1.3.0**. It is the shape of these files, not the age of the data
 — read it first and refuse a version you do not know. Every size below is at the
 current corpus (120 companies, 709 filings, 779 runs, three scoring passes) and will
 grow with it.
@@ -31,6 +31,7 @@ grow with it.
 | `prices/<TICKER>.json` | lazy, per company | 2,074.1 KB total · 17.3 KB median | 120 files |
 | `scores/<band>.<split>.<vintage>.<digest>.json` | lazy | 133.5 KB each | 3 files |
 | `scores/holdout_spend.json` | lazy | 0.4 KB | 1 spend |
+| `live/replay.json` | lazy | 0.9 KB | 1 run |
 
 **Eager total 0.77 MB. Whole export 5.34 MB.**
 
@@ -64,6 +65,7 @@ array and then filter it — see §3.
 
 ```json
 [{ "ticker": "AAPL", "name": "Apple Inc.", "cik": 320193, "split": "holdout",
+   "exchange": "Nasdaq",
    "filings": [{ "filed": "2025-05-01", "accession": "0000320193-25-000055",
                  "band": "ambiguous", "split": "holdout",
                  "runs": ["bb1e69f6-9ea9-47f4-aae0-f43e3dc8c76e"] }] }]
@@ -407,7 +409,7 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 ## 7. The manifest, and what `--check` compares
 
 ```json
-{ "export_version": "1.2.0", "exported_at": "2026-09-09",
+{ "export_version": "1.3.0", "exported_at": "2026-09-29",
   "freeze":  { "version": "2.6.0", "digest": "7cf4ae3d…" },
   "code":    { "commit": "e5a38f2…", "forecast_digest": "fb673274…" },
   "ledger":  { "items_settled": 709 },
@@ -426,10 +428,12 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 | `freeze.version` / `freeze.digest` | Which frozen corpus, and a hash of the fields that govern a forecast. |
 | `code.commit` / `code.forecast_digest` | Which code. The digest hashes only the files that can produce a forecast (`config/`, `src/mapf/`, minus scoring, rendering and evaluation), so it does **not** move when scoring or CLI-reporting code changes. `null` = the tree was dirty when the export ran, in **any** file — including documentation, which cannot affect a forecast. Treat null as "unidentifiable", not as "changed". |
 | `ledger.items_settled` | See below. |
-| `runs.rows` | One count per `runs/by_source/` file, counted from the rows written into it — the per-population count `map runs` prints. **Four counts and no total.** A total would be the export pooling what its files keep apart; a consumer that wants one adds them, in code where that is visible. Not compared by `--check`. Added in 1.2.0. |
+| `runs.rows` | One count per `runs/by_source/` file, counted from the rows written into it — the per-population count `map runs` prints. **Four counts and no total.** A total would be the export pooling what its files keep apart; a consumer that wants one adds them, in code where that is visible. Added in 1.2.0. **Compared by `--check` since 1.3.0**, one key per source: a live run must move `runs.edgar` and nothing else, and if it ever moves the ledger or a freeze digest then something has written into the corpus. |
 | `symbols.synced_on` | Vintage of the symbol index — **a month older than the prices**, which is why there is no single export vintage. |
 | `prices.snapshot` | The pinned price vintage every series and outcome was read from. |
-| `filers.rows` / `filers.vintages` | Pre-screen size and the set of days it was walked over. |
+| `filers.rows` / `filers.distinct` / `filers.vintages` | Pre-screen size and the set of days it was walked over. **Rows are not filers**: 8,001 rows carry 7,998 distinct CIKs, because three were re-screened after a failed request and appear twice. The last row for a CIK is the pre-screen's answer. `distinct` added in 1.2.0. |
+| `funnel` | The search screen's counts, over ONE base — tickers — computed at export because counting them in a browser means a pass over `filers.json` at 1.2 MB on every page load. `tickers` is the base; `earnings_filer`, `no_earnings_filings` and `unscreened` partition it exactly; `frozen` and `readable_unread` partition `earnings_filer`. Every part is counted, never subtracted. Added in 1.2.0. |
+| `replay` | `{run_id, exported_as}`: the ONE recorded live run a copy with no models behind it shows, pinned by id in `export.py`. Never "the newest run" — that would republish whatever happened locally, which is a live claim by another route. `exported_as` is null when the pinned run is not in `runs/`, and then no `live/` file is written. Added in 1.3.0. |
 | `files` | Every path written, with its byte size. |
 
 Every identity stamp above is **carried from its own source**. The counts —
@@ -447,6 +451,33 @@ that may not mean the same thing.
 ---
 
 ## 8. Five things a consumer will get wrong
+
+### `live/replay.json` — one recorded run, for a copy with no models
+
+```json
+{ "run_id": "b8748710-…", "ticker": "KO", "anchor_date": "2026-09-28",
+  "anchor_spot": 87.332, "horizon_days": 5, "corpus_relation": "outside_corpus",
+  "price_kind": "intraday", "price_taken_at": "2026-09-28T19:52:43+00:00",
+  "band": [{ "level": 0.1, "price": 84.005 }, …], "scenarios": [ … ] }
+```
+
+A `JournalEntry` as `runs/by_source/edgar.json` writes it, plus three fields the
+replay needs and a journal row does not.
+
+**`price_kind` is `close`, `intraday` or `unknown`,** and it is the reason this
+block exists rather than the page simply printing `anchor_date`. A price provider
+returns a daily bar for the session in progress and keeps updating it, so a run
+made before 16:00 in New York anchors on a quote that looks exactly like a close.
+This run was made at 15:52 ET, eight minutes before the bell. `price_taken_at` is
+the run's own recorded instant, and the two together are what let a page say what
+the price actually was instead of repeating a claim the artifact never checked.
+The run itself is not edited — it is a record of what happened.
+
+**`band`** is quantiles of the predictive distribution at 10/25/75/90, as prices,
+from the same `simulate()` the scorer uses with the run's own scenarios and the
+same seed. It is exported rather than sampled in the browser so that one quantity
+has one implementation; a page that samples its own is a second estimator with no
+way to say which answer a score would be computed against.
 
 ### `ledger.items_settled` is **not** a run count
 
