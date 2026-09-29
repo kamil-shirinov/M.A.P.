@@ -241,6 +241,30 @@ describe("the page, its markup and its rules", () => {
     }
   });
 
+  it("states the absence in one line and puts the reasoning in the notes", () => {
+    /* It was four paragraphs on screen. The reasoning is worth having; a reader
+       should meet it when they go looking, not on the way past. */
+    const offer = read("assets/js/ui/analyse-offer.js");
+    const box = offer.slice(offer.indexOf("export function renderNoServer"), offer.indexOf("export function noServerNotes"));
+    assert.equal((box.match(/el\("p"/g) ?? []).length, 1, "one paragraph in the box");
+    assert.doesNotMatch(box, /el\("pre"/, "the command belongs in the notes");
+    assert.match(box, /runs on the machine that has the models/);
+    assert.match(box, /static record/);
+
+    const notes = offer.slice(offer.indexOf("export function noServerNotes"));
+    assert.match(notes, /uv run map serve/);
+    assert.match(notes, /Nothing is queued and nothing is pending/);
+    assert.match(notes, /six to twelve minutes/);
+  });
+
+  it("adds those notes only on a screen that has no button", () => {
+    for (const file of ["analyse-page.js", "search-page.js", "company.js"]) {
+      const page = read(`assets/js/${file}`);
+      assert.match(page, /noServerNotes\(\)/, file);
+      assert.match(page, /\? \[\] : \[noServerNotes\(\)\]/, `${file} adds them conditionally`);
+    }
+  });
+
   it("asks whether a server is there without being able to start a run", () => {
     // `health` with GET. A speculative POST would cost seven minutes to find out.
     const offer = read("assets/js/ui/analyse-offer.js");

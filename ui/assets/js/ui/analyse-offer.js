@@ -92,18 +92,36 @@ export function renderNoServer(host, { where }) {
   const box = el("div", "anl-absent");
   box.dataset.chrome = "no analysis server is present; nothing here is a figure";
   box.append(el("h3", "anl-absent-head", "No analysis server"));
+  /* ONE LINE. It was four paragraphs, which is a wall of prose on a screen whose
+     job at that moment is to say one thing. The reasoning — why nothing is
+     queued, what the command does, what a run costs — is worth having and now
+     lives in the disclosure with the other notes, where a reader goes when they
+     want it rather than meeting it on the way past. */
   box.append(el("p", null,
-    `${where} Live analysis runs three models on the machine serving this page, and ` +
-    "these files are a static record with nothing behind them."));
-  box.append(el("p", null,
-    "Nothing is queued and nothing is pending: the request cannot be made at all, " +
-    "rather than being made and not answered."));
-  box.append(el("pre", null, "uv run map serve"));
-  box.append(el("p", "anl-absent-foot",
-    "That serves this page and the endpoint from one origin, on your own machine. " +
-    "Each analysis usually takes six to twelve minutes and is a permanent journal entry."));
+    `${where} Live analysis runs on the machine that has the models; this copy is a ` +
+    "static record."));
   host.append(box);
   return box;
+}
+
+/** The notes this component contributes to a page's disclosure.
+
+    Everything the box used to say on screen. Merged into each page's own groups
+    so there is one disclosure per screen rather than a second one below it. */
+export function noServerNotes() {
+  return {
+    title: "Why there is no Analyse button here",
+    notes: [
+      "Live analysis reads a company's latest earnings 8-K and runs three models over " +
+        "it. The models run on the machine serving the page, so a published copy of " +
+        "this site — which is a directory of static files — cannot do it.",
+      "Nothing is queued and nothing is pending. There is no server behind these files " +
+        "to accept the request, so it is not made at all rather than made and unanswered.",
+      "On your own machine, `uv run map serve` serves this page and the endpoint from " +
+        "one origin. Each analysis usually takes six to twelve minutes and writes a " +
+        "permanent entry to the run journal; there is no discard.",
+    ],
+  };
 }
 
 /** A link into the live-analysis screen, carrying a ticker and a horizon.

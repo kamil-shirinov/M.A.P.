@@ -26,7 +26,7 @@ import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { mountPageRosette } from "./ui/rosette.js";
 import { createModeController, mountDoor, mountMastheadNav } from "./ui/front-door.js";
-import { renderNoServer, serverPresent } from "./ui/analyse-offer.js";
+import { noServerNotes, renderNoServer, serverPresent } from "./ui/analyse-offer.js";
 import { renderNoExport } from "./ui/no-export.js";
 
 const $ = (id) => document.getElementById(id);
@@ -266,7 +266,14 @@ async function boot() {
     });
     $("why").before(absence);
   }
-  renderPageWhy($("why"), { groups: whyGroups(state.funnel) });
+  renderPageWhy($("why"), {
+    groups: [
+      ...whyGroups(state.funnel),
+      // Only when it applies. A note explaining an absent button on a screen that
+      // has one is noise.
+      ...(state.canAnalyse ? [] : [noServerNotes()]),
+    ],
+  });
 
   mountMastheadNav($("masthead-nav"), { current: "search" });
   box = mountBox($("box"), { onQuery });

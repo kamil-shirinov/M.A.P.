@@ -31,6 +31,7 @@ import { chrome, chromeText } from "./lib/figure.js";
 import {
   DEFAULT_HORIZON,
   PERIODS,
+  noServerNotes,
   renderHorizons,
   renderNoServer,
   serverPresent,
@@ -237,7 +238,9 @@ async function boot() {
     });
   }
 
-  renderPageWhy($("why"), { groups: whyGroups() });
+  renderPageWhy($("why"), {
+    groups: [...whyGroups(), ...((await serverPresent()) ? [] : [noServerNotes()])],
+  });
   applyPageProvenance();
   enforce();
 }

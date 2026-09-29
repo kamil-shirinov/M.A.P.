@@ -26,6 +26,7 @@ import { renderScoring } from "./ui/company-scoring.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { mountPageRosette } from "./ui/rosette.js";
 import { renderLive } from "./ui/company-live.js";
+import { noServerNotes, serverPresent } from "./ui/analyse-offer.js";
 import { renderPageWhy } from "./ui/page-why.js";
 import { COMPANY_WHY } from "./ui/company-why.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
@@ -111,7 +112,9 @@ async function paint() {
   renderFooter($("footer"), state.manifest);
   renderTitle(company);
   await renderLive($("live"), company);
-  renderPageWhy($("why"), { groups: COMPANY_WHY });
+  renderPageWhy($("why"), {
+    groups: [...COMPANY_WHY, ...((await serverPresent()) ? [] : [noServerNotes()])],
+  });
 
   applyPageProvenance();
   enforce();
