@@ -26,7 +26,16 @@ export function renderIdentity(root, { company, runs }) {
   addFact(facts, "CIK", chromeText(String(company.cik), "an SEC filer id, not a quantity"));
   // Absent, not unknown. The exchange is in symbols.json, and the page does not
   // fetch 864 KB to fill one field.
-  addFact(facts, "Exchange", el("em", "cmp-absent", "not loaded"));
+  /* From corpus.json, which this page already has open. It said "not loaded"
+     because the field used to live only in symbols.json; the export carries it
+     on the corpus row now. */
+  addFact(
+    facts,
+    "Exchange",
+    company.exchange
+      ? el("span", null, company.exchange)
+      : el("em", "cmp-absent", "not in this export"),
+  );
   addFact(facts, "Filings held", renderFigure(figure(company.filings.length, MEASURED, "int")));
   /* TWO COUNTS, because they are two things and a page that shows one unlabelled
      disagrees with the search screen for no visible reason. TSLA: 12 panel runs

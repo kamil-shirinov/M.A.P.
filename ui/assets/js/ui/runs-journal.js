@@ -18,7 +18,7 @@
 import { chromeText, derive, renderFigure } from "../lib/figure.js";
 import { describeCorpusRelation, describeDrift, describeOutcome, isAbsent } from "../data/source.js";
 import { fmt } from "../lib/format.js";
-import { RELATIONS } from "./runs-filters.js";
+import { OUTCOMES, RELATIONS } from "./runs-filters.js";
 import { stagger } from "../lib/motion.js";
 
 const el = (tag, className, text) => {
@@ -26,6 +26,21 @@ const el = (tag, className, text) => {
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
   return node;
+};
+
+/** The filter's own word for why an outcome is missing.
+
+    One table, so a row and the control that filters it cannot disagree about
+    what the same run is. */
+function outcomeLabel(run) {
+  const status = run.outcome_status;
+  return OUTCOMES.find(([v]) => v === status)?.[1] ?? "no outcome";
+}
+
+const OUTCOME_WHY = {
+  window_open: "The horizon has not elapsed yet",
+  absent_from_snapshot: "The anchor is past the newest close this price snapshot holds",
+  not_requested: "No price snapshot was supplied, so no outcome was looked for",
 };
 
 const REL_DETAIL = {
@@ -336,7 +351,13 @@ function rowLine(run, ctx, ditto) {
 
   const close = el("span", "runs-c-num");
   if (isAbsent(run.outcome)) {
-    close.append(el("span", "runs-c-open", "window open"));
+    /* THE STATUS DECIDES THE WORDS. Every absent outcome used to read "window
+       open", which is only one of four reasons an outcome is missing — the
+       filter offered all four while the rows claimed one. KO's horizon is not
+       open; its anchor is simply past the end of a snapshot pinned three weeks
+       earlier, which is `absent_from_snapshot`. Same vocabulary as the filter,
+       from the same table. */
+    close.append(el("span", "runs-c-open", outcomeLabel(run)));
   } else {
     close.append(renderFigure(run.outcome.close));
     close.append(chromeText(run.outcome.trading_date.slice(5), "the session the horizon closed on"));
@@ -412,13 +433,16 @@ function detail(run, ctx) {
   }
 
   const drifted = !isAbsent(run.anchor_drift);
-  const out = say("Outcome", isAbsent(run.outcome) ? "open" : null);
+  const out = say("Outcome", isAbsent(run.outcome) ? outcomeLabel(run) : null);
   if (isAbsent(run.outcome)) {
-    out.append(document.createTextNode("The horizon has not elapsed yet — "));
+    // Each status has its own reason. They were all being given the one for
+    // `window_open`, which is wrong for a run anchored past the snapshot's end.
+    out.append(document.createTextNode(
+      `${OUTCOME_WHY[run.outcome_status] ?? "There is no outcome for this run"} — `));
     out.append(chromeText(`${run.horizon_days} sessions`, "the horizon in sessions"));
     out.append(document.createTextNode(
-      " from this anchor land past the newest close the snapshot holds. There is no outcome, " +
-      "and that is a fact about the calendar."));
+      " from this anchor. There is no outcome, and that is a fact about the calendar "
+      + "rather than about the run."));
   } else {
     appendParts(out, describeOutcome(run));
     if (!drifted) {

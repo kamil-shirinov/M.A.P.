@@ -235,6 +235,7 @@ def export(
         symbols_db = settings.data.sec.symbols_db
         index = build_symbol_index(settings)
         names: dict[str, str] = {}
+        exchanges: dict[str, object] = {}
         symbol_rows: list[dict[str, object]] = []
         synced_on: date | None = None
         if _require(
@@ -249,6 +250,12 @@ def export(
             ]
             rows = symbol_rows
             names = {str(r["ticker"]): str(r["name"]) for r in rows}
+            # Carried onto the corpus rows below. A corpus company's exchange is
+            # in this 864 KB file and nowhere else, so the screens that show one
+            # had to say "not loaded" — true, and useless. Copying 120 short
+            # strings into corpus.json costs about a kilobyte on a file both
+            # screens already fetch, and removes an absence nobody wanted.
+            exchanges = {str(r["ticker"]): r["exchange"] for r in rows}
             synced_on = index.synced_on()
             # Lazy: 10,398 rows the front end needs only once someone types. The
             # eager universe below is the 120 companies that have anything to show.
@@ -295,6 +302,9 @@ def export(
                 {
                     "ticker": plan.ticker,
                     "name": names.get(plan.ticker),
+                    # None when the index was not exported, which the screens
+                    # render as a named absence rather than as a blank.
+                    "exchange": exchanges.get(plan.ticker),
                     "cik": plan.cik,
                     "split": plan.split,
                     "filings": [

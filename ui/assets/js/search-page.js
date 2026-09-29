@@ -126,6 +126,10 @@ async function group(term) {
     ...row,
     filings: state.counts?.get(row.ticker)?.filings ?? 0,
     runs: state.counts?.get(row.ticker)?.runs ?? 0,
+    // corpus.json carries it now, and this row already fetches that file for the
+    // counts — so the exchange costs nothing here and the row stops saying
+    // "not loaded" about a field that is, in fact, loaded.
+    exchange: state.counts?.get(row.ticker)?.exchange ?? null,
   }));
   const groups = { corpus, earnings: [], none: [], unfiled: [] };
 

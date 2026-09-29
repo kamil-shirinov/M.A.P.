@@ -137,7 +137,11 @@ function switcher(meta, record, records, band, onBand) {
 
   const line = el("p", "res-record-line");
   line.append(
-    el("span", "res-k", "record "),
+    // "code", as the manifest calls it (`code.forecast_digest`) and as the
+    // company page labels the same eight characters. It read "record" here, which
+    // is the export's word for the scoring FILE — a different thing that this
+    // screen also shows.
+    el("span", "res-k", "code "),
     chromeText(meta.forecast_digest.slice(0, 8), "an abbreviated forecast digest"),
     dot(),
     el("span", "res-k", "commit "),

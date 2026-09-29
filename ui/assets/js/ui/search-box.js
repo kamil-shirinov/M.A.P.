@@ -58,12 +58,17 @@ function nameNode(name) {
   return el("span", "srch-name", name);
 }
 
-/** Exchange is absent for a corpus row by construction — it lives in
-    symbols.json, and loading 864 KB to label a row is the eager cost the export
-    splits the two files to avoid. Absent, not blank, and not unknown. */
+/** Corpus rows carry an exchange now: `map export` copies it onto corpus.json,
+    which this row already fetches for the counts.
+
+    It used to read "not loaded" while the chip beside the box said INDEX LOADED
+    and the ticker was plainly in the index — true in a narrow sense, since the
+    field lives in symbols.json, and useless to read. When it really is absent
+    (an export written before 1.2.0) the row says which file it was expected in,
+    rather than naming a loading state that is not the reason. */
 function exchangeNode(exchange) {
   if (exchange === null || exchange === undefined || isAbsent(exchange)) {
-    return el("span", "srch-absent", "not loaded");
+    return el("span", "srch-absent", "not in this export");
   }
   return el("span", "srch-ex", exchange);
 }

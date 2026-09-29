@@ -247,6 +247,9 @@ export async function getCorpusFilingCounts() {
       {
         filings: c.filings.length,
         runs: c.filings.reduce((n, f) => n + f.runs.length, 0),
+        // Carried since export 1.2.0. Absent on an older export, which the row
+        // renders as a named absence rather than as a blank.
+        exchange: c.exchange ?? null,
       },
     ]),
   );
@@ -310,6 +313,9 @@ export async function getCompany(ticker) {
     name: row.name,
     cik: row.cik,
     split: row.split,
+    // Carried since export 1.2.0; null on an older export, which the identity
+    // strip renders as a named absence rather than as a blank.
+    exchange: row.exchange ?? null,
     filings: row.filings.map((f) => ({
       // Carried, never derived. A corpus forecast is dated the day AFTER the
       // filing it reads, and only 66 of 701 have the two equal — reconstructing

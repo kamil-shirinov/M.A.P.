@@ -195,11 +195,15 @@ describe("company page, against the real export", () => {
     }
   });
 
-  itNeedsExport("states exchange as not loaded rather than fetching symbols.json", async () => {
+  itNeedsExport("shows the exchange, which the corpus row now carries", async () => {
+    /* It read "not loaded" while the search screen's chip said INDEX LOADED and
+       the ticker was plainly in it — true in a narrow sense and useless to read.
+       `map export` copies the field onto corpus.json, which this page opens
+       anyway, so the absence is gone rather than better explained. */
     const { roots, why } = await renderCompany("ACHC");
-    // The fact strip says WHICH it is; the reason is one of the page's notes.
-    assert.match(roots.identity.textContent, /not loaded/);
-    assert.match(why, /does not fetch a megabyte to fill one field/);
+    assert.doesNotMatch(roots.identity.textContent, /not loaded/);
+    assert.match(roots.identity.textContent, /Nasdaq|NYSE|NYSE American|Cboe|OTC/);
+    assert.match(why, /corpus\.json, which this page already opens/);
   });
 
   itNeedsExport("names the page a record rather than a projection", async () => {

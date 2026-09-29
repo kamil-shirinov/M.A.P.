@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, it } from "node:test";
+import { itNeedsExport } from "./needs-export.mjs";
 import { Node, installDom } from "./dom.mjs";
 
 /* A local DOM stub, as company, runs, results and front-door each keep one.
@@ -376,5 +377,41 @@ describe("the door counts live runs, which is not the same set as outside_corpus
     // out by a count that arrived later.
     const door = read("assets/js/ui/front-door.js");
     assert.match(door, /does not beat a plain random walk or GARCH/);
+  });
+});
+
+describe("one status, one label", () => {
+  it("names an absent outcome by its own status, not always window open", async () => {
+    /* Every absent outcome used to read "window open" — one of four reasons the
+       filter offers. KO's horizon is not open: its anchor is past the end of a
+       snapshot pinned three weeks earlier. */
+    const journal = read("assets/js/ui/runs-journal.js");
+    assert.match(journal, /outcomeLabel\(run\)/);
+    assert.doesNotMatch(
+      journal.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""),
+      /"runs-c-open", "window open"/,
+    );
+  });
+
+  it("takes the words from the filter's own table", async () => {
+    const { OUTCOMES } = await import("../assets/js/ui/runs-filters.js");
+    const labels = Object.fromEntries(OUTCOMES);
+    assert.equal(labels.absent_from_snapshot, "absent from snapshot");
+    assert.equal(labels.window_open, "window open");
+    assert.match(read("assets/js/ui/runs-journal.js"), /OUTCOMES\.find\(\(\[v\]\) => v === status\)/);
+  });
+
+  it("gives each status its own reason rather than one for all of them", () => {
+    const journal = read("assets/js/ui/runs-journal.js");
+    for (const status of ["window_open", "absent_from_snapshot", "not_requested"]) {
+      assert.match(journal, new RegExp(`${status}:`), status);
+    }
+  });
+
+  itNeedsExport("and the live run in this export is absent_from_snapshot", () => {
+    const rows = JSON.parse(readFileSync(new URL("../assets/export/runs/by_source/edgar.json", import.meta.url), "utf8"));
+    if (!rows.length) return;
+    assert.equal(rows[0].outcome_status, "absent_from_snapshot");
+    assert.equal(rows[0].outcome, null);
   });
 });

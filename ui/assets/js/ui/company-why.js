@@ -12,8 +12,9 @@ export const COMPANY_WHY = [
       "This is a record of forecasts already made for this company, not a current projection. " +
         "The export holds no live forecast, and the CLOSED count above says how many of the runs " +
         "on this page have an outcome at all.",
-      "Exchange sits in symbols.json, loaded lazily on the first search keystroke. It is absent " +
-        "here rather than unknown: the page does not fetch a megabyte to fill one field.",
+      "Exchange comes from corpus.json, which this page already opens. It used to be absent " +
+        "here because the field lived only in the 864 KB symbol index; the export copies it " +
+        "onto the corpus row now, so a fact the app plainly knew stopped reading as missing.",
     ],
   },
   {
