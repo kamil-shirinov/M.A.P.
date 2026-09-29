@@ -181,3 +181,5 @@ body > .masthead,
 .anl-band { fill: var(--accent); opacity: .10; stroke: none; }
 .anl-band[data-level="50"] { opacity: .16; }
 .anl-fan[data-calibration="uncalibrated"] .anl-band { fill: var(--uncal); }
+
+.anl-band-key { margin: var(--sp-3) 0 0; font: var(--sans-sm); color: var(--ink-3); }

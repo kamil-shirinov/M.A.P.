@@ -157,8 +157,32 @@ export function renderFan(host, result) {
   }
 
   host.append(svg);
+  /* The band needs naming. Shading with no legend is a region a reader has to
+     guess at, and the guess available is "the scenarios", which it is not: the
+     ribbons are quantiles of the whole predictive distribution and the lines are
+     three points inside it. */
+  if (band.length >= 2) host.append(bandLegend(band, result));
   host.append(readout(result, paths));
   return svg;
+}
+
+/** What the shading is, in one line. */
+function bandLegend(band, result) {
+  const sorted = [...band].sort((a, b) => a.level - b.level);
+  const span = (lo, hi) => Math.round((hi.level - lo.level) * 100);
+  const line = el("p", "anl-band-key");
+  line.append(chromeText(
+    `Shaded: the middle ${span(sorted[0], sorted.at(-1))}% and ${span(sorted[1], sorted.at(-2))}% `
+    + "of the forecast's own distribution",
+    "what the shaded region is",
+  ));
+  line.append(chromeText(
+    result.corrected
+      ? " — widened by the fitted correction."
+      : " — raw, and this is the width measured too narrow.",
+    "whether the correction was applied to this band",
+  ));
+  return line;
 }
 
 /** The numbers under the fan, each as a marked figure. */

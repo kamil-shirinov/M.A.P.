@@ -439,3 +439,40 @@ describe("one status, one label", () => {
     assert.equal(rows[0].outcome, null);
   });
 });
+
+describe("the shaded region is named", () => {
+  const banded = {
+    ...RESULT,
+    band: [
+      { level: 0.1, price: 188 }, { level: 0.25, price: 195 },
+      { level: 0.75, price: 209 }, { level: 0.9, price: 216 },
+    ],
+  };
+
+  it("says what the shading is, and whether it was widened", async () => {
+    /* Shading with no legend is a region a reader has to guess at, and the guess
+       available is "the scenarios" — which it is not. */
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    renderFan(host, banded);
+    assert.match(host.textContent, /middle 80% and 50%/);
+    assert.match(host.textContent, /widened by the fitted correction/);
+  });
+
+  it("says the raw band is the width measured too narrow", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    renderFan(host, { ...banded, corrected: false, marking: "uncalibrated" });
+    assert.match(host.textContent, /raw, and this is the width measured too narrow/);
+  });
+
+  it("adds no legend when there is no band", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    renderFan(host, { ...RESULT, band: [] });
+    assert.doesNotMatch(host.textContent, /Shaded:/);
+  });
+});
