@@ -3047,3 +3047,50 @@ PARTIAL. This one lost every figure behind the finding the write-ups call the on
 established out of sample, and left the verdict standing in prose since 2026-09-05 with
 nothing in the repository that could produce it. A verdict that outlives its numbers reads
 the same as one that still has them.
+
+### Addendum, 2026-09-29 — S3 rebuilt, because two sentences rest on it
+
+The entry above left S3 standing as recorded. It should not have: S3 is what the README's
+"far too narrow for the ones that move" says, and `docs/results.md` cites its recorded
+outcome, "all three cut depths were negative and monotone". Record 6 defines it as the
+median σ(M.A.P.)/σ(baseline) on the top 6%, 10% and 20% of items by |realised return|
+against the rest, each difference with a cluster-robust interval. The cut is on the
+realised return, which neither model produced, so selecting on it cannot manufacture a
+small σ. It is now `largest_move_cuts` in `mapf.eval.compression`, committed with its tests
+before this addendum (`21fcfdb`).
+
+The returns are the persisted `realised_return` where the scoring records hold the item.
+For the three SCCO items per band they are the pinned outcome over the forecast's recorded
+spot, the route #61 used. The two agree exactly on every item where both exist.
+
+**Development reproduces record 5 exactly, under one reading.** Record 5 reported the
+random walk only. All nine of its figures — three medians of the top, three differences,
+six bounds, with the rest's medians — reproduce to four decimals when the top set is chosen
+once on the whole panel, the generator restarts from the seed for each cut, and the draws
+are **2,000**. Re-choosing the top k inside every resample misses by up to 0.05. Record 5
+ran at 2,000, the house default of the time; record 6 registered the replication at 4,000,
+as records 2 and 4 did. The second band is computed at 4,000.
+
+| second band, 177, 4,000 draws | random walk | GARCH |
+| --- | --- | --- |
+| top 6% (11) vs rest | 0.5120 vs 0.9107, −0.3987 [−0.4601, −0.2437] | 0.4711 vs 0.8797, −0.4086 [−0.5109, −0.2598] |
+| top 10% (18) vs rest | 0.5402 vs 0.9237, −0.3835 [−0.4598, −0.2499] | 0.5196 vs 0.8887, −0.3692 [−0.4487, −0.2318] |
+| top 20% (35) vs rest | 0.6461 vs 0.9452, −0.2991 [−0.3964, −0.2279] | 0.6512 vs 0.9010, −0.2498 [−0.3924, −0.2129] |
+
+**The recorded outcome holds against both baselines.** Every difference is negative, all six
+intervals exclude zero, and the deeper the cut the more negative the difference. Record 6
+predicted a top-cut median of roughly 0.4–0.6, which both meet, and a rest of roughly
+0.8–0.9, which GARCH meets and the random walk's 0.91 slightly exceeds. These intervals are
+computed today and were never recorded.
+
+**The rounding is the one choice left open.** Record 6 gave fractions, not counts, and 20%
+of 177 is 35.4. Nearest gives 35; rounding up gives 36, and −0.2975 [−0.3911, −0.2293] and
+−0.2439 [−0.3806, −0.2129]. Both readings give 11, 18 and 36 on development's 178, where the
+counts came from. No verdict changes.
+
+**Development against GARCH, never recorded, is not monotone.** Its 6% and 10% cuts are
+−0.2742 and −0.2745, the deeper one less negative by 0.0003; the 20% cut is −0.2388. All
+three intervals exclude zero. On the second band, the registered test, both baselines are
+monotone. On the populations the scoring records hold today (175 and 174) nothing changes:
+the second band is negative, excluding zero and monotone on both baselines, and development
+against GARCH is still out of order by 0.0006.

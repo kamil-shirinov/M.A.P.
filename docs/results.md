@@ -192,6 +192,21 @@ on the original 178 items but not on the 175 the scoring record now holds, where
 reaches 1.0038. The development result was too close to 1.0 to carry the claim; the
 replication carries it.
 
+S3, where the narrowness sits: the median σ(M.A.P.)/σ(baseline) on the largest moves by
+|realised return| against the rest, recomputed the same day. Development reproduces record
+5's figures exactly at the 2,000 draws it used; the second band is at the registered 4,000.
+
+| second band (177), difference in median σ ratio | random walk | GARCH |
+| --- | --- | --- |
+| top 6% vs rest | −0.3987 [−0.4601, −0.2437] | −0.4086 [−0.5109, −0.2598] |
+| top 10% vs rest | −0.3835 [−0.4598, −0.2499] | −0.3692 [−0.4487, −0.2318] |
+| top 20% vs rest | −0.2991 [−0.3964, −0.2279] | −0.2498 [−0.3924, −0.2129] |
+
+On the largest 6% of moves M.A.P.'s σ is about half the baseline's (0.51 and 0.47), against
+0.91 and 0.88 on the rest. All six differences exclude zero and deepen with the cut, as
+recorded. On development against GARCH, which was never recorded, the 6% and 10% cuts are
+out of order by 0.0003 (Findings #66).
+
 **Compare 0.3765 with 0.4092, not 0.3166.** 0.3166 is the raw development slope record 5
 reported, and the correction raises a slope by construction. None of this can be
 re-derived from the export, which stores M.A.P.'s σ but not the baselines'; the

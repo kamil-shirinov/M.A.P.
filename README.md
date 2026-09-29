@@ -116,10 +116,11 @@ M.A.P.'s — *quoted from the record; the export does not store the baselines' �
 cannot be re-derived from it.*
 
 **4. One finding did replicate, out of sample: volatility compression.** M.A.P. states too
-narrow a range of volatilities across companies — about right for typical names, far too
-narrow for the ones that move. The measure is the slope of log σ(M.A.P.) on a baseline's
-log σ, corrected for the error in the baseline's own σ; 1.0 would be right. Same estimator
-on both bands, intervals computed on 2026-09-29 from the pre-registration:
+narrow a range of volatilities across companies. On most companies its σ is close to the
+baselines' (a median 0.91 of the random walk's on the second band); on the largest 6% of
+moves it is about half (0.51). The main measure is the slope of log σ(M.A.P.) on a
+baseline's log σ, corrected for the error in the baseline's own σ; 1.0 would be right. Same
+estimator on both bands, intervals computed on 2026-09-29 from the pre-registration:
 
 | corrected slope | development (178) | second band (177) |
 | --- | --- | --- |
