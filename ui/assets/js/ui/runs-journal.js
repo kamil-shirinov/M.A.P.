@@ -298,7 +298,11 @@ function rowLine(run, ctx, ditto) {
 
   const co = el("span", "runs-c-co");
   co.append(el("span", "t", run.ticker));
-  const name = ctx.universe.get(run.ticker)?.name;
+  /* universe.json holds the frozen 120, so a run outside the corpus had no name
+     to resolve and the row read "name not exported" — true, and no use to a
+     reader looking at a real company. A live run records its own name in its
+     manifest, and that is the fallback. */
+  const name = ctx.universe.get(run.ticker)?.name ?? run.company_name;
   // Phillips 66. A company name is chrome: it carries digits that are part of a
   // name and not a quantity, and the audit has no way to tell those apart.
   const nameNode = !name || isAbsent(name)

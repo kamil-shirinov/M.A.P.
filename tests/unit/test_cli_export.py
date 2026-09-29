@@ -225,6 +225,8 @@ def test_a_run_record_is_the_same_object_map_runs_emits(
         "run_id",
         "scenarios",
         "ticker",
+        # Recorded at run time; the journal cannot resolve a name outside the 120.
+        "company_name",
     }
 
 

@@ -270,3 +270,7 @@ body > .masthead,
   .res-terms { grid-template-columns: 1fr; gap: 0 0; }
   .res-terms dd { margin-bottom: var(--sp-3); }
 }
+
+/* A count label sitting inside its bar, used when placing it above would put it
+   on the uniform line. Darker than the bar so it reads against the fill. */
+.res-tick--inside { fill: var(--paper); font-weight: 600; }

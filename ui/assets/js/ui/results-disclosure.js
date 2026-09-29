@@ -38,6 +38,12 @@ const BLOCKS = [
    "The comparison reads the clean and the ambiguous record, which were scored on different days and " +
    "under different commits. The difference of the means is arithmetic this page does; the interval " +
    "around it is quoted, because it is in neither file."],
+  ["The subtraction is done before the rounding",
+   "Each mean is shown to five places and their difference to five, but the difference is taken " +
+   "from the full values and rounded once at the end. So the figures on screen need not subtract " +
+   "to the figure beside them: 0.03179 minus 0.03105 reads as 0.00074 while the page shows " +
+   "+0.00075. Rounding first and subtracting after would put the error into the result instead of " +
+   "leaving it visible between two displays."],
   ["Two clean records, one measurement",
    "The clean band ships twice — the same items scored from a committed tree and from a dirty one. " +
    "The one with a forecast digest is shown, the other is named, and they are never averaged."],

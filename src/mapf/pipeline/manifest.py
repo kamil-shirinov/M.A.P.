@@ -146,6 +146,12 @@ class RunManifest(DomainModel):
     #   "news"    `map run` over a news directory or RSS. Also outside the corpus.
     #   None      predates this field. Not a claim that it was any of the above.
     document_source: Literal["corpus", "edgar", "news"] | None = None
+    # The company's name, recorded at run time because nothing downstream can look
+    # it up. The journal resolves names from `universe.json`, which holds the 120
+    # frozen companies — so a run outside the corpus had no name anywhere and the
+    # row read "name not exported". Optional: runs made before this field carry
+    # none, and that is a real state rather than a blank.
+    company_name: str | None = None
 
     # WHICH EXPERIMENTAL ARM PRODUCED THIS RUN, if any.
     #

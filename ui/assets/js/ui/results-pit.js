@@ -82,7 +82,19 @@ function chart(stats) {
     rect.style.transformOrigin = "bottom";
     if (i) rect.style.animationDelay = `${i * 20}ms`;
     s.append(rect);
-    s.append(tick(left + barW / 2, y(count) - 5, String(count)));
+    /* The count sits above its bar — unless that puts it on the uniform line,
+       which is where bars 2 and 3 landed: a bar near the expected height has its
+       label in exactly the place the reference line runs, and a number crossed
+       out by a dashed rule is worse than no number.
+
+       Close to the line, the label goes INSIDE the bar instead. A bar that tall
+       has room for it, and the one place it cannot collide with the line is
+       below the line. */
+    const top = y(count);
+    const collides = Math.abs(top - y(expected)) < 14;
+    const label = tick(left + barW / 2, collides ? top + 14 : top - 5, String(count));
+    if (collides) label.setAttribute("class", "res-tick res-tick--inside");
+    s.append(label);
   }
 
   // Drawn last so it sits over the bars: it is the reference they are read

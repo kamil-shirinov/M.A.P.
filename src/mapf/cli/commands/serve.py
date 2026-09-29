@@ -210,6 +210,9 @@ def serve(
                             # is then whatever the journal's own check makes of the
                             # document (ADR 0036 §2) — never asserted here.
                             document_source="edgar",
+                            # Recorded now because nothing downstream can look it
+                            # up: the journal resolves names from the frozen 120.
+                            company_name=company_name(ticker),
                         )
                     )
                 except BaseException as error:  # noqa: BLE001 - re-raised below
@@ -250,6 +253,10 @@ def serve(
         def symbol_cik(ticker: str) -> int | None:
             found = symbols.get(ticker)
             return getattr(found, "cik", None) if found else None
+
+        def company_name(ticker: str) -> str | None:
+            found = symbols.get(ticker)
+            return getattr(found, "name", None) if found else None
 
         wiring = Wiring(
             fetch_exhibit=fetch_exhibit,

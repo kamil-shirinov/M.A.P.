@@ -121,6 +121,7 @@ class StoredManifest(BaseModel):
     manifest_version: str = ""
     prices: _StoredPrices
     document_source: Literal["corpus", "edgar", "news"] | None = None
+    company_name: str | None = None
     freeze_version: str | None = None
     arm: str | None = None
 
@@ -208,6 +209,11 @@ class JournalEntry:
 
     run_id: str
     ticker: str
+    # Recorded at run time, because nothing downstream can resolve a name for a
+    # company outside the frozen 120: the journal looks names up in universe.json,
+    # which holds only those. None on runs made before the field existed, which is
+    # a real state and not a blank.
+    company_name: str | None
     anchor_date: date
     anchor_spot: float
     horizon_days: int
@@ -462,6 +468,7 @@ def _entries(
         yield JournalEntry(
             run_id=run_id,
             ticker=forecast.ticker,
+            company_name=manifest.company_name,
             # The session the spot was read from, not `as_of`: `as_of` is a wall
             # clock (and for corpus items, the day after the filing), while the
             # anchor is the bar the forecast actually opened from.

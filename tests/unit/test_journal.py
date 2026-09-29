@@ -182,6 +182,9 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
     assert carried == {
         "run_id",
         "ticker",
+        # Recorded at run time, not resolved here: the journal looks names up in
+        # the frozen 120, so a run outside the corpus had none anywhere.
+        "company_name",
         "anchor_date",
         "anchor_spot",
         "horizon_days",
