@@ -12,6 +12,10 @@
      it. Loading the sheet is what keeps ONE row on both screens. -->
 <link rel="stylesheet" href="assets/styles/runs.css">
 <link rel="stylesheet" href="assets/styles/front-door.css">
+<!-- Both screens can offer an analysis, and both state the absence when
+     nothing is behind these files, so both need the rules for it. Before
+     system.css, which keeps the load order these pages already rely on. -->
+<link rel="stylesheet" href="assets/styles/analyse.css">
 <link rel="stylesheet" href="assets/styles/system.css">
 <script>
   /* Arms the entrance styles BEFORE first paint, and only when motion is

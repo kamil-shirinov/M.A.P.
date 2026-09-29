@@ -236,3 +236,38 @@ describe("the page, its markup and its rules", () => {
     }
   });
 });
+
+describe("a shared component's rules reach every page that renders it", () => {
+  /* The defect this exists for: `analyse-offer.js` was rendered from the search
+     and company pages while `analyse.css` was linked only from analyse.html, so
+     the absence block appeared unstyled — no border, no background, no measure.
+     Nothing in the markup was wrong and no test could see it. */
+  const OFFER_CLASSES = ["anl-absent", "anl-offer", "anl-periods", "anl-period-note"];
+  const PAGES = { "index.html": "search-page.js", "company.html": "company.js", "analyse.html": "analyse-page.js" };
+
+  it("links analyse.css from every page that can render the offer", () => {
+    for (const page of Object.keys(PAGES)) {
+      assert.match(read(page), /assets\/styles\/analyse\.css/, page);
+    }
+  });
+
+  it("defines every class the shared module emits", () => {
+    const sheet = read("assets/styles/analyse.css");
+    const emitted = read("assets/js/ui/analyse-offer.js");
+    for (const cls of OFFER_CLASSES) {
+      assert.ok(emitted.includes(cls), `the module emits .${cls}`);
+      assert.ok(sheet.includes(`.${cls}`), `analyse.css defines .${cls}`);
+    }
+  });
+
+  it("loads analyse.css before system.css, as the other sheets are ordered", () => {
+    // system.css carries the page-level overrides and has to win.
+    for (const page of Object.keys(PAGES)) {
+      const html = read(page);
+      assert.ok(
+        html.indexOf("styles/analyse.css") < html.indexOf("styles/system.css"),
+        `${page} loads analyse.css before system.css`,
+      );
+    }
+  });
+});
