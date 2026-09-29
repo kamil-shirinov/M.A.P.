@@ -184,7 +184,7 @@ def test_a_stale_filing_is_amber_because_the_anchor_is_too_far_out() -> None:
         run_analysis("AAPL", 5, wiring=_wiring(fetch_exhibit=lambda _t: old), typical_seconds=397)
     )[-1]
     assert result["corrected"] is False
-    assert any("sessions from the filing" in str(r) for r in result["reasons"])
+    assert any("days after one" in str(r) for r in result["reasons"])
 
 
 def test_the_longer_periods_are_offered_and_always_amber() -> None:
@@ -192,7 +192,7 @@ def test_the_longer_periods_are_offered_and_always_amber() -> None:
     for horizon in (10, 21):
         result = list(run_analysis("AAPL", horizon, wiring=_wiring(), typical_seconds=397))[-1]
         assert result["corrected"] is False
-        assert any(f"horizon is {horizon} sessions" in str(r) for r in result["reasons"])
+        assert any(f"and this is {horizon}" in str(r) for r in result["reasons"])
 
 
 def test_the_marking_is_in_the_same_object_as_the_numbers() -> None:

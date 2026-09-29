@@ -178,14 +178,14 @@ function filerRow(row, kind) {
     detail.append(chrome(el("span", null, screen.why), "the pre-screen could not answer for this filer"));
   } else if (kind === "earnings") {
     detail.append(
-      chromeText("last 2.02 " + screen.most_recent + " · ", "the most recent Item 2.02 in the filer's recent block"),
+      chromeText("latest " + screen.most_recent + " · ", "the most recent Item 2.02 in the filer's recent block"),
       renderFigure(screen.count),
-      chromeText(" in block", "Item 2.02 filings in the filer's recent block"),
+      chromeText(" earnings filings", "Item 2.02 filings in the filer's recent block"),
     );
   } else {
     detail.append(
       renderFigure(screen.count),
-      chromeText(" in recent block", "Item 2.02 filings in the filer's recent block"),
+      chromeText(" earnings filings", "Item 2.02 filings in the filer's recent block"),
     );
   }
   div.append(

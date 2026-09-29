@@ -145,7 +145,7 @@ export function renderFunnel(host, { symbolCount, funnel }) {
   );
   host.append(
     drop(f ? `−${f.no_earnings_filings.toLocaleString("en-US")}` : "−5,089",
-      "no Item 2.02 in the recent block"),
+      "do not publish earnings results this way"),
   );
   host.append(
     stage({
@@ -163,7 +163,7 @@ export function renderFunnel(host, { symbolCount, funnel }) {
   );
   host.append(
     drop(f ? `−${f.readable_unread.toLocaleString("en-US")}` : "−5,189",
-      "publish it, not read"),
+      "publish them, and M.A.P. has not read them"),
   );
   host.append(
     stage({

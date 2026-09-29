@@ -156,21 +156,23 @@ def applicability(
     reasons: list[str] = []
     if horizon_days != FITTED_HORIZON_DAYS:
         reasons.append(
-            f"horizon is {horizon_days} sessions; the correction was fitted at "
-            f"{FITTED_HORIZON_DAYS} and at no other"
+            f"the correction was only tested over {FITTED_HORIZON_DAYS} sessions, "
+            f"and this is {horizon_days}"
         )
     if anchor_lag_sessions is None:
         reasons.append(
-            "the anchor's distance from the filing could not be counted in trading "
-            "sessions, so the panel's alignment cannot be confirmed"
+            "the gap between the filing and this forecast could not be counted in "
+            "trading days, so there is no way to tell whether the correction applies"
         )
     elif not 0 <= anchor_lag_sessions <= MAX_ANCHOR_LAG_SESSIONS:
         reasons.append(
-            f"the anchor is {anchor_lag_sessions} sessions from the filing; the panel "
-            f"anchors within {MAX_ANCHOR_LAG_SESSIONS}"
+            f"the correction was only tested within {MAX_ANCHOR_LAG_SESSIONS} trading "
+            f"day of a filing, and this forecast is {anchor_lag_sessions} days after one"
         )
     for screen in failed_screens:
-        reasons.append(f"the corpus filters would reject this company: {screen}")
+        reasons.append(
+            f"the correction was tested on companies this one would not have qualified as: {screen}"
+        )
     for screen in unscreened:
-        reasons.append(f"a corpus filter could not be evaluated here: {screen}")
+        reasons.append(f"one of the tests for that kind of company could not be run here: {screen}")
     return Applicability(applies=not reasons, reasons=tuple(reasons))

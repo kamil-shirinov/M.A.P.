@@ -103,13 +103,14 @@ def test_a_horizon_other_than_five_refuses_and_says_so() -> None:
         decision = _ok(horizon_days=horizon)
         assert decision.applies is False
         assert decision.marking == "uncalibrated"
-        assert any(f"horizon is {horizon} sessions" in r for r in decision.reasons)
+        assert any(f"and this is {horizon}" in r for r in decision.reasons)
+        assert any("only tested over 5 sessions" in r for r in decision.reasons)
 
 
 def test_an_anchor_too_far_from_the_filing_refuses() -> None:
     decision = _ok(anchor_lag_sessions=3)
     assert decision.applies is False
-    assert any("3 sessions from the filing" in r for r in decision.reasons)
+    assert any("this forecast is 3 days after one" in r for r in decision.reasons)
 
 
 def test_an_uncountable_anchor_lag_is_a_failure_not_a_pass() -> None:
@@ -117,7 +118,7 @@ def test_an_uncountable_anchor_lag_is_a_failure_not_a_pass() -> None:
     treating `None` as fine — is how an unchecked case becomes a silent pass."""
     decision = _ok(anchor_lag_sessions=None)
     assert decision.applies is False
-    assert any("could not be counted" in r for r in decision.reasons)
+    assert any("could not be counted in" in r for r in decision.reasons)
 
 
 def test_a_failed_company_screen_refuses_and_names_it() -> None:
@@ -126,12 +127,24 @@ def test_a_failed_company_screen_refuses_and_names_it() -> None:
     assert any("illiquid" in r for r in decision.reasons)
 
 
+def test_every_reason_is_a_sentence_a_reader_can_act_on() -> None:
+    """These strings are printed verbatim in the amber box, so they are screen
+    copy rather than internal labels. "the panel anchors within 1" told a reader
+    nothing they could use; "the correction was only tested within 1 trading day
+    of a filing" tells them what the limit is and why it bites."""
+    decision = _ok(horizon_days=21, anchor_lag_sessions=9, failed_screens=["illiquid"])
+    for reason in decision.reasons:
+        assert "panel" not in reason, reason
+        assert "anchor is" not in reason, reason
+        assert reason[0].islower() and len(reason.split()) >= 8, reason
+
+
 def test_an_unrun_company_screen_is_also_a_failure() -> None:
     """The rule is that the panel conditions are KNOWN to hold. An unrun screen is
     not a held one."""
     decision = _ok(unscreened=["no_exhibit"])
     assert decision.applies is False
-    assert any("could not be evaluated" in r for r in decision.reasons)
+    assert any("could not be run here" in r for r in decision.reasons)
 
 
 def test_every_failing_condition_is_reported_not_just_the_first() -> None:

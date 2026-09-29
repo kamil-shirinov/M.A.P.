@@ -262,7 +262,7 @@ async function boot() {
     const absence = document.createElement("section");
     absence.id = "no-server";
     renderNoServer(absence, {
-      where: "The readable filers above have no page and cannot be run from here.",
+      where: "The companies above that publish earnings results have no page here.",
     });
     $("why").before(absence);
   }
