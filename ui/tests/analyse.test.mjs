@@ -456,8 +456,8 @@ describe("the shaded region is named", () => {
     const { renderFan } = await load("ui/analyse-fan.js");
     const host = new Node("div");
     renderFan(host, banded);
-    assert.match(host.textContent, /middle 80% and 50%/);
-    assert.match(host.textContent, /widened by the fitted correction/);
+    assert.match(host.textContent, /middle 80% and 50% of the forecast\./);
+    assert.match(host.textContent, /The fitted correction widened this\./);
   });
 
   it("says the raw band is the width measured too narrow", async () => {
@@ -465,7 +465,7 @@ describe("the shaded region is named", () => {
     const { renderFan } = await load("ui/analyse-fan.js");
     const host = new Node("div");
     renderFan(host, { ...banded, corrected: false, marking: "uncalibrated" });
-    assert.match(host.textContent, /raw, and this is the width measured too narrow/);
+    assert.match(host.textContent, /This raw width was measured too narrow\./);
   });
 
   it("adds no legend when there is no band", async () => {
