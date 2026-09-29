@@ -51,9 +51,15 @@ Option 3: `.github/workflows/ci.yml`, GitHub Actions, on every push to any branc
   v7.0.0. A tag can be moved to different code; a commit cannot. uv is pinned to
   0.12.3 and Python to 3.12, matching `pyproject.toml` and the lockfile. The job has
   read-only repository permissions.
+- **Full history for the Python job.** The digest tests rebuild past records from
+  named commits (`ee492d7`, `318250f` and others), and a default checkout is one commit
+  deep. Every commit the tests name is reachable from `main`, so a full fetch is enough.
 - **Linux, not macOS.** Development is on an M1. Ubuntu runners are cheaper and are a
   second platform: a case-sensitive filesystem and a UTC clock. The suites were run
-  under `TZ=UTC` on a clean clone before the workflow was committed.
+  under `TZ=UTC` on a clean clone before the workflow was committed, and the first run
+  still failed eight tests: six on the shallow checkout, one on colour codes Typer
+  forces under `GITHUB_ACTIONS`, and one on float summation that differs between ARM and
+  x86 (Findings #67, addendum). All three were fixed in the tests, not in the workflow.
 - **Pinned in a test.** `test_ci_runs_every_command_of_the_gate` asserts the workflow
   runs all seven lines, so removing one means changing that test too.
 

@@ -3132,3 +3132,28 @@ only that. Gitignored data is exactly what a hand-run gate on one machine can ne
 missing, so only a clean checkout finds this class. That is the case for CI that #65 did
 not make — #65 was about a check nobody ran, and this is about a check that ran every time
 on the one machine where it could not fail.
+
+### Addendum — the first CI run found three more
+
+The clean clone was run under `TZ=UTC` before the workflow was committed, and the first
+run on GitHub still failed eight tests. None of them fails on this machine.
+
+- **Six read history a shallow checkout does not have.** The forecast- and
+  freeze-digest tests rebuild past records from named commits — `ee492d7`, `318250f`,
+  `0d78326` — and the default checkout is one commit deep, so every lookup returned
+  `None`. The Python job now fetches full history. Every commit a test names was checked
+  to be reachable from `origin/main`, since a local clone also holds pre-rebase objects
+  that no remote will ever serve.
+- **One read an error box through colour codes.** Typer forces a colour terminal at
+  import time when `GITHUB_ACTIONS` is set, so `--split` arrived as escape codes around
+  its hyphens and the substring test failed. A suite-wide fixture now switches that off,
+  beside the one that already strips `MAP_*` from the environment for the same reason.
+- **One verdict turned on the last bit of a float.** The tilt test's U-shaped panel was
+  `[0.02, 0.98] * 100`, which makes every resample mean exactly 0.5: both intervals had
+  zero width, and whether they "excluded" 0.5 depended on summation order. Locally the
+  bounds were `0.5` and `0.5000000000000001`, "not established"; on x86 one landed a bit
+  below, "suggestive". The panel is now drawn with real spread and clears 0.5 by 0.049.
+  The statistic was not changed: no real panel produces a zero-width interval.
+
+Each of the eight passed every hand-run gate on this machine. That is the whole case: the
+hand-run gate and CI are two different checks, not one check run twice.

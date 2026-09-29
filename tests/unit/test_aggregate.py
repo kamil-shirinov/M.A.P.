@@ -394,11 +394,20 @@ def test_a_tilt_only_one_view_finds_is_suggestive_not_established() -> None:
 
 
 def test_a_symmetric_u_has_no_tilt_and_the_shape_test_still_sees_it() -> None:
-    """Why both statistics exist: a U-shaped PIT has a mean of exactly 0.5, so the
-    tilt test is silent and only KS reports the departure."""
-    values = np.array([0.02, 0.98] * 100)
+    """Why both statistics exist: a U-shaped PIT has a mean near 0.5, so the tilt
+    test is silent and only KS reports the departure.
+
+    Drawn, not written as `[0.02, 0.98] * 100`. That panel made every resample mean
+    exactly 0.5, so both intervals had zero width and the verdict turned on the last
+    bit of a float sum: "not established" on ARM, "suggestive" on CI's x86
+    (Findings #67). This one has real spread and clears 0.5 by 0.04 on every bound."""
+    rng = np.random.default_rng(102)
+    low = rng.random(200) < 0.5
+    values = np.where(low, rng.uniform(0.0, 0.05, 200), rng.uniform(0.95, 1.0, 200))
     result = pit_uniformity(values, _clustered_days(200))
     assert result.tilted == "not established"
+    assert min(0.5 - result.lower, result.upper - 0.5) > 0.04
+    assert min(0.5 - result.cluster_lower, result.cluster_upper - 0.5) > 0.04
     assert result.ks_statistic > 0.3
 
 

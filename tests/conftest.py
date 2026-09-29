@@ -30,6 +30,19 @@ def _isolate_map_environment(monkeypatch: pytest.MonkeyPatch) -> None:
             monkeypatch.delenv(key, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _plain_cli_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Render Typer's help and error boxes without escape codes, everywhere.
+
+    Typer decides at import time to force a colour terminal when `GITHUB_ACTIONS`
+    is set, so on CI an option name inside an error box arrives split by ANSI codes
+    and `"--split" in result.output` fails there and nowhere else (Findings #67).
+    The same reasoning as the `MAP_*` fixture above: a test's result must not depend
+    on the environment it happens to run in.
+    """
+    monkeypatch.setattr("typer.rich_utils.FORCE_TERMINAL", False)
+
+
 def make_scenario(
     *,
     weight: float = 0.33,
