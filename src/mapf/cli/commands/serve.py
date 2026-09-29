@@ -18,6 +18,7 @@ import threading
 import time
 import webbrowser
 from collections.abc import Generator, Iterator
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,20 @@ def serve(
     port: int = typer.Option(8765, help="Loopback port for the app and the endpoint."),
     ui_dir: Path = typer.Option(UI_ROOT, help="The app directory to serve."),
     edgar_days: int = typer.Option(120, help="How far back to look for an Item 2.02."),
+    fixtures: Path | None = typer.Option(
+        None,
+        help=(
+            "Replay recorded LLM fixtures instead of calling a model server. "
+            "With --runs-dir, makes this server incapable of touching the real journal."
+        ),
+    ),
+    runs_dir: Path | None = typer.Option(
+        None,
+        help=(
+            "Where runs are written. Point it at a temporary directory to take "
+            "screenshots without writing to the journal (Findings #63)."
+        ),
+    ),
     frozen: Path = typer.Option(
         Path("corpus/frozen.json"),
         help="The frozen corpus, for relating a live run to it (ADR 0036 section 2).",
@@ -169,11 +184,16 @@ def serve(
             Reading progress off it means a stage is reported done because the run
             said so, never because enough seconds passed.
             """
-            provider = build_llm_provider(settings, fixtures=None)
+            provider = build_llm_provider(settings, fixtures=fixtures)
             registry = ModelRegistry(settings.models)
             resolved = {str(k): v for k, v in registry.resolve_all(provider.list_models()).items()}
             run_id = new_run_id()
             wiring = build_run(settings, provider=provider, resolved=resolved, run_id=run_id)
+            if runs_dir is not None:
+                # Redirected AFTER the wiring is built, so nothing else has to know
+                # about the override. The trace still lands beside the run, because
+                # the watcher reads the path this branch sets.
+                wiring = replace(wiring, runs_dir=runs_dir)
 
             emitted: list[dict[str, object]] = []
             seen = [0]
@@ -282,6 +302,15 @@ def serve(
 
         server = build(Config(root=ui_dir, port=port, analyse=analyse))
         url = f"http://127.0.0.1:{port}/analyse.html"
+        if fixtures is not None or runs_dir is not None:
+            # Said loudly. A server that cannot make a real forecast, or cannot
+            # record one, must not be mistaken for the one that can.
+            typer.secho(
+                "serve      NOT A REAL ANALYSIS SERVER"
+                + (f" — replaying fixtures from {fixtures}" if fixtures else "")
+                + (f" — runs go to {runs_dir}" if runs_dir else ""),
+                fg=typer.colors.YELLOW,
+            )
         typer.secho(f"serve      {url}", fg=typer.colors.GREEN)
         typer.echo("           every analysis is a real run and a permanent journal entry")
         lo, hi = round(RUN_SECONDS_P10 / 60), round(RUN_SECONDS_P90 / 60)

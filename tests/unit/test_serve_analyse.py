@@ -8,6 +8,7 @@ marking that travels with the result, which is the part a page depends on.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -811,7 +812,9 @@ def test_the_browser_is_opened_only_when_asked(
     assert "ctrl-c to stop" in result.output
 
 
-def _serve_with(monkeypatch: pytest.MonkeyPatch, ui: Any, **over: Any) -> Any:
+def _serve_with(
+    monkeypatch: pytest.MonkeyPatch, ui: Any, extra: list[str] | None = None, **over: Any
+) -> Any:
     """Start `map serve` with every adapter stubbed and return the server Config."""
     from typer.testing import CliRunner
 
@@ -856,7 +859,7 @@ def _serve_with(monkeypatch: pytest.MonkeyPatch, ui: Any, **over: Any) -> Any:
     for name, value in {**defaults, **over}.items():
         monkeypatch.setattr(command, name, value)
     monkeypatch.setattr(command.ModelRegistry, "resolve_all", lambda _self, _m: {})
-    CliRunner().invoke(app, ["serve", "--ui-dir", str(ui), "--no-open"])
+    CliRunner().invoke(app, ["serve", "--ui-dir", str(ui), "--no-open", *(extra or [])])
     return captured[0] if captured else None
 
 
@@ -974,3 +977,129 @@ def test_the_price_date_is_the_last_session_not_the_run_date() -> None:
         )["price_date"]
         is None
     )
+
+
+def test_serve_can_be_made_incapable_of_touching_the_journal(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Findings #63. An intercept that stops matching fails open, so the screenshot
+    server is given fixtures and a temporary runs directory: a missed intercept then
+    produces a fixture answer written somewhere that is deleted afterwards."""
+    from typer.testing import CliRunner
+
+    from mapf.cli.app import app
+    import mapf.cli.commands.serve as command
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    captured: list[Any] = []
+
+    class _Server:
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            return None
+
+    monkeypatch.setattr(command, "build", lambda c: (captured.append(c), _Server())[1])
+    result = CliRunner().invoke(
+        app,
+        [
+            "serve",
+            "--ui-dir",
+            str(ui),
+            "--no-open",
+            "--fixtures",
+            str(tmp_path / "fx"),
+            "--runs-dir",
+            str(tmp_path / "runs"),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    # Loudly, so a server that cannot make a real forecast is not mistaken for one.
+    assert "NOT A REAL ANALYSIS SERVER" in result.output
+    assert str(tmp_path / "runs") in result.output
+
+
+def test_a_plain_serve_says_nothing_about_fixtures(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from mapf.cli.app import app
+    import mapf.cli.commands.serve as command
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+
+    class _Server:
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            return None
+
+    monkeypatch.setattr(command, "build", lambda _c: _Server())
+    result = CliRunner().invoke(app, ["serve", "--ui-dir", str(ui), "--no-open"])
+    assert "NOT A REAL ANALYSIS SERVER" not in result.output
+    assert "every analysis is a real run" in result.output
+
+
+def test_a_redirected_runs_dir_is_where_the_run_lands(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The redirect is the half that makes a missed intercept harmless: fixtures
+    stop a real model call, and this stops the record."""
+    import json
+    from typer.testing import CliRunner
+
+    from mapf.cli.app import app
+    import mapf.cli.commands.serve as command
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    (ui / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    real = tmp_path / "real-runs"
+    real.mkdir()
+    redirected = tmp_path / "throwaway"
+
+    class _Result:
+        forecast = _Forecast()
+        window = _Window()
+
+    # A real dataclass, because the command redirects with `dataclasses.replace`
+    # and the production `Wiring` is one. A plain class here would have made the
+    # test fail for a reason the code does not have.
+    @dataclass(frozen=True)
+    class _Wiring:
+        runs_dir: Any
+        agents: Any = None
+        market: Any = None
+        dividends: Any = None
+        trace: Any = None
+        allow_nondeterministic: bool = False
+
+    seen: list[Any] = []
+
+    def _execute(request: Any, **kw: Any) -> Any:
+        # Whatever directory the command handed the trace watcher is where a real
+        # run would write, so that is what this records.
+        seen.append(kw.get("runs_dir"))
+        directory = kw["runs_dir"] / str(request.run_id)
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "trace.jsonl").write_text(
+            json.dumps({"stage": "intake", "cache_hit": True}) + "\n", encoding="utf-8"
+        )
+        return _Result()
+
+    config = _serve_with(
+        monkeypatch,
+        ui,
+        build_run=lambda *_a, **_k: _Wiring(runs_dir=real),
+        execute=_execute,
+        extra=["--runs-dir", str(redirected)],
+    )
+    list(config.analyse("AAPL", 5))
+
+    assert seen == [redirected], "the run was written to the throwaway directory"
+    assert not any(real.iterdir()), "and nothing reached the real one"
