@@ -4,9 +4,11 @@
 running locally, read a company's earnings filing and forecast its share price five
 trading days out — as a distribution, not a single number. Each forecast was then scored
 against what the price actually did. The corpus was frozen before any forecast on it was
-made, each test was fixed before its result existed, every result is reported, and the
-headline is negative: **it does not beat a plain random walk or GARCH on the development
-companies.**
+made. The development half was explored first; the tests that decide anything — the
+leakage comparison, the replications on a second band and the one-shot holdout — were
+written down before their results existed. Every result is reported, failures included,
+and the headline is negative: **it does not beat a plain random walk or GARCH on the
+development companies.**
 
 **[→ Open the app](PLACEHOLDER_URL)** — the run journal and the scored results, every
 figure marked with where it came from.
@@ -31,7 +33,9 @@ invalid tokens unreachable, so model intelligence is not what makes the output v
 
 The scenarios become a Monte Carlo distribution. That is scored against the realised
 close with CRPS, log score and Brier, against three baselines — a random walk, a GARCH
-fit, and a random walk widened for earnings days.
+fit, and a random walk widened for earnings days — all three committed on 2026-08-15,
+before anything was scored, and last changed on 2026-08-30, before the first result on
+2026-09-02.
 
 **All inference is local.** No data goes to a third-party model provider. This is *not*
 "100% offline": prices come from Yahoo Finance and filings from SEC EDGAR, and those
@@ -48,8 +52,8 @@ models on it**; the published site is static files and says so.
 Most live fans are drawn **raw and marked uncalibrated**. The correction below was tested
 on a panel — five sessions, anchored within one trading day of a filing, companies the
 corpus filters accept — so it is applied only where all three hold, and the screen names
-whichever does not. Even then the run is not one of the frozen panel's items: applying
-the correction is defensible, not verified. [ADR 0036](decisions/0036-live-analysis.md).
+whichever does not. Even then the run is not one of the frozen corpus's forecasts:
+applying the correction is defensible, not verified. [ADR 0036](decisions/0036-live-analysis.md).
 
 ---
 
@@ -132,22 +136,23 @@ A forecasting system that cannot be scored is not a forecasting system. Most of 
 here is in making the claims falsifiable and then letting them fail:
 
 - **The corpus was frozen before any forecast on it was made** — 120 tickers and 727
-  forecasts at commit `36e08a3`, 2026-08-14 11:41 UTC, *"FREEZE THE CORPUS --
+  forecasts at commit `36e08a3`, 2026-08-14 12:41 (+0100), *"FREEZE THE CORPUS --
   pre-registration artifact"*. *Not* before any inference: the pipeline was built and
   exercised on sample documents from 2026-08-11. One of those runs, `266aa3ba`, predates
   the manifest format and cannot be read; four others — AAPL, made on 2026-08-12 and
   2026-08-13 — are in the run journal, marked outside the corpus, and in no scored
   population.
 - **Membership was amended once, the same day, before any forecast on the corpus** —
-  commit `96ad926`, 16:46 UTC, five hours after the freeze. A pre-flight fetch found **30
+  commit `96ad926`, 2026-08-14 17:46 (+0100), five hours after the freeze. A pre-flight fetch found **30
   of 727 items had no usable Exhibit 99.1**, over the 2% failure allowance. `BRK-A` was
   dropped as a duplicate CIK with `BRK-B`, and `GEN` for carrying no EX-99.1 on any filing;
   `CG` and `WULF` replaced them from the seeded ordering. **727 forecasts → 709.** This
   applied the pre-registered replacement rule rather than a new one: how a company attaches
   its release is a fixed property of how it files. [ADR 0018](decisions/0018-corpus-band-and-panel-shape.md)
   records the amendment as preceding "all inference", which here means all inference on
-  the corpus, and heads the section 2026-08-15 although both commits are dated the 14th.
-  `36e08a3` was kept rather than rewritten, so the pair shows what was known when.
+  the corpus; a dated erratum at its end corrects the section's heading, which says
+  2026-08-15. `36e08a3` was kept rather than rewritten, so the pair shows what was known
+  when.
 - **Later amendments changed how items were run, not which items.** The 779 runs made
   before live analysis span **four freeze versions**, and 68 predate the field that
   records one. Each item carries a `freeze_digest` over only the fields governing *what a

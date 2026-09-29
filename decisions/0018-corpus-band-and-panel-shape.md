@@ -467,3 +467,18 @@ The frozen record now also carries the two things it was missing: **accession nu
 and the **content hash of every exhibit**. Until this amendment there were no per-item hashes at all,
 only prompt-template and ticker-ordering digests, so the claim that the corpus is "a list of
 identifiers plus content hashes" was not yet true. It is now.
+
+---
+
+## Erratum, 2026-09-29 — the date of the amendment
+
+The section above headed **"Amendment, 2026-08-15"** is misdated. It was committed on
+**2026-08-14 at 17:45** (`3e16106`), and the amendment it describes was committed a
+minute later, **2026-08-14 at 17:46** (`96ad926`) — the same day as the freeze
+(`36e08a3`, 12:41), not the next. All three times are the commits' own author dates, in
++0100, as `git show` prints them.
+
+The heading is left as it was written. The substance is unaffected: the amendment still
+precedes every forecast on the corpus. Where that section says it "precedes all
+inference", it means all inference on the corpus; development runs on sample documents
+had been made since 2026-08-11 and are recorded in the README.
