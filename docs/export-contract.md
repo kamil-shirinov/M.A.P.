@@ -112,7 +112,8 @@ runs shows 701 and misstates the corpus.
 | `document_is_frozen_exhibit` | bool \| null | Whether this run's document hash matches an exhibit in `frozen.json`. **null = not checked.** |
 | `corpus_relation` | see §3 | Where the run stands to the pre-registered panel. **Use this, not the two fields above.** |
 | `ledger_item` | object \| null | `{ticker, band, filing_date}` — present only when `corpus_relation` is `ledger_item`. |
-| `anchor_drift` | object \| null | Set when the snapshot's close at the anchor disagrees with `anchor_spot`. See §4a. |
+| `price_kind` | `"close"` \| `"intraday"` \| `"unknown"` | Whether `anchor_spot` was a settled close or a quote taken while the session was still trading. Decided from what the run recorded: a `fetched_on` later than the price bar proves the bar had settled; a same-day fetch is judged from the run's own `as_of` against 16:30 New York. **Not from `as_of` alone** — corpus runs carry a synthetic `as_of` at 00:00 UTC on the bar's date, the evening before that session opened. Three runs are `intraday`. Added in 1.3.0. |
+| `anchor_drift` | object \| null | Set when the snapshot's close at the anchor disagrees with `anchor_spot`, with a `cause`. See §4a. |
 | `outcome` | object \| null | The realised close. Present only when `outcome_status` is `closed`. |
 | `outcome_status` | see §4 | Why there is or is not an outcome. |
 
@@ -310,16 +311,26 @@ hold its outcome — the bar did not exist when the run was written. Show it as
 ## 4a. `anchor_drift` — the snapshot disagrees with the run
 
 ```json
-"anchor_drift": { "recorded_spot": 185.0, "snapshot_close": 182.806, "ratio": 0.988142 }
+"anchor_drift": { "recorded_spot": 185.0, "snapshot_close": 182.806, "ratio": 0.988142,
+                  "cause": "corporate_action" }
 ```
 
-`null` on 770 of 779 runs. Present on **9**, where the close at the anchor in the pinned
-snapshot is not the price the forecast was produced from — 7 SCCO (the corpus holds a
-1.012 split, so ≈0.988142) and 2 AAPL (≈1.007509).
+`null` on all but **9** runs, where the close at the anchor in the pinned snapshot is not
+the price the forecast was produced from.
+
+**`cause` says why, and there are two.** `corporate_action`: the run read a settled close,
+and a later adjustment re-based the series — 7 SCCO, one factor, ≈0.988142.
+`intraday_anchor`: the run read a bar whose session was still trading, so its price
+never was a close — 2 AAPL, made at 13:02 and 13:11 New York time on 2026-08-13, one
+factor (≈1.007509) because they read the same unfinished bar nine minutes apart.
+`unknown` when the run did not record enough to tell. Added in 1.3.0; **before it,
+every consumer inferred "corporate action" from the fact of a ratio**, and all nine
+were labelled that way. The cause comes from the row's `price_kind`, never from the
+size of the ratio.
 
 **`ratio` is not a groupable key.** It is computed per run from that run's own recorded
 spot, and both sides are float32 off the wire, so the nine rows carry **seven distinct
-float values** for **two** corporate actions:
+float values** for **two** events of two different kinds:
 
 ```
 SCCO  0.9881423249262894   0.9881423325818092   0.9881423105034546
@@ -327,12 +338,13 @@ SCCO  0.9881423249262894   0.9881423325818092   0.9881423105034546
 AAPL  1.007508703480546  (both rows)
 ```
 
-Grouping on equality gives seven groups where there are two events. **Group on `ticker`,
-or round** — six decimal places collapses these nine rows to the two values above.
+Grouping on equality gives seven groups where there are two events. **Group on `ticker`
+and `cause`, or round** — six decimal places collapses these nine rows to the two values
+above. The app groups on ticker and cause, because a ticker could carry both kinds.
 Display the same way: `×0.988142`, not the full float.
 
-**Scoring refuses these items.** A return whose endpoints come from two adjustment bases
-is wrong while every individual number stays plausible, so `SpotDriftError` fires and the
+**Scoring refuses these items, whatever the cause.** A return whose endpoints come from two
+different prices is wrong while every individual number stays plausible, so `SpotDriftError` fires and the
 item is not scored. The three SCCO clean/dev items are exactly the `"unscored":
 {"SpotDriftError": 3}` in the scoring record, and **SCCO appears nowhere among the 175
 scored items**.
