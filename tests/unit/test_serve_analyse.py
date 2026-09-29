@@ -7,7 +7,7 @@ marking that travels with the result, which is the part a page depends on.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from typing import Any
@@ -75,7 +75,9 @@ def _exhibit(**over: Any) -> Exhibit:
 
 
 def _wiring(**over: Any) -> Wiring:
-    def execute_run(_t: str, _h: int, _e: Exhibit) -> Iterator[dict[str, object]]:
+    def execute_run(
+        _t: str, _h: int, _e: Exhibit
+    ) -> Generator[dict[str, object], None, tuple[str, object, object]]:
         yield {"event": "progress", "stage": "intake", "detail": ""}
         yield {"event": "progress", "stage": "analyst", "detail": ""}
         yield {"event": "progress", "stage": "structuralist", "detail": ""}
@@ -93,6 +95,20 @@ def _wiring(**over: Any) -> Wiring:
 
 def _stream(**over: Any) -> list[dict[str, object]]:
     return list(run_analysis("AAPL", 5, wiring=_wiring(**over), typical_seconds=397))
+
+
+def _listed(line: dict[str, object], key: str) -> list[Any]:
+    value = line[key]
+    assert isinstance(value, list)
+    return value
+
+
+def _capture(captured: list[Any], server: Any) -> Any:
+    def build(config: Any) -> Any:
+        captured.append(config)
+        return server
+
+    return build
 
 
 # --- the stream ----------------------------------------------------------------
@@ -161,19 +177,19 @@ def test_an_illiquid_company_is_amber_with_the_reason_shown() -> None:
     result = _stream(liquidity=lambda _t, _s, _e: 1.0e6)[-1]
     assert result["corrected"] is False
     assert result["marking"] == "uncalibrated"
-    assert any("illiquid" in str(r) for r in result["reasons"])
+    assert any("illiquid" in str(r) for r in _listed(result, "reasons"))
 
 
 def test_an_unknown_liquidity_refuses_rather_than_passing() -> None:
     result = _stream(liquidity=lambda _t, _s, _e: None)[-1]
     assert result["corrected"] is False
-    assert any("no_price_history" in str(r) for r in result["reasons"])
+    assert any("no_price_history" in str(r) for r in _listed(result, "reasons"))
 
 
 def test_a_ticker_with_no_cik_is_amber() -> None:
     result = _stream(symbol=lambda _t: None)[-1]
     assert result["corrected"] is False
-    assert any("no_cik" in str(r) for r in result["reasons"])
+    assert any("no_cik" in str(r) for r in _listed(result, "reasons"))
 
 
 def test_a_stale_filing_is_amber_because_the_anchor_is_too_far_out() -> None:
@@ -185,7 +201,7 @@ def test_a_stale_filing_is_amber_because_the_anchor_is_too_far_out() -> None:
         run_analysis("AAPL", 5, wiring=_wiring(fetch_exhibit=lambda _t: old), typical_seconds=397)
     )[-1]
     assert result["corrected"] is False
-    assert any("trading days after one" in str(r) for r in result["reasons"])
+    assert any("trading days after one" in str(r) for r in _listed(result, "reasons"))
 
 
 def test_the_longer_periods_are_offered_and_always_amber() -> None:
@@ -193,7 +209,7 @@ def test_the_longer_periods_are_offered_and_always_amber() -> None:
     for horizon in (10, 21):
         result = list(run_analysis("AAPL", horizon, wiring=_wiring(), typical_seconds=397))[-1]
         assert result["corrected"] is False
-        assert any(f"and this is {horizon}" in str(r) for r in result["reasons"])
+        assert any(f"and this is {horizon}" in str(r) for r in _listed(result, "reasons"))
 
 
 def test_the_marking_is_in_the_same_object_as_the_numbers() -> None:
@@ -237,11 +253,11 @@ def test_an_unreadable_freeze_leaves_the_relation_unchecked(tmp_path: Any) -> No
 def test_the_real_freeze_relates_aapls_latest_filing_as_a_repeat() -> None:
     """The case that prompted this: the company page claimed a live run always
     reads something newer than the table above it, and for AAPL it does not."""
-    from pathlib import Path as P
+    from pathlib import Path
 
     from mapf.serve.analyse import Freeze
 
-    freeze = Freeze.load(P("corpus/frozen.json"))
+    freeze = Freeze.load(Path("corpus/frozen.json"))
     assert freeze.relate(document_id=None, accession="0000320193-26-000018") == "repeat_of_exhibit"
     assert freeze.relate(document_id=None, accession="9999999999-99-999999") == "outside_corpus"
 
@@ -308,9 +324,9 @@ def test_the_result_line_reports_all_three_scenarios_with_their_weights() -> Non
         ),
         correction=_Correction(),
     )
-    names = [s["name"] for s in line["scenarios"]]  # type: ignore[index]
+    names = [s["name"] for s in _listed(line, "scenarios")]
     assert names == ["bullish", "base_case", "bearish"]
-    assert sum(s["weight"] for s in line["scenarios"]) == pytest.approx(1.0)  # type: ignore[index]
+    assert sum(s["weight"] for s in _listed(line, "scenarios")) == pytest.approx(1.0)
 
 
 def test_a_failed_screen_and_an_unevaluated_one_are_different_sentences() -> None:
@@ -469,11 +485,9 @@ def test_map_serve_wires_a_working_analysis(tmp_path: Any, monkeypatch: pytest.M
     monkeypatch.setattr(command, "build_symbol_index", lambda _s: _Stub())
     monkeypatch.setattr(command, "build_run", lambda *_a, **_k: _Wiring())
     monkeypatch.setattr(command, "execute", _execute)
-    monkeypatch.setattr(command.ModelRegistry, "resolve_all", lambda _self, _m: {})
+    monkeypatch.setattr("mapf.cli.commands.serve.ModelRegistry.resolve_all", lambda _self, _m: {})
     monkeypatch.setattr(command, "MarketLiquidity", lambda _m: _Stub())
-    monkeypatch.setattr(
-        command, "webbrowser", type("W", (), {"open": staticmethod(lambda _u: None)})
-    )
+    monkeypatch.setattr("mapf.cli.commands.serve.webbrowser.open", lambda _u: None)
 
     class _Server:
         def serve_forever(self) -> None:
@@ -693,7 +707,7 @@ def test_a_failing_run_propagates_rather_than_reporting_an_empty_forecast(
     monkeypatch.setattr(command, "MarketLiquidity", lambda _m: _Stub())
     monkeypatch.setattr(command, "build_run", lambda *_a, **_k: _Wiring())
     monkeypatch.setattr(command, "execute", _boom)
-    monkeypatch.setattr(command.ModelRegistry, "resolve_all", lambda _self, _m: {})
+    monkeypatch.setattr("mapf.cli.commands.serve.ModelRegistry.resolve_all", lambda _self, _m: {})
 
     class _Server:
         def serve_forever(self) -> None:
@@ -702,7 +716,7 @@ def test_a_failing_run_propagates_rather_than_reporting_an_empty_forecast(
         def server_close(self) -> None:
             return None
 
-    monkeypatch.setattr(command, "build", lambda c: (captured.append(c), _Server())[1])
+    monkeypatch.setattr(command, "build", _capture(captured, _Server()))
     CliRunner().invoke(app, ["serve", "--ui-dir", str(ui), "--no-open"])
 
     with pytest.raises(RuntimeError, match="the analyst never answered"):
@@ -767,7 +781,7 @@ def test_a_market_failure_leaves_the_screen_unevaluated_not_passed(
         ("execute", lambda *_a, **_k: _Result()),
     ):
         monkeypatch.setattr(command, name, value)
-    monkeypatch.setattr(command.ModelRegistry, "resolve_all", lambda _self, _m: {})
+    monkeypatch.setattr("mapf.cli.commands.serve.ModelRegistry.resolve_all", lambda _self, _m: {})
 
     class _Server:
         def serve_forever(self) -> None:
@@ -776,12 +790,12 @@ def test_a_market_failure_leaves_the_screen_unevaluated_not_passed(
         def server_close(self) -> None:
             return None
 
-    monkeypatch.setattr(command, "build", lambda c: (captured.append(c), _Server())[1])
+    monkeypatch.setattr(command, "build", _capture(captured, _Server()))
     CliRunner().invoke(app, ["serve", "--ui-dir", str(ui), "--no-open"])
 
     result = list(captured[0].analyse("AAPL", 5))[-1]
     assert result["corrected"] is False
-    assert any("no_price_history" in str(r) for r in result["reasons"])
+    assert any("no_price_history" in str(r) for r in _listed(result, "reasons"))
 
 
 def test_the_browser_is_opened_only_when_asked(
@@ -804,7 +818,7 @@ def test_the_browser_is_opened_only_when_asked(
             return None
 
     monkeypatch.setattr(command, "build", lambda _c: _Server())
-    monkeypatch.setattr(command.webbrowser, "open", lambda url: opened.append(url))
+    monkeypatch.setattr("mapf.cli.commands.serve.webbrowser.open", opened.append)
 
     result = CliRunner().invoke(app, ["serve", "--ui-dir", str(ui)])
     assert result.exit_code == 0
@@ -854,11 +868,11 @@ def _serve_with(
         "build_market_data": lambda _s: _Stub(),
         "build_symbol_index": lambda _s: _Stub(),
         "MarketLiquidity": lambda _m: _Stub(),
-        "build": lambda c: (captured.append(c), _Server())[1],
+        "build": _capture(captured, _Server()),
     }
     for name, value in {**defaults, **over}.items():
         monkeypatch.setattr(command, name, value)
-    monkeypatch.setattr(command.ModelRegistry, "resolve_all", lambda _self, _m: {})
+    monkeypatch.setattr("mapf.cli.commands.serve.ModelRegistry.resolve_all", lambda _self, _m: {})
     CliRunner().invoke(app, ["serve", "--ui-dir", str(ui), "--no-open", *(extra or [])])
     return captured[0] if captured else None
 
@@ -987,8 +1001,8 @@ def test_serve_can_be_made_incapable_of_touching_the_journal(
     produces a fixture answer written somewhere that is deleted afterwards."""
     from typer.testing import CliRunner
 
-    from mapf.cli.app import app
     import mapf.cli.commands.serve as command
+    from mapf.cli.app import app
 
     ui = tmp_path / "ui"
     ui.mkdir()
@@ -1001,7 +1015,7 @@ def test_serve_can_be_made_incapable_of_touching_the_journal(
         def server_close(self) -> None:
             return None
 
-    monkeypatch.setattr(command, "build", lambda c: (captured.append(c), _Server())[1])
+    monkeypatch.setattr(command, "build", _capture(captured, _Server()))
     result = CliRunner().invoke(
         app,
         [
@@ -1026,8 +1040,8 @@ def test_a_plain_serve_says_nothing_about_fixtures(
 ) -> None:
     from typer.testing import CliRunner
 
-    from mapf.cli.app import app
     import mapf.cli.commands.serve as command
+    from mapf.cli.app import app
 
     ui = tmp_path / "ui"
     ui.mkdir()
@@ -1051,10 +1065,6 @@ def test_a_redirected_runs_dir_is_where_the_run_lands(
     """The redirect is the half that makes a missed intercept harmless: fixtures
     stop a real model call, and this stops the record."""
     import json
-    from typer.testing import CliRunner
-
-    from mapf.cli.app import app
-    import mapf.cli.commands.serve as command
 
     ui = tmp_path / "ui"
     ui.mkdir()

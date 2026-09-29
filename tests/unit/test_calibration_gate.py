@@ -14,6 +14,7 @@ import pytest
 
 from mapf.eval.calibration import (
     COMPANY_SCREENS,
+    Applicability,
     CalibrationError,
     Correction,
     applicability,
@@ -24,7 +25,7 @@ from mapf.eval.calibration import (
 SPEND = Path(__file__).parents[2] / "corpus" / "holdout_spend.jsonl"
 
 
-def _ok(**over: object) -> object:
+def _ok(**over: object) -> Applicability:
     base: dict[str, object] = {"horizon_days": 5, "anchor_lag_sessions": 1}
     return applicability(**{**base, **over})  # type: ignore[arg-type]
 

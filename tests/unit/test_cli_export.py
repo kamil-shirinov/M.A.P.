@@ -1100,7 +1100,6 @@ def test_the_last_row_for_a_filer_is_the_one_the_funnel_reads() -> None:
 def _identities(tmp_path: Path) -> dict[str, tuple[object, object]]:
     """What `--check` compares: the export's stamps against this checkout's."""
     from mapf.cli.commands.export import _exported_identity, _live_identity
-
     from mapf.settings.loader import load
 
     manifest = _read(tmp_path, "manifest.json")
@@ -1253,9 +1252,9 @@ def test_a_replay_whose_forecast_cannot_be_read_still_exports_the_row(
 
     journal = read_journal(tmp_path / "runs", snapshot=None, today=datetime.now(UTC).date())
     sizes: dict[str, int] = {}
-    name = _write_replay(tmp_path / "out", journal, sizes, tmp_path / "elsewhere")
+    written = _write_replay(tmp_path / "out", journal, sizes, tmp_path / "elsewhere")
 
-    assert name == "live/replay.json"
+    assert written == "live/replay.json"
     row = json.loads((tmp_path / "out" / "live" / "replay.json").read_text())
     assert row["run_id"] == REPLAY_RUN_ID
     assert row["band"] == []
