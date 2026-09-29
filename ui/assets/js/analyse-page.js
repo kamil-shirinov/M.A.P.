@@ -197,16 +197,21 @@ function renderResult(host, event) {
   head.append(chrome(tag, "how this run relates to the frozen corpus"));
   /* Both dates, because they are not always the same one. A run made before a
      session closes anchors on the previous close, so saying only "anchored
-     2026-09-29" invites reading a 09-28 price as that day's. */
-  head.append(chromeText(`anchored ${event.anchor}`, "the date the run was made"));
+     2026-09-29" invites reading a 09-28 price as that day's.
+
+     In ONE element: the head is a space-between row, and three children flung the
+     price clause to the far margin where it read as an unrelated fragment. */
+  const when = el("span", "anl-when");
+  when.append(chromeText(`anchored ${event.anchor}`, "the date the run was made"));
   if (event.price_date && event.price_date !== event.anchor) {
-    head.append(chromeText(
+    when.append(chromeText(
       ` · price is the ${event.price_date} close`,
       "the session the anchor price is the close of",
     ));
   } else if (event.price_date) {
-    head.append(chromeText(" · at that day's close", "the session the anchor price is the close of"));
+    when.append(chromeText(" · at that day's close", "the session the anchor price is the close of"));
   }
+  head.append(when);
   host.append(head);
 
   const marking = el("div", "anl-marking-host");
