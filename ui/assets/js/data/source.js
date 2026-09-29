@@ -425,13 +425,18 @@ function adaptRun(run) {
     arm: run.arm,
     // Present only when `corpus_relation` is "ledger_item".
     ledger_item: run.ledger_item ?? absent(NOT_APPLICABLE, "this run is not a panel item"),
+    // Whether `anchor_spot` was a settled close or a live quote, as the journal
+    // decided it from what the run recorded. Absent on an export before 1.3.0.
+    price_kind: run.price_kind ?? "unknown",
     anchor_drift: run.anchor_drift
       ? {
           recorded_spot: figure(run.anchor_drift.recorded_spot, MEASURED, "price"),
           snapshot_close: figure(run.anchor_drift.snapshot_close, MEASURED, "price"),
-          // Six places. The nine drifted rows carry seven distinct floats for two
-          // corporate actions, so the raw value is not a key — group on ticker.
+          // Six places. The raw ratios differ in the ninth, so the value is not a
+          // key — group on ticker and cause.
           ratio: figure(run.anchor_drift.ratio, MEASURED, "ratio"),
+          // WHY they disagree, which the ratio alone cannot say. See DRIFT_CAUSES.
+          cause: run.anchor_drift.cause ?? "unknown",
         }
       : absent(NOT_APPLICABLE, "the snapshot agrees with the price this run opened from"),
     outcome_status: run.outcome_status,
@@ -774,11 +779,43 @@ export function describeOutcome(run) {
   ];
 }
 
+/* Why a run's recorded price and the snapshot's close disagree. ONE table, and
+   every screen takes its words from it, because there are two causes and they are
+   not interchangeable.
+
+   A corporate action re-bases every close before it, so a price that WAS a close
+   no longer matches the series: SCCO, seven runs, one factor. A price read while
+   the session was still trading never was a close, and the settled bar disagrees
+   with it from the start: two AAPL runs at 13:02 and 13:11, which is why they
+   share one factor — they read the same unfinished bar nine minutes apart. Every
+   screen called all nine "re-based by a corporate action", from the ratio alone.
+
+   `short` is for a tag or a legend; `long` begins the sentence in a run's detail. */
+export const DRIFT_CAUSES = {
+  corporate_action: {
+    short: "re-based",
+    long: "The price series was re-based after this run, by a corporate action",
+  },
+  intraday_anchor: {
+    short: "priced before the close",
+    long: "This run's price was taken while the market was still open, so it was never a close",
+  },
+  unknown: {
+    short: "price differs",
+    long: "The snapshot's close differs from the price this run recorded",
+  },
+};
+
+export function driftCause(run) {
+  if (isAbsent(run.anchor_drift)) return null;
+  return DRIFT_CAUSES[run.anchor_drift.cause] ?? DRIFT_CAUSES.unknown;
+}
+
 export function describeDrift(run) {
   if (isAbsent(run.anchor_drift)) return [];
   const d = run.anchor_drift;
   return [
-    text("The price series has been re-based since this run: the snapshot closes "),
+    text(`${driftCause(run).long}: the snapshot closes `),
     fig(d.snapshot_close),
     text(" at this anchor against "),
     fig(d.recorded_spot),

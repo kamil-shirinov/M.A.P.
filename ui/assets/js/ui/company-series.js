@@ -23,7 +23,7 @@
    anchor and nothing else. */
 
 import { DERIVED, chromeText, figure, renderFigure, MEASURED } from "../lib/figure.js";
-import { isAbsent } from "../data/source.js";
+import { DRIFT_CAUSES, isAbsent } from "../data/source.js";
 import { draw, prefersReducedMotion } from "../lib/motion.js";
 
 const NS = "http://www.w3.org/2000/svg";
@@ -281,7 +281,14 @@ function legend(rows) {
     ["cmp-anchor", "run, anchor to outcome"],
     ["cmp-dot--outcome", "outcome close"],
   ];
-  if (rows.some((r) => !isAbsent(r.anchor_drift))) items.push(["cmp-anchor--drift", "re-based anchor"]);
+  /* Named by cause. AAPL's two marks were labelled "re-based anchor" and were
+     never re-based: they were priced at 13:02 and 13:11 on a session still
+     trading. One legend entry per cause actually on this page. */
+  const causes = new Set(rows.filter((r) => !isAbsent(r.anchor_drift)).map((r) => r.anchor_drift.cause));
+  for (const cause of causes) {
+    const label = (DRIFT_CAUSES[cause] ?? DRIFT_CAUSES.unknown).short;
+    items.push(["cmp-anchor--drift", cause === "corporate_action" ? "re-based anchor" : `anchor ${label}`]);
+  }
   if (rows.some((r) => r.outcome_status === "window_open")) items.push(["cmp-anchor--open", "open window"]);
 
   const ul = document.createElement("ul");

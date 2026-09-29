@@ -35,7 +35,7 @@ import json
 from collections import Counter
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -44,6 +44,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from mapf.core.models import Forecast, PriceWindow
 from mapf.core.ports import PriceSnapshotIndex
+from mapf.core.sessions import session_has_settled
 from mapf.eval.window import (
     SPOT_TOLERANCE,
     ScoringError,
@@ -97,6 +98,11 @@ class _StoredPrices(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     last_trading_date: date
+    # A lower bound on when the price was read, not a timestamp. #39 showed the
+    # corpus manifests carry a label here rather than the real fetch day — but the
+    # label precedes the real fetch, so a label later than the price bar still
+    # proves the bar had settled.
+    fetched_on: date | None = None
 
 
 class StoredManifest(BaseModel):
@@ -143,15 +149,54 @@ class ScenarioLine:
 OutcomeStatus = Literal["closed", "window_open", "absent_from_snapshot", "not_requested"]
 
 
+PriceKind = Literal["close", "intraday", "unknown"]
+DriftCause = Literal["intraday_anchor", "corporate_action", "unknown"]
+
+
+def price_kind(*, as_of: datetime, price_bar: date, fetched_on: date | None) -> PriceKind:
+    """Whether a run's `spot_price` was a settled close or a live quote.
+
+    From what the run RECORDED, never from the run's date alone:
+
+      fetched later than the bar   `close`. The next UTC day begins at 19:00 or
+                                   20:00 in New York, after the 16:30 settle.
+                                   Every corpus run is here — its `as_of` sits at
+                                   00:00 UTC on the bar's own date, which is the
+                                   evening BEFORE that session opened, so judging
+                                   by `as_of` would call all 701 of them intraday.
+      fetched the same day         only a live run, whose `as_of` is the real wall
+                                   clock it started at. Compared with 16:30 New
+                                   York on the bar's date.
+      anything else                `unknown`, rather than a guess.
+
+    Findings #64: two AAPL runs made at 13:02 and 13:11 and one KO run at 15:52
+    all anchored on bars that were still trading.
+    """
+    if fetched_on is None:
+        return "unknown"
+    if fetched_on > price_bar:
+        return "close"
+    if fetched_on == price_bar:
+        return "close" if session_has_settled(as_of, session=price_bar) else "intraday"
+    return "unknown"
+
+
 @dataclass(frozen=True)
 class AnchorDrift:
     """The snapshot disagrees with the price the forecast was produced from.
 
-    A corporate action applied after the run — the corpus holds one, a 1.012 split
-    — re-bases every prior close, so the anchor bar in a later snapshot is not the
-    bar the forecast opened on. Scoring refuses an item in this state
-    (`SpotDriftError`), because a return whose endpoints come from two adjustment
-    bases is wrong while every individual number stays plausible.
+    TWO CAUSES, and they are not interchangeable. A corporate action applied after
+    the run re-bases every prior close, so a settled anchor no longer matches the
+    series — SCCO's seven runs, one uniform factor. An anchor read while its
+    session was still trading never was a close, so the settled bar disagrees with
+    it from the start — two AAPL runs at 13:02 and 13:11, one factor between them
+    because they read the same unfinished bar nine minutes apart. The first is a
+    fact about the series; the second is a fact about the run. `cause` says which,
+    from `price_kind`, so no screen has to guess from the size of the ratio.
+
+    Scoring refuses an item in this state (`SpotDriftError`) whatever the cause,
+    because a return whose endpoints come from two different prices is wrong while
+    every individual number stays plausible.
 
     **Named for what it checks, not for what scoring does about it.** "Scoring
     declined this" would be false for the three drifted runs no scoring pass ever
@@ -166,6 +211,7 @@ class AnchorDrift:
     recorded_spot: float
     snapshot_close: float
     ratio: float
+    cause: DriftCause = "unknown"
 
 
 @dataclass(frozen=True)
@@ -216,6 +262,9 @@ class JournalEntry:
     company_name: str | None
     anchor_date: date
     anchor_spot: float
+    # Recorded by the reader from what the run itself wrote down, not derived from
+    # its outcome: whether `anchor_spot` was a settled close or a live quote.
+    price_kind: PriceKind
     horizon_days: int
     scenarios: tuple[ScenarioLine, ...]
     document_source: Source
@@ -366,7 +415,9 @@ def _scenarios(forecast: Forecast) -> tuple[ScenarioLine, ...]:
     )
 
 
-def _drift(window: PriceWindow, anchor: date, spot: float) -> AnchorDrift | None:
+def _drift(
+    window: PriceWindow, anchor: date, spot: float, kind: PriceKind = "unknown"
+) -> AnchorDrift | None:
     """Whether the snapshot's anchor bar is the bar the forecast opened on.
 
     Two prices compared, which is not a score: nothing here reads a forecast's
@@ -377,11 +428,24 @@ def _drift(window: PriceWindow, anchor: date, spot: float) -> AnchorDrift | None
     bar = next((b for b in window.bars if b.date == anchor), None)
     if bar is None or abs(bar.close - spot) / spot <= SPOT_TOLERANCE:
         return None
-    return AnchorDrift(recorded_spot=spot, snapshot_close=bar.close, ratio=bar.close / spot)
+    cause: DriftCause = (
+        "intraday_anchor"
+        if kind == "intraday"
+        else "corporate_action"
+        if kind == "close"
+        else "unknown"
+    )
+    return AnchorDrift(
+        recorded_spot=spot, snapshot_close=bar.close, ratio=bar.close / spot, cause=cause
+    )
 
 
 def _outcome(
-    snapshot: PriceSnapshotIndex, forecast: Forecast, anchor: date, today: date
+    snapshot: PriceSnapshotIndex,
+    forecast: Forecast,
+    anchor: date,
+    today: date,
+    kind: PriceKind = "unknown",
 ) -> tuple[Outcome | None, OutcomeStatus, AnchorDrift | None]:
     """The close the horizon landed on, retrieved from the snapshot, and why not.
 
@@ -394,7 +458,7 @@ def _outcome(
     window: PriceWindow | None = snapshot.covering(forecast.ticker, anchor, anchor)
     if window is None:
         return None, "absent_from_snapshot", None
-    drift = _drift(window, anchor, forecast.spot_price)
+    drift = _drift(window, anchor, forecast.spot_price, kind)
     try:
         bar = realised_bar(window, anchor, forecast.horizon_days)
     except WindowNotClosedError:
@@ -460,10 +524,13 @@ def _entries(
         )
         item = None if ledger_items is None else ledger_items.get(run_id)
         relation = _relation(is_exhibit, item)
+        kind = price_kind(
+            as_of=forecast.as_of, price_bar=anchor, fetched_on=manifest.prices.fetched_on
+        )
         outcome, status, drift = (
             (None, "not_requested", None)
             if snapshot is None
-            else _outcome(snapshot, forecast, anchor, today)
+            else _outcome(snapshot, forecast, anchor, today, kind)
         )
         yield JournalEntry(
             run_id=run_id,
@@ -474,6 +541,7 @@ def _entries(
             # anchor is the bar the forecast actually opened from.
             anchor_date=anchor,
             anchor_spot=forecast.spot_price,
+            price_kind=kind,
             horizon_days=forecast.horizon_days,
             scenarios=_scenarios(forecast),
             document_source=manifest.document_source or "unknown",

@@ -103,15 +103,23 @@ const WHY = [
   {
     title: "Drift",
     notes: [
-      "The export carries the ratio and nothing else — no event, no size, no name. “A 1.012 split” " +
-        "is not in these files: it is 1 ÷ 0.988142, and a split is one of several corporate actions " +
-        "with that shape. The screen shows the measured ratio and, beside it, the derived inverse.",
+      "A run's recorded price can differ from the snapshot's close for two reasons, and each row " +
+        "says which. Re-based: a corporate action changed the series after the run, so a price " +
+        "that was a close no longer matches it — SCCO's seven runs share one factor. Priced before " +
+        "the close: the run read its price while the market was still open, so it never was a " +
+        "close — the two AAPL runs of 2026-08-13 were made at 13:02 and 13:11 New York time and " +
+        "share one factor because they read the same unfinished bar.",
+      "The cause comes from what each run recorded about when its price was fetched, not from " +
+        "the size of the ratio. A 0.75% factor is neither a split nor a plausible dividend, which " +
+        "is what gave AAPL away, but a rule that guessed causes from sizes would be wrong the " +
+        "first time a small dividend and a quiet afternoon produced the same number.",
+      "The export carries a ratio and no event: “a 1.012 split” is not in these files. For SCCO " +
+        "the screen shows the measured ratio and, beside it, the derived inverse, 1 ÷ 0.988142.",
       "freeze_version null means unrecorded, not “no freeze”: 68 runs predate the field.",
-      "The snapshot's anchor is not the price these runs used: a corporate action was applied to " +
-        "the series after the forecast was written. Their rows carry a red rule and the ratio, and " +
-        "their outcomes stay out of every figure that aggregates outcomes.",
-      "The raw ratios differ in the ninth place, so rows group on ticker and the ratio shows to " +
-        "six places. Selecting one sets the ticker filter below.",
+      "Either way, these rows carry a red rule and the ratio, and their outcomes stay out of " +
+        "every figure that aggregates outcomes.",
+      "The raw ratios differ in the ninth place, so rows group on ticker and cause, and the ratio " +
+        "shows to six places. Selecting one sets the ticker filter below.",
     ],
   },
   {

@@ -27,6 +27,11 @@ from zoneinfo import ZoneInfo
 # year and, worse, wrong in a way that only shows in March and November.
 EXCHANGE_TZ = ZoneInfo("America/New_York")
 REGULAR_CLOSE = time(16, 0)
+# The bell is not the close. The official closing price comes out of the closing
+# auction and can post several minutes after 16:00, and a provider's bar for the
+# day can keep moving until it does. Half an hour of margin costs a run made at
+# 16:10 its same-day anchor, which it had no business having anyway.
+SETTLED_AFTER = time(16, 30)
 
 
 class _Dated(Protocol):
@@ -34,21 +39,24 @@ class _Dated(Protocol):
     def date(self) -> date: ...
 
 
-def session_has_closed(when: datetime, *, session: date) -> bool:
-    """Has `session` finished, as of the instant `when`?
+def session_has_settled(when: datetime, *, session: date) -> bool:
+    """Is `session`'s close final, as of the instant `when`?
+
+    Final means 16:30 in New York, not 16:00: the bell ends trading, the closing
+    auction sets the price, and the price can reach a provider minutes later.
 
     `when` must be timezone-aware: a naive datetime here would be read in
     whatever zone the machine happens to sit in, which is the class of bug this
     module exists to remove rather than relocate.
     """
     if when.tzinfo is None:
-        raise ValueError("session_has_closed needs an aware datetime, not a local one")
+        raise ValueError("session_has_settled needs an aware datetime, not a local one")
     local = when.astimezone(EXCHANGE_TZ)
     if local.date() != session:
         # Any other day is either finished or has not started; both mean the bar
         # dated `session` is not the one being written into right now.
         return local.date() > session
-    return local.time() >= REGULAR_CLOSE
+    return local.time() >= SETTLED_AFTER
 
 
 def settled[Bar: _Dated](bars: Sequence[Bar], *, now: datetime) -> tuple[Bar, ...]:
@@ -61,6 +69,6 @@ def settled[Bar: _Dated](bars: Sequence[Bar], *, now: datetime) -> tuple[Bar, ..
     """
     if not bars:
         return ()
-    if session_has_closed(now, session=bars[-1].date):
+    if session_has_settled(now, session=bars[-1].date):
         return tuple(bars)
     return tuple(bars[:-1])

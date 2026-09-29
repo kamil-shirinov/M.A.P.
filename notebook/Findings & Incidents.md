@@ -2859,3 +2859,66 @@ no price was ever fetched, consistent everywhere, false everywhere.
 provider's state at a moment, and a moment is part of the value. Where the claim
 is "this is a close", the check is not on the number — it is on whether the thing
 that produces closes had finished producing that one.
+
+### Addendum — two more, and they were already labelled wrong
+
+Two AAPL runs anchored 2026-08-13 (`46cf0ac0`, `d8da0ae6`) were shown on every screen
+as **re-based by a corporate action**, factor ×1.007509. None of that fit. A 0.75%
+factor is not a split and is several times Apple's quarterly dividend; a real
+adjustment re-bases every earlier close, yet AAPL's panel runs and even its
+2026-08-11 runs showed no drift; and the two runs shared one spot, 302.985.
+
+They were made at **13:02 and 13:11 New York time** — mid-session, nine minutes
+apart, off the same unfinished bar. The settled close was 305.26. This is the same
+defect as the KO run above, found two weeks earlier, and explained away by the
+screens as something else.
+
+**The explaining-away is the part worth recording.** The export carried a ratio and
+nothing else, and every screen that met a ratio supplied a cause for it: the drift
+panel's title, its per-group label, the chart legend, the journal's detail heading
+and the disclosure all said "re-based" or "corporate action". Nothing had recorded
+the cause, so each screen inferred the only one it knew. The inference was right for
+SCCO and wrong for AAPL, and the two looked identical because the screens were
+reading the same field.
+
+The journal now decides `price_kind` for every run from what the run recorded, and
+each drift carries a `cause` from it: **three runs are `intraday`** — the two AAPL
+runs and KO `b8748710` — and every other run on disk, all 701 corpus items included,
+is a settled `close`. SCCO's seven stay a corporate action. The rule reads
+`fetched_on` before `as_of`, because corpus runs carry a synthetic `as_of` at 00:00
+UTC on the bar's own date — the evening before that session opened — and a rule that
+compared `as_of` with the anchor session, which the replay briefly used, would have
+labelled all 701 of them intraday.
+
+The settle time is now **16:30 New York**, not the 16:00 bell: the closing auction
+sets the official close and a provider's bar can keep moving for minutes after it.
+
+---
+
+## 65 · An architecture contract broken, and no gate that could see it
+
+The fix for #64 put the session rule in `mapf.data` and imported it from
+`mapf.pipeline.run`. ADR 0004's contracts forbid exactly that — pipeline never
+imports adapters — and, transitively through `run.py`, corpus selection too. Two of
+seven contracts were broken on `main` for one commit.
+
+**Nothing ran them.** `lint-imports` is listed in `docs/setup.md` as a gate, and the
+definition-of-done test says linters are kept out of pytest deliberately because they
+run "in the same command that runs this suite" — in CI. There is no CI in this
+repository. The test asserts only that the contracts are *configured*. The push gate
+in practice was pytest and the node suite, and neither can see an import graph.
+
+Found while adding `price_kind` to the journal, which needed the same rule and is
+forbidden from importing `mapf.data` for the same reason. The rule is pure — the
+standard library's `zoneinfo` and nothing else — and now lives in `mapf.core`, where
+every layer may import it and "core is a sink" still holds. All seven contracts kept.
+
+Same family as [[#62]] and [[#63]]: **a check that exists and does not bind.** #62 was
+a test isolated on six paths of seven; #63 a stub covering one route of many; this is
+a gate documented as enforced by a runner that does not exist. In each case the
+safeguard was real, and what was missing was anything that made it run.
+
+**Open, and not decided here:** whether to add a CI workflow, or run `lint-imports`
+from inside pytest against the recorded reasoning in `test_definition_of_done.py`.
+Until one of those happens, the contracts hold only because they are run by hand
+before each push.

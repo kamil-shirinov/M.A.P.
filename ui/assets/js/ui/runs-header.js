@@ -195,35 +195,52 @@ export function renderUnrun(root, { filings }) {
 
 /** Section 4b. Runs whose price basis moved after the forecast was written. */
 export function renderDrift(root, { rows, total, selected, onSelect }) {
-  const { box, head } = card(root, "Re-based since the run");
+  // Named for what it checks rather than for one cause: two AAPL runs in this
+  // panel were never re-based — they were priced before the close.
+  const { box, head } = card(root, "Recorded price differs from the snapshot");
   box.classList.add("runs-drift");
   const drifted = rows.filter((r) => !r.anchor_drift.absent);
   const count = el("span", "runs-note runs-note--right");
   count.append(renderFigure(derive(drifted.length, "int")), chromeText(" of ", "of the journal"), renderFigure(derive(total, "int")), chromeText(" runs", "runs in the journal"));
   head.append(count);
 
-  /* Grouped on TICKER. The ratio is computed per run from that run's own float32
-     spot, so nine rows carry seven distinct values for two corporate actions;
-     grouping on it would make one group per run. */
-  const byTicker = new Map();
+  /* Grouped on TICKER and CAUSE. The ratio is computed per run from that run's
+     own float32 spot, so it differs in the ninth place and is not a key. The
+     cause is: a ticker could in principle carry both, and one button saying
+     "corporate action" over a group that was partly priced mid-session is the
+     mistake this panel used to make for all of AAPL. */
+  const groups = new Map();
   for (const r of drifted) {
-    if (!byTicker.has(r.ticker)) byTicker.set(r.ticker, []);
-    byTicker.get(r.ticker).push(r);
+    const key = `${r.ticker}|${r.anchor_drift.cause}`;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
   }
   const acts = el("div", "runs-acts");
-  for (const [ticker, list] of byTicker) {
+  for (const list of groups.values()) {
+    const ticker = list[0].ticker;
+    const drift = list[0].anchor_drift;
     const b = el("button", "runs-act");
     b.type = "button";
+    b.dataset.cause = drift.cause;
     b.setAttribute("aria-pressed", String(selected === ticker));
     b.append(el("span", "t", ticker));
-    b.append(renderFigure(derive(list.length, "int")), chromeText(" runs · ", "runs of this ticker that were re-based"));
-    b.append(chromeText("×", "the ratio the snapshot moved by"), renderFigure(list[0].anchor_drift.ratio));
-    /* The size of the action, DERIVED as 1 ÷ ratio rather than named. The export
-       carries a ratio and nothing else: calling it "a 1.012 split" quotes a
-       profile, and a split is one of several actions that produce this shape. */
-    const act = derive(1 / list[0].anchor_drift.ratio.value, "ratio", list[0].anchor_drift.ratio);
+    b.append(renderFigure(derive(list.length, "int")), chromeText(" runs · ", "runs of this ticker in this group"));
     const why = el("span", "why");
-    why.append(chromeText(" · corporate action ×", "the size of the action, computed here as 1 ÷ the ratio"), renderFigure(act));
+    if (drift.cause === "corporate_action") {
+      b.append(chromeText("×", "the ratio the snapshot moved by"), renderFigure(drift.ratio));
+      /* The size of the action, DERIVED as 1 ÷ ratio rather than named. The
+         export carries a ratio: calling it "a 1.012 split" quotes a profile. */
+      const act = derive(1 / drift.ratio.value, "ratio", drift.ratio);
+      why.append(chromeText(" · corporate action ×", "the size of the action, computed here as 1 ÷ the ratio"), renderFigure(act));
+    } else if (drift.cause === "intraday_anchor") {
+      // The ratio is the settled close over the price the run took: here the
+      // close finished that much above the quote the run read at mid-session.
+      b.append(chromeText("close ×", "the settled close over the price the run recorded"), renderFigure(drift.ratio));
+      why.append(chromeText(" · priced before the close", "the run read its price while the market was open"));
+    } else {
+      b.append(chromeText("×", "the ratio between the snapshot and the recorded price"), renderFigure(drift.ratio));
+      why.append(chromeText(" · cause not recorded", "the run did not record enough to say why"));
+    }
     b.append(why);
     b.addEventListener("click", () => onSelect(selected === ticker ? null : ticker));
     acts.append(b);

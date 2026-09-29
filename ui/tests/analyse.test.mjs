@@ -552,3 +552,32 @@ describe("the hosted copy replays one recorded run", () => {
     assert.match(read("assets/js/analyse-page.js"), /price taken during that session/);
   });
 });
+
+describe("each drifted run is labelled by its own cause", () => {
+  const rows = () => ["unknown", "edgar"].flatMap((s) =>
+    JSON.parse(readFileSync(new URL(`../assets/export/runs/by_source/${s}.json`, import.meta.url), "utf8")));
+
+  itNeedsExport("AAPL's two were priced before the close, SCCO's seven re-based", () => {
+    /* Every screen called all nine "re-based by a corporate action". AAPL's were
+       made at 13:02 and 13:11 New York time on a session still trading. */
+    const drifted = rows().filter((r) => r.anchor_drift);
+    const byTicker = (t) => drifted.filter((r) => r.ticker === t).map((r) => r.anchor_drift.cause);
+    assert.deepEqual([...new Set(byTicker("AAPL"))], ["intraday_anchor"]);
+    assert.equal(byTicker("AAPL").length, 2);
+    assert.deepEqual([...new Set(byTicker("SCCO"))], ["corporate_action"]);
+    assert.equal(byTicker("SCCO").length, 7);
+  });
+
+  it("takes every screen's words from one table", async () => {
+    const { DRIFT_CAUSES } = await import("../assets/js/data/source.js");
+    assert.equal(DRIFT_CAUSES.corporate_action.short, "re-based");
+    assert.equal(DRIFT_CAUSES.intraday_anchor.short, "priced before the close");
+    for (const file of ["ui/runs-journal.js", "ui/company-series.js"]) {
+      assert.match(read(`assets/js/${file}`), /DRIFT_CAUSES/, file);
+    }
+    // The drift panel no longer names one cause for all of them.
+    const header = read("assets/js/ui/runs-header.js");
+    assert.doesNotMatch(header, /card\(root, "Re-based since the run"\)/);
+    assert.match(header, /drift\.cause === "intraday_anchor"/);
+  });
+});

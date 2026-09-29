@@ -212,6 +212,8 @@ def test_a_run_record_is_the_same_object_map_runs_emits(
     assert set(exported[0]) == {
         "anchor_date",
         "anchor_spot",
+        # Whether that spot was a settled close or a live quote (Findings #64).
+        "price_kind",
         "arm",
         "corpus_relation",
         "document_is_frozen_exhibit",
@@ -1257,4 +1259,7 @@ def test_a_replay_whose_forecast_cannot_be_read_still_exports_the_row(
     row = json.loads((tmp_path / "out" / "live" / "replay.json").read_text())
     assert row["run_id"] == REPLAY_RUN_ID
     assert row["band"] == []
-    assert row["price_kind"] == "unknown"
+    # The classification survives: the journal decided it from the manifest, so
+    # losing the forecast file here costs the band and the instant, not the kind.
+    assert row["price_kind"] == "close"
+    assert "price_taken_at" not in row

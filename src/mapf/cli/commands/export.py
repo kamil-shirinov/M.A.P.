@@ -47,7 +47,6 @@ from mapf.core.provenance import code_version, freeze_digest
 from mapf.corpus.ledger import Ledger
 from mapf.corpus.record import load_frozen
 from mapf.corpus.selection import Corpus
-from mapf.data.sessions import session_has_closed
 from mapf.eval.journal import SOURCES, LedgerItem, read_journal
 from mapf.eval.montecarlo import simulate
 from mapf.serve.analyse import BAND_LEVELS, band_prices
@@ -538,22 +537,16 @@ def _write_replay(out: Path, journal: Any, sizes: dict[str, int], runs_dir: Path
     record = dict(as_dict(entry))
     forecast = runs_dir / REPLAY_RUN_ID / "forecast.json"
     band: list[dict[str, float]] = []
-    kind = "unknown"
     try:
         stored = Forecast.model_validate_json(forecast.read_text(encoding="utf-8"))
-        # WHAT THE PRICE ACTUALLY WAS, from the run's own recorded instant. This
-        # run was made at 15:52 in New York, eight minutes before the bell, so its
-        # anchor is an intraday quote on an unfinished bar and not a close. The run
-        # is not edited — it is a record of what happened — but nothing downstream
-        # has to repeat its claim.
-        kind = (
-            "close" if session_has_closed(stored.as_of, session=entry.anchor_date) else "intraday"
-        )
+        # `price_kind` is already on the row: the journal decides it, once, for
+        # every run. This used to be decided here as well, by a rule that compared
+        # `as_of` with the anchor session — correct for a live run and wrong for all
+        # 701 corpus runs, whose `as_of` sits the evening before the bar they read.
+        # One rule in one place, and this reads it.
         record["price_taken_at"] = stored.as_of.isoformat()
-        # ONE implementation of the band. The page used to sample its own in
-        # JavaScript, which is a second estimator of the same quantity — the
-        # quickest way to have two answers and no way to tell which is the one the
-        # scorer would score.
+        # ONE implementation of the band, for the same reason. The page used to
+        # sample its own in JavaScript: a second estimator of one quantity.
         simulation = simulate(stored.scenarios, horizon_days=stored.horizon_days)
         band = band_prices(
             stored.spot_price,
@@ -564,7 +557,6 @@ def _write_replay(out: Path, journal: Any, sizes: dict[str, int], runs_dir: Path
     except (OSError, ValidationError, MapError):
         # A replay without a band is a smaller page, not a broken one.
         pass
-    record["price_kind"] = kind
     record["band"] = band
 
     name = "live/replay.json"

@@ -187,6 +187,9 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
         "company_name",
         "anchor_date",
         "anchor_spot",
+        # From what the run recorded about WHEN it read its price. Not derived from
+        # the outcome, so it combines nothing across the two sides.
+        "price_kind",
         "horizon_days",
         "scenarios",
         "document_source",

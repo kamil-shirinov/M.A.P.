@@ -126,8 +126,15 @@ describe("company page, against the real export", () => {
   itNeedsExport("AAPL shows drift and an open window, and keeps the outcome", async () => {
     const { roots } = await renderCompany("AAPL");
     const text = roots.runs.textContent;
-    assert.match(text, /re-based since this run/);
-    assert.match(text, /0\.988142|1\.007509/, "the ratio is shown at six places");
+    /* AAPL's two drifted runs were priced at 13:02 and 13:11 on a session still
+       trading, and the page called them re-based by a corporate action — the
+       ratio's cause guessed from the fact of a ratio. The cause is now recorded,
+       and this pins that AAPL is told the true one. */
+    assert.match(text, /Priced before the close/);
+    assert.match(text, /taken while the market was still open, so it was never a close/);
+    assert.doesNotMatch(text, /re-based/i);
+    assert.doesNotMatch(text, /corporate action/i);
+    assert.match(text, /1\.007509/, "the ratio is shown at six places");
     assert.match(text, /horizon has not elapsed yet/);
     // A drifted run keeps its outcome; the marker is what stops the two from
     // looking identical.
@@ -524,7 +531,9 @@ describe("a re-based run has no realised return, on any screen", () => {
     const bodies = byClass(roots.runs, "runs-detail");
     const rebased = bodies.filter((p) => /No realised return is shown/.test(p.textContent));
     assert.equal(rebased.length, bad.length, "every re-based run says why it has no figure");
-    for (const p of rebased) assert.match(p.textContent, /it would mix two price bases/);
+    // "Two different prices", not "two price bases": a price taken mid-session is
+    // not a second adjustment basis, it is a different price.
+    for (const p of rebased) assert.match(p.textContent, /it would mix two different prices/);
 
     /* The ratio is what exists, and it is still on the page. This page states it
        in prose — "the snapshot closes 305.26 ... against 302.98 recorded

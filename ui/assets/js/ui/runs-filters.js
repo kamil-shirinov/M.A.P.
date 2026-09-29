@@ -204,7 +204,8 @@ export function renderChart(root, { rows, filtered, filtering, onPick }) {
     note.append(el("span", null, "bar height is every run that month; blue is the share that matches"));
   }
   const dot = el("span", "runs-chart-legend-dot");
-  dot.append(el("i", "runs-bar-dot"), el("span", null, "re-based"));
+  // Named for what the dot marks, not for one of its two causes.
+  dot.append(el("i", "runs-bar-dot"), el("span", null, "price differs from the snapshot"));
   note.append(dot);
   root.append(note);
 

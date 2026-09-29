@@ -16,7 +16,14 @@
    detail, because a column headed "Realised" states no convention at all. */
 
 import { chromeText, derive, renderFigure } from "../lib/figure.js";
-import { describeCorpusRelation, describeDrift, describeOutcome, isAbsent } from "../data/source.js";
+import {
+  DRIFT_CAUSES,
+  describeCorpusRelation,
+  describeDrift,
+  describeOutcome,
+  driftCause,
+  isAbsent,
+} from "../data/source.js";
 import { fmt } from "../lib/format.js";
 import { OUTCOMES, RELATIONS } from "./runs-filters.js";
 import { stagger } from "../lib/motion.js";
@@ -196,9 +203,20 @@ function groupBlock(group, ctx) {
     m.append(renderFigure(derive(group.open, "int")), chromeText(" window open", "runs whose horizon has not elapsed"));
     marks.append(m);
   }
-  if (group.drift) {
+  /* One mark per cause, from the rows themselves. A single "re-based" count
+     folded two AAPL runs priced mid-session into a corporate action. */
+  const causes = new Map();
+  for (const r of group.rows ?? []) {
+    if (isAbsent(r.anchor_drift)) continue;
+    causes.set(r.anchor_drift.cause, (causes.get(r.anchor_drift.cause) ?? 0) + 1);
+  }
+  for (const [cause, n] of causes) {
     const m = el("span", "runs-mark runs-mark--drift tag");
-    m.append(renderFigure(derive(group.drift, "int")), chromeText(" re-based", "runs whose price series was re-based since the run"));
+    m.dataset.cause = cause;
+    m.append(renderFigure(derive(n, "int")), chromeText(
+      ` ${(DRIFT_CAUSES[cause] ?? DRIFT_CAUSES.unknown).short}`,
+      "runs whose recorded price differs from the snapshot, by cause",
+    ));
     marks.append(m);
   }
   const d = el("span", "runs-mark runs-mark--dates");
@@ -458,10 +476,11 @@ function detail(run, ctx) {
   }
 
   if (drifted) {
-    const d = say("Re-based", "drift");
+    const label = driftCause(run).short;
+    const d = say(label.charAt(0).toUpperCase() + label.slice(1), "drift");
     appendParts(d, describeDrift(run));
     d.append(document.createTextNode(
-      " No realised return is shown: it would mix two price bases."));
+      " No realised return is shown: it would mix two different prices."));
   }
 
   say("Score").append(document.createTextNode(
@@ -494,7 +513,7 @@ function legend() {
   };
   item(sample("measured"), " measured — read from the row");
   item(sample("derived"), " derived — computed on this page, weakest input wins");
-  item(el("span", "swatch"), " re-based since the run");
+  item(el("span", "swatch"), " recorded price differs from the snapshot — re-based, or priced before the close");
   item(el("span", null, "unrecorded"), " freeze version predates the field — not “no freeze”");
   item(el("span", null, "realised"), " a log return, shown as the simple return it equals");
   return box;
