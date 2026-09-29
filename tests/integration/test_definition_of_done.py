@@ -404,7 +404,7 @@ def test_criterion_6_the_whole_pipeline_runs_offline(baseline: Any) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7. ruff + mypy — enforced by CI, asserted here as a placeholder for intent
+# 7. ruff + mypy — enforced by CI (ADR 0037), asserted here as a placeholder
 # ---------------------------------------------------------------------------
 def test_criterion_7_is_enforced_by_the_toolchain_not_by_a_test() -> None:
     """Deliberately not shelling out to ruff and mypy from inside pytest.
@@ -420,6 +420,26 @@ def test_criterion_7_is_enforced_by_the_toolchain_not_by_a_test() -> None:
     assert "[tool.ruff]" in text
     assert "strict = true" in text
     assert "[tool.importlinter]" in text
+
+
+def test_ci_runs_every_command_of_the_gate() -> None:
+    """The docstring above said "in CI" when there was no CI, and an
+    import contract broke unseen because of it (Findings #65). The workflow now
+    exists; this pins that it runs the whole gate, so dropping a command from it is
+    a change someone has to make to this test as well."""
+    workflow = Path(__file__).parents[2] / ".github" / "workflows" / "ci.yml"
+    text = workflow.read_text(encoding="utf-8")
+    for command in (
+        "uv sync --extra dev --locked",
+        "uv run ruff check .",
+        "uv run ruff format --check .",
+        "uv run mypy",
+        "uv run lint-imports",
+        "uv run pytest",
+        "node --test ui/tests/*.test.mjs",
+    ):
+        assert f"- run: {command}\n" in text, command
+    assert "\n  push:\n" in text
 
 
 # ---------------------------------------------------------------------------

@@ -119,6 +119,12 @@ node ui/tests/styles.probe.mjs   # computed styles in a real browser; needs Play
 The test suite must pass with the inference server switched off. If it ever needs a live
 model, CI is broken.
 
+**CI runs the same commands on every push** — `.github/workflows/ci.yml`, ADR 0037 — on a
+clean Ubuntu checkout with no models and no export. It is a second check, not a
+replacement: run the list above before pushing. A clean checkout has no export, so CI runs
+100 of the 218 front-end tests and skips the rest with their reason; only a machine with a
+full export runs them all.
+
 ### Two suites, one repository
 
 `ui/` is the front end, merged in with its own history in 2026-09. It has **no build

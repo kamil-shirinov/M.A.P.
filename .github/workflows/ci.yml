@@ -1,0 +1,42 @@
+# The gate, on every push (ADR 0037). The same six commands run by hand before
+# each push, on a clean checkout: no models, no network beyond installing
+# dependencies, and no export, so the front-end tests that need one skip with
+# their reason and the rest run.
+#
+# Third-party actions are pinned to a commit, not a tag: a tag can be moved to
+# different code, and this job runs with the repository's token.
+
+name: gate
+
+on:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.3"
+          python-version: "3.12"
+      - run: uv sync --extra dev --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy
+      - run: uv run lint-imports
+      - run: uv run pytest
+
+  ui:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "24"
+      - run: node --test ui/tests/*.test.mjs

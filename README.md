@@ -217,7 +217,9 @@ node --test ui/tests/*.test.mjs   # the front end; no build step, no dependencie
 ```
 
 On a fresh clone most front-end tests **skip**, with the reason — they need an export this
-repository does not carry. The summary says so rather than reporting green.
+repository does not carry. The summary says so rather than reporting green. CI runs these
+on every push on exactly that fresh clone, with ruff and mypy
+([ADR 0037](decisions/0037-continuous-integration.md)).
 
 **Check the arithmetic.** [docs/export-contract.md](docs/export-contract.md) states every
 file the app reads, field by field. The leakage figure is re-derivable from two files in
