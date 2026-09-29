@@ -127,13 +127,25 @@ def sessions_between(sessions: Sequence[date], start: date, end: date) -> int | 
 
     Calendar days would be wrong at every weekend and every holiday: a Friday
     filing anchored the following Monday is one session late and three days late,
-    and only one of those two numbers is the panel's alignment. `None` when either
-    date is not a session in the series, which is itself a failing condition.
+    and only one of those two numbers is the panel's alignment.
+
+    AN ANCHOR PAST THE LAST SESSION STILL COUNTS. A live run anchored today, before
+    today's close, has no bar for its own anchor — the series ends at the last
+    completed session. Returning `None` there was correct but useless: the gate
+    refused with "could not be counted", when the filing was two months back and
+    the answer was never in doubt. The count from the filing to the last session
+    is a LOWER BOUND on the real gap, and a lower bound is enough to decide a
+    question of the form "is this within one session". Only a start date that is
+    not a session at all is genuinely uncountable.
     """
     index = {day: i for i, day in enumerate(sessions)}
-    if start not in index or end not in index:
+    if start not in index:
         return None
-    return index[end] - index[start]
+    if end in index:
+        return index[end] - index[start]
+    if sessions and end > sessions[-1]:
+        return len(sessions) - 1 - index[start]
+    return None
 
 
 def applicability(

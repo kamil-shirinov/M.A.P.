@@ -174,10 +174,34 @@ def test_sessions_are_counted_on_the_calendar_not_in_days() -> None:
     assert (date(2026, 9, 28) - date(2026, 9, 25)).days == 3
 
 
-def test_a_date_that_is_not_a_session_gives_no_count() -> None:
+def test_a_filing_that_is_not_a_session_gives_no_count() -> None:
+    """The START has to be a real session. Nothing can be counted from a day the
+    market was shut."""
     sessions = [date(2026, 9, 24), date(2026, 9, 25)]
     assert sessions_between(sessions, date(2026, 9, 26), date(2026, 9, 25)) is None
-    assert sessions_between(sessions, date(2026, 9, 24), date(2026, 9, 26)) is None
+
+
+def test_an_anchor_past_the_last_session_counts_as_a_lower_bound() -> None:
+    """A live run anchored today, before today's close, has no bar for its own
+    anchor. Refusing to count there was correct and useless: the filing was two
+    months back, and a lower bound settles "is this within one session" outright.
+
+    It reached the screen as "could not be counted in trading days", which told a
+    reader nothing about a question that was never in doubt."""
+    sessions = [date(2026, 9, 21), date(2026, 9, 22), date(2026, 9, 23)]
+    assert sessions_between(sessions, date(2026, 9, 21), date(2026, 9, 30)) == 2
+    assert sessions_between(sessions, date(2026, 9, 23), date(2026, 9, 30)) == 0
+
+
+def test_a_gap_inside_the_series_is_still_refused() -> None:
+    """A date the series simply lacks — a holiday in the middle — is not a lower
+    bound, it is a hole. Only an end past the LAST session is countable."""
+    sessions = [date(2026, 9, 21), date(2026, 9, 25)]
+    assert sessions_between(sessions, date(2026, 9, 21), date(2026, 9, 23)) is None
+
+
+def test_an_empty_calendar_counts_nothing() -> None:
+    assert sessions_between([], date(2026, 9, 21), date(2026, 9, 30)) is None
 
 
 def test_an_anchor_before_the_filing_is_negative_and_refused() -> None:
