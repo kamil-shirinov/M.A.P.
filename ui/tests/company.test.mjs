@@ -10,71 +10,13 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { before, describe, it } from "node:test";
 import { HAVE_EXPORT, itNeedsExport } from "./needs-export.mjs";
+import { Node, installDom } from "./dom.mjs";
 
 const EXPORT = new URL("../assets/export/", import.meta.url);
 const HAVE = existsSync(new URL("manifest.json", EXPORT));
 
 /* ---- a DOM small enough to read and large enough to render into ---- */
-class Node {
-  constructor(tag) {
-    this.tagName = (tag || "").toUpperCase();
-    this.children = []; this.attrs = {}; this.dataset = {};
-    this.classList = { add: (c) => this._cls.add(c), remove: (c) => this._cls.delete(c) };
-    this._cls = new Set(); this._text = ""; this.parentElement = null;
-  }
-  set className(v) { this._cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
-  get className() { return [...this._cls].join(" "); }
-  set textContent(v) { this._text = String(v); this.children = []; }
-  get textContent() {
-    return this._text + this.children.map((c) => (c.nodeType === 3 ? c.data : c.textContent)).join("");
-  }
-  /* `class` set via setAttribute is the same thing as className — which is how
-     every SVG element in this app is built, since createElementNS takes its
-     attributes that way. The stub used to keep the two apart, so a class set on
-     an <svg> child was invisible to any assertion that looked for it. */
-  setAttribute(k, v) {
-    this.attrs[k] = String(v);
-    if (k === "class") this.className = String(v);
-  }
-  getAttribute(k) { return this.attrs[k]; }
-  addEventListener() {}
-  append(...kids) {
-    for (const k of kids) {
-      const node = typeof k === "string" ? { nodeType: 3, data: k, parentElement: this } : k;
-      node.parentElement = this;
-      this.children.push(node);
-    }
-  }
-  /* The company page now renders the runs journal's row component, which reads
-     `lastChild` to style the trailing date in the outcome cell. */
-  get firstChild() { return this.children[0]; }
-  get lastChild() { return this.children.at(-1); }
-  querySelector() { return null; }
-  querySelectorAll() { return []; }
-  closest(sel) {
-    // Only the audit's selector is needed: [data-prov], [data-chrome], [data-audit-exempt].
-    const keys = sel.match(/data-[a-z-]+/g).map((d) => d.replace("data-", "").replace(/-(.)/g, (_, c) => c.toUpperCase()));
-    for (let n = this; n; n = n.parentElement) {
-      if (n.dataset && keys.some((k) => n.dataset[k] !== undefined)) return n;
-    }
-    return null;
-  }
-}
 
-function installDom() {
-  const doc = {
-    createElement: (t) => new Node(t),
-    createElementNS: (_ns, t) => new Node(t),
-    createTextNode: (t) => ({ nodeType: 3, data: String(t), parentElement: null }),
-    getElementById: () => new Node("div"),
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    body: new Node("body"),
-  };
-  globalThis.document = doc;
-  globalThis.location = { search: "" };
-  return doc;
-}
 
 function stubFetch() {
   globalThis.fetch = async (path) => {

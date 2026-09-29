@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { before, describe, it } from "node:test";
 import { HAVE_EXPORT, itNeedsExport } from "./needs-export.mjs";
+import { Node, fetched, installDom } from "./dom.mjs";
 
 const ROOT = new URL("../", import.meta.url);
 const EXPORT = new URL("assets/export/", ROOT);
@@ -21,59 +22,7 @@ const read = (name) => JSON.parse(readFileSync(new URL(name, EXPORT), "utf8"));
 const file = (p) => readFileSync(new URL(p, ROOT), "utf8");
 
 /* ---- a DOM wide enough for this page's renderers ---- */
-class Node {
-  constructor(tag) {
-    this.tagName = (tag || "").toUpperCase();
-    this.children = []; this.dataset = {}; this.style = {}; this.attrs = {};
-    this._cls = new Set(); this._text = ""; this.parentElement = null;
-    this.classList = { add: (c) => this._cls.add(c), remove: (c) => this._cls.delete(c), contains: (c) => this._cls.has(c) };
-  }
-  set className(v) { this._cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
-  get className() { return [...this._cls].join(" "); }
-  set textContent(v) { this._text = String(v); this.children = []; }
-  get textContent() {
-    return this._text + this.children.map((c) => (c.nodeType === 3 ? c.data : c.textContent)).join("");
-  }
-  get firstChild() { return this.children[0]; }
-  get lastChild() { return this.children.at(-1); }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  getAttribute(k) { return this.attrs[k]; }
-  addEventListener(name, fn) { (this._on ??= {})[name] = fn; }
-  append(...kids) {
-    for (const k of kids) {
-      const node = typeof k === "string" ? { nodeType: 3, data: k, parentElement: this } : k;
-      node.parentElement = this;
-      this.children.push(node);
-    }
-  }
-  querySelector() { return null; }
-  closest(sel) {
-    const keys = sel.match(/data-[a-z-]+/g)?.map((d) => d.replace("data-", "").replace(/-(.)/g, (_, c) => c.toUpperCase())) ?? [];
-    for (let n = this; n; n = n.parentElement) if (n.dataset && keys.some((k) => n.dataset[k] !== undefined)) return n;
-    return null;
-  }
-}
 
-const fetched = [];
-function installDom() {
-  globalThis.document = {
-    createElement: (t) => new Node(t),
-    createElementNS: (_ns, t) => new Node(t),
-    createTextNode: (t) => ({ nodeType: 3, data: String(t), parentElement: null }),
-    getElementById: () => new Node("div"),
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    body: new Node("body"),
-  };
-  globalThis.location = { search: "" };
-  fetched.length = 0;
-  globalThis.fetch = async (path) => {
-    const name = String(path).replace(/^assets\/export\//, "");
-    fetched.push(name);
-    if (!existsSync(new URL(name, EXPORT))) return { status: 404, ok: false };
-    return { status: 200, ok: true, json: async () => read(name) };
-  };
-}
 
 function* walk(node) {
   yield node;

@@ -8,48 +8,12 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { describe, it } from "node:test";
+import { Node, installDom } from "./dom.mjs";
 
 /* A local DOM stub, as company, runs, results and front-door each keep one.
    Four copies is a smell, but a fifth convention would be worse than a fifth
    copy: these tests are the thing that has to stay readable. */
-class Node {
-  constructor(tag) {
-    this.tagName = (tag || "").toUpperCase();
-    this.children = []; this.dataset = {}; this.style = {}; this.attrs = {};
-    this._cls = new Set(); this._text = ""; this.parentElement = null;
-    this.classList = { add: (c) => this._cls.add(c), remove: (c) => this._cls.delete(c) };
-  }
-  set className(v) { this._cls = new Set(String(v).split(/\s+/).filter(Boolean)); }
-  get className() { return [...this._cls].join(" "); }
-  set textContent(v) { this._text = String(v); this.children = []; }
-  get textContent() {
-    return this._text + this.children.map((c) => (c.nodeType === 3 ? c.data : c.textContent)).join("");
-  }
-  setAttribute(k, v) { this.attrs[k] = String(v); }
-  getAttribute(k) { return this.attrs[k]; }
-  addEventListener(name, fn) { (this._on ??= {})[name] = fn; }
-  append(...kids) {
-    for (const k of kids) {
-      const node = typeof k === "string" ? { nodeType: 3, data: k, parentElement: this } : k;
-      node.parentElement = this;
-      this.children.push(node);
-    }
-  }
-  querySelector() { return null; }
-  closest() { return null; }
-}
 
-function installDom() {
-  globalThis.document = {
-    createElement: (t) => new Node(t),
-    createElementNS: (_ns, t) => new Node(t),
-    createTextNode: (t) => ({ nodeType: 3, data: String(t), parentElement: null }),
-    getElementById: () => new Node("div"),
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    body: new Node("body"),
-  };
-}
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const load = (path) => import(`../assets/js/${path}?${Math.random()}`);
