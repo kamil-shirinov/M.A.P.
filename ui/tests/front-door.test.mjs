@@ -150,7 +150,7 @@ describe("the door's strip", () => {
       // The run count is one part now: a link to the screen it names.
       `${rowsInFiles.toLocaleString("en-US")} runs recorded`,
       // Two parts: the figure is marked and the label is chrome, as everywhere else.
-      ...(outside ? ["·", outside.toLocaleString("en-US"), " outside the corpus"] : []),
+      ...(outside ? ["·", outside.toLocaleString("en-US"), outside === 1 ? " live run" : " live runs"] : []),
       "·",
       "does not beat a plain random walk or GARCH on the development companies",
     ]);

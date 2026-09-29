@@ -200,6 +200,18 @@ the scoring passes, and none of it is committed — so a clone sees a stated "No
 panel, not a broken app. `uv run map export --allow-partial` builds what a clone *can*:
 the frozen corpus, and five named absences. See [docs/publishing.md](docs/publishing.md).
 
+**Make one yourself.** With the three models loaded on your own machine:
+
+```bash
+uv run map serve            # the app and one endpoint, on 127.0.0.1:8765
+```
+
+It opens the live-analysis screen. Type a ticker, and you watch the run happen — the
+stages come off the run's own trace, not a timer. A run usually takes six to twelve
+minutes and is permanent, so this is the one command here that changes the record rather
+than reading it. Without the models it will not start; with them, every fan it draws
+carries the marking described under [How it works](#how-it-works).
+
 ---
 
 ## How it works
@@ -223,6 +235,26 @@ fit, and a random walk widened for earnings days.
 **All inference is local.** No data goes to a third-party model provider. This is *not*
 "100% offline": prices come from Yahoo Finance and filings from SEC EDGAR, and those
 parties see what is asked of them.
+
+### Live analysis
+
+Everything above is a record of forecasts already made. `map serve` adds the one thing
+that is not a read: type a ticker, and it fetches that company's most recent 8-K Item
+2.02, runs the three agents over it, and draws the three scenarios fanning out from the
+latest close. A run usually takes six to twelve minutes and writes a permanent entry to
+the run journal — there is no discard.
+
+**It only works on a machine with the models on it.** The published copy of this site is
+static files; nothing is behind them to accept the request, so each screen that would
+otherwise offer an analysis states that instead of showing a control that cannot work.
+
+Most live fans are drawn **raw and marked uncalibrated**, and that is the intended
+outcome rather than a limitation being confessed. The fitted correction was measured on a
+panel — five sessions, anchored within one trading day of the filing, companies that
+passed the corpus filters — so it is applied only where all three of those hold, and the
+failing condition is named on screen when they do not. Even where it is applied, the
+company is outside the frozen corpus: the conditions make it defensible, not verified.
+[ADR 0036](decisions/0036-live-analysis.md) has the rule and the reasoning.
 
 ---
 

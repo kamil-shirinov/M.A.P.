@@ -101,7 +101,7 @@ export function renderNoServer(host, { where }) {
   box.append(el("pre", null, "uv run map serve"));
   box.append(el("p", "anl-absent-foot",
     "That serves this page and the endpoint from one origin, on your own machine. " +
-    "Each analysis takes about seven minutes and is a permanent journal entry."));
+    "Each analysis usually takes six to twelve minutes and is a permanent journal entry."));
   host.append(box);
   return box;
 }

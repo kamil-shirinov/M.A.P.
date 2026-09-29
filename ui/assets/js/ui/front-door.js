@@ -125,22 +125,27 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding }) {
     strip.append(link);
 
     /* "N runs" alone was fine while every run came from the corpus. It is not
-       now: live analysis writes runs that are outside the frozen corpus, and a
-       reader who sees one number next to "120 companies" will read it as work on
-       those companies. So when any run has a source other than the panel's, the
-       door names how many and what they are — from the manifest's own per-source
-       counts, not by subtracting one number from another. */
-    const outside = ["edgar", "news"]
+       now: live analysis writes runs the panel never asked for, and a reader who
+       sees one number next to "120 companies" will read it as work on those
+       companies.
+
+       IT SAYS "LIVE RUNS", NOT "OUTSIDE THE CORPUS", because those are different
+       sets and this count is the smaller one. `corpus_relation` calls five runs
+       `outside_corpus` today — the one live run plus four AAPL runs that predate
+       the document-source field — and this clause can only see the sources the
+       manifest counts. Labelling a count of live runs with the name of a larger
+       set would put a number on the door that the runs screen contradicts. */
+    const live = ["edgar", "news"]
       .map((key) => runsBySource[key])
       .filter((figure) => figure && figure.value > 0);
-    if (outside.length) {
-      const sum = derive(outside.reduce((n, f) => n + f.value, 0), "int", ...outside);
+    if (live.length) {
+      const sum = derive(live.reduce((n, f) => n + f.value, 0), "int", ...live);
       strip.append(dot());
       strip.append(
         renderFigure(sum),
         chromeText(
-          " outside the corpus",
-          "runs whose document was not a frozen corpus exhibit, counted per source in the manifest",
+          sum.value === 1 ? " live run" : " live runs",
+          "runs made on demand from this machine, counted per document source in the manifest",
         ),
       );
     }

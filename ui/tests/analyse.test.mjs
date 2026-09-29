@@ -271,3 +271,37 @@ describe("a shared component's rules reach every page that renders it", () => {
     }
   });
 });
+
+describe("the door counts live runs, which is not the same set as outside_corpus", () => {
+  const EXPORT = new URL("../assets/export/", import.meta.url);
+  const exported = (name) => JSON.parse(readFileSync(new URL(name, EXPORT), "utf8"));
+
+  it("says live runs rather than naming a larger set", () => {
+    /* The clause can only see what the manifest counts per document source.
+       `corpus_relation` calls more runs `outside_corpus` than that — runs made
+       before the source field existed carry `unknown` and can still be outside
+       the corpus — so labelling this count "outside the corpus" would put a
+       number on the door that the runs screen contradicts. */
+    const door = read("assets/js/ui/front-door.js");
+    assert.match(door, /" live run" : " live runs"/);
+    assert.doesNotMatch(door, /chromeText\(\s*" outside the corpus"/);
+  });
+
+  it("and the two really do differ in this export", () => {
+    const rows = ["corpus", "edgar", "news", "unknown"]
+      .flatMap((s) => exported(`runs/by_source/${s}.json`).map((e) => [s, e.corpus_relation]));
+    const live = rows.filter(([s]) => s === "edgar" || s === "news").length;
+    const outside = rows.filter(([, r]) => r === "outside_corpus").length;
+    // If these ever coincide the distinction still holds; it is just not visible
+    // here, and this assertion says which case the export is in.
+    assert.ok(outside >= live, "outside_corpus is the larger set");
+    assert.notEqual(outside, live, "and in this export they differ, which is why the label matters");
+  });
+
+  it("keeps the one-line finding on the door", () => {
+    // The door's only claim about results. It sits last and must not be crowded
+    // out by a count that arrived later.
+    const door = read("assets/js/ui/front-door.js");
+    assert.match(door, /does not beat a plain random walk or GARCH/);
+  });
+});

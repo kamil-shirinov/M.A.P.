@@ -46,6 +46,19 @@ const el = (tag, className, text) => {
 
 const state = { horizon: DEFAULT_HORIZON, running: false, started: null, typical: null };
 
+/* What to expect, as a RANGE. A single median reads as a promise, and the middle
+   eighty percent of the 701 recorded runs spans six to twelve minutes. The server
+   measures both from `elapsed_s` in the ledger and sends them; this only formats
+   whichever it was given. */
+function range(event) {
+  const mins = (s) => Math.round(s / 60);
+  const span = event.usual_range_seconds;
+  if (Array.isArray(span) && span.length === 2) {
+    return `usually ${mins(span[0])} to ${mins(span[1])} minutes`;
+  }
+  return `usually about ${mins(event.typical_seconds)} minutes`;
+}
+
 function renderAsk(host) {
   host.textContent = "";
   const form = el("form", "anl-ask");
@@ -83,8 +96,8 @@ function renderAsk(host) {
   host.append(chrome(
     el("p", "anl-cost",
       "One analysis reads the company's latest earnings 8-K, runs three models " +
-      "locally, and writes a permanent entry to the run journal. It takes about " +
-      "seven minutes and cannot be undone."),
+      "locally, and writes a permanent entry to the run journal. It usually takes " +
+      "six to twelve minutes and cannot be undone."),
     "what pressing Analyse does",
   ));
 }
@@ -152,7 +165,7 @@ function consume(event, lines, progress, result) {
     lines.length = 0;
     lines.push({
       label: `Running ${event.ticker} over ${event.horizon_days} sessions.`,
-      detail: `usually about ${Math.round(event.typical_seconds / 60)} minutes`,
+      detail: range(event),
     });
   } else if (event.event === "filing") {
     lines.push({ label: `Reading the 8-K filed ${event.filed}.`, detail: event.accession });

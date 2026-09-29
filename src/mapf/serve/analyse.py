@@ -203,6 +203,7 @@ def run_analysis(
     *,
     wiring: Wiring,
     typical_seconds: int,
+    usual_range_seconds: tuple[int, int] | None = None,
     liquidity_floor: float = 50_000_000.0,
 ) -> Iterator[dict[str, object]]:
     """One ticker to one streamed result, with the calibration decision attached.
@@ -216,6 +217,9 @@ def run_analysis(
         "ticker": ticker,
         "horizon_days": horizon,
         "typical_seconds": typical_seconds,
+        # The range, not only the middle of it: a single number reads as a promise
+        # and the middle eighty percent of real runs spans six to twelve minutes.
+        "usual_range_seconds": list(usual_range_seconds) if usual_range_seconds else None,
         "stages": ["intake", "analyst", "structuralist"],
     }
     exhibit = wiring.fetch_exhibit(ticker)

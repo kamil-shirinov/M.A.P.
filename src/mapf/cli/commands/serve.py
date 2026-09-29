@@ -43,9 +43,22 @@ from mapf.serve.analyse import AnalysisError, Exhibit, Wiring, latest_exhibit, r
 from mapf.serve.server import Config, build
 from mapf.settings import ModelRegistry, load
 
-# Measured from eleven recent traces, first `at` to last. Carried to the page so a
-# five-minute wait reads as expected rather than as a hang.
-TYPICAL_RUN_SECONDS = 397
+# Measured from the 701 completed corpus runs that recorded an `elapsed_s`, which
+# is the runner's own wall clock. Carried to the page so a ten-minute wait reads
+# as expected rather than as a hang.
+#
+# NOT from trace spans, which is what an earlier version used. A trace's first
+# line is written when the FIRST AGENT FINISHES, so the span from first line to
+# last excludes everything before it — for the one live run so far, 495 seconds
+# of span against 601 of wall clock. The span is a lower bound on the run, and it
+# was being reported as the run.
+#
+# AND NOT A MEDIAN ALONE. "About eight minutes" invites being read as a promise
+# when the middle eighty percent spans six to twelve, so the range travels too
+# and the page states both.
+TYPICAL_RUN_SECONDS = 457
+RUN_SECONDS_P10 = 331
+RUN_SECONDS_P90 = 692
 UI_ROOT = Path("ui")
 
 
@@ -235,14 +248,20 @@ def serve(
         )
 
         def analyse(ticker: str, horizon: int) -> Iterator[dict[str, object]]:
-            return run_analysis(ticker, horizon, wiring=wiring, typical_seconds=TYPICAL_RUN_SECONDS)
+            return run_analysis(
+                ticker,
+                horizon,
+                wiring=wiring,
+                typical_seconds=TYPICAL_RUN_SECONDS,
+                usual_range_seconds=(RUN_SECONDS_P10, RUN_SECONDS_P90),
+            )
 
         server = build(Config(root=ui_dir, port=port, analyse=analyse))
         url = f"http://127.0.0.1:{port}/analyse.html"
         typer.secho(f"serve      {url}", fg=typer.colors.GREEN)
         typer.echo("           every analysis is a real run and a permanent journal entry")
-        minutes = round(TYPICAL_RUN_SECONDS / 60)
-        typer.echo(f"           a run takes about {minutes} minutes on this hardware")
+        lo, hi = round(RUN_SECONDS_P10 / 60), round(RUN_SECONDS_P90 / 60)
+        typer.echo(f"           a run usually takes {lo} to {hi} minutes on this hardware")
         typer.echo("           ctrl-c to stop")
         if open_browser:
             webbrowser.open(url)

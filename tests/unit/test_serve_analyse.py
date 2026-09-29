@@ -108,11 +108,34 @@ def test_the_filing_is_announced_before_the_long_wait() -> None:
 
 
 def test_the_first_line_carries_a_measured_expectation() -> None:
-    """Not a spinner. 397 seconds is the median of eleven recent traces on this
-    hardware, so the page can say how long this usually takes."""
-    started = _stream()[0]
-    assert started["typical_seconds"] == 397
+    """Not a spinner, and not a single number either.
+
+    The median alone reads as a promise; the middle eighty percent of the 701
+    recorded runs spans six to twelve minutes, so the range travels with it."""
+    started = list(
+        run_analysis(
+            "AAPL", 5, wiring=_wiring(), typical_seconds=457, usual_range_seconds=(331, 692)
+        )
+    )[0]
+    assert started["typical_seconds"] == 457
+    assert started["usual_range_seconds"] == [331, 692]
     assert started["stages"] == ["intake", "analyst", "structuralist"]
+
+
+def test_an_absent_range_is_null_rather_than_an_invented_one() -> None:
+    assert _stream()[0]["usual_range_seconds"] is None
+
+
+def test_the_stated_time_comes_from_recorded_elapsed_not_trace_spans() -> None:
+    """A trace's first line is written when the FIRST AGENT FINISHES, so the span
+    from first line to last is a lower bound on the run — 495 seconds against 601
+    of wall clock on the one live run so far. The ledger's `elapsed_s` is the
+    runner's own clock and is what these constants are measured from."""
+    from mapf.cli.commands import serve as command
+
+    assert command.TYPICAL_RUN_SECONDS == 457
+    assert (command.RUN_SECONDS_P10, command.RUN_SECONDS_P90) == (331, 692)
+    assert command.RUN_SECONDS_P10 < command.TYPICAL_RUN_SECONDS < command.RUN_SECONDS_P90
 
 
 def test_every_agent_stage_reaches_the_stream() -> None:
