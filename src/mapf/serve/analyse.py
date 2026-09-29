@@ -13,9 +13,12 @@ decision be tested without a network, a model or a run.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+import json
+import math
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 from mapf.core.errors import MapError
@@ -24,6 +27,59 @@ from mapf.core.tokens import AgentBudget
 from mapf.core.truncation import truncate
 from mapf.eval.calibration import Applicability, applicability, sessions_between
 from mapf.settings import ModelRegistry
+
+
+@dataclass(frozen=True)
+class Freeze:
+    """What the frozen corpus knows about documents, for relating a live run.
+
+    Two lookups rather than one, because they answer different questions. The
+    document id is the identity the journal uses and is what decides the
+    relation; the accession is what a reader recognises, and is what lets a page
+    say "this is the filing already in the table above" rather than implying a
+    live run always reads something new.
+    """
+
+    document_ids: frozenset[str]
+    accessions: frozenset[str]
+
+    @classmethod
+    def load(cls, path: Path) -> Freeze:
+        """Read the freeze, or an empty one if it is not there.
+
+        Empty rather than refused: a missing freeze means the relation cannot be
+        decided, which is the `unchecked` case the journal already has a word for,
+        and it must not stop a run.
+        """
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+            by_accession = record.get("exhibits", {}).get("by_accession", {})
+        except (OSError, json.JSONDecodeError, AttributeError):
+            return cls(document_ids=frozenset(), accessions=frozenset())
+        return cls(
+            document_ids=frozenset(
+                str(e["document_id"]) for e in by_accession.values() if isinstance(e, dict)
+            ),
+            accessions=frozenset(str(a) for a in by_accession),
+        )
+
+    def relate(self, *, document_id: str | None, accession: str) -> str:
+        """The live run's `corpus_relation`, by the journal's own rule.
+
+        Never `ledger_item`: that names a run the ledger recorded, and this run is
+        being made now. A live run over a frozen exhibit is a `repeat_of_exhibit`
+        — same document, new run — which is exactly what re-running a corpus
+        company before its next quarter produces.
+        """
+        if not self.document_ids and not self.accessions:
+            return "unchecked"
+        if document_id and document_id in self.document_ids:
+            return "repeat_of_exhibit"
+        # The accession is the fallback, not the primary: a re-fetch can differ by
+        # a byte and change the hash while naming the same filing.
+        if accession in self.accessions:
+            return "repeat_of_exhibit"
+        return "outside_corpus"
 
 
 class AnalysisError(MapError):
@@ -152,7 +208,41 @@ class Wiring:
     liquidity: Any
     symbol: Any
     correction: Any
-    watch: Any = None
+    freeze: Any = None
+    simulate: Any = None
+
+
+# The band the chart draws. Two levels, not five: the point is that the forecast
+# has a WIDTH, and a nest of ribbons makes the reader estimate which one matters.
+BAND_LEVELS: tuple[float, ...] = (0.10, 0.25, 0.75, 0.90)
+
+
+def band_prices(
+    spot: float,
+    quantiles: Sequence[float],
+    *,
+    mean: float,
+    sigma: float,
+    correction: Any = None,
+) -> list[dict[str, float]]:
+    """Quantiles of the predictive distribution, as prices.
+
+    THE CORRECTION IS APPLIED HERE OR NOWHERE. ADR 0032's map is `z -> (z - a) / b`
+    on the PIT side; the distribution that makes an outcome's corrected z come out
+    right has mean `mu + a*sigma` and sd `b*sigma`. So a corrected band is
+    genuinely wider than its raw twin — which is the whole reason the chart draws
+    one. Without a band, a corrected fan and a raw fan are the same three lines
+    and the amber box is warning about something invisible.
+
+    `quantiles` are LOG returns, which is what `simulate` produces. Prices are
+    `spot * exp(q)`; the scenario endpoints elsewhere use simple returns and the
+    two must not be mixed.
+    """
+    out: list[dict[str, float]] = []
+    for level, q in zip(BAND_LEVELS, quantiles, strict=True):
+        moved = mean + correction.a * sigma + correction.b * (q - mean) if correction else q
+        out.append({"level": level, "price": spot * math.exp(moved)})
+    return out
 
 
 def result_line(
@@ -164,6 +254,8 @@ def result_line(
     forecast: Any,
     applies: Applicability,
     correction: Any,
+    band: Sequence[dict[str, float]] = (),
+    relation: str = "unchecked",
 ) -> dict[str, object]:
     """The final line of the stream.
 
@@ -190,6 +282,9 @@ def result_line(
             }
             for name in ("bullish", "base_case", "bearish")
         ],
+        "band": list(band),
+        # Decided by the freeze, never asserted by the page (ADR 0036 section 2).
+        "corpus_relation": relation,
         "marking": applies.marking,
         "corrected": applies.applies,
         "reasons": list(applies.reasons),
@@ -232,6 +327,14 @@ def run_analysis(
 
     run_id, forecast, window = yield from wiring.execute_run(ticker, horizon, exhibit)
 
+    relation = (
+        wiring.freeze.relate(
+            document_id=getattr(exhibit.document, "id", None), accession=exhibit.accession
+        )
+        if wiring.freeze
+        else "unchecked"
+    )
+
     sessions = [bar.date for bar in window.bars]
     anchor = forecast.as_of.date()
     failed, unevaluated = company_screens(
@@ -241,19 +344,35 @@ def run_analysis(
         floor=liquidity_floor,
         has_exhibit=True,
     )
+    applies = decide(
+        horizon_days=horizon,
+        filed=exhibit.filed,
+        anchor=anchor,
+        sessions=sessions,
+        failed_screens=failed,
+        unevaluated=unevaluated,
+    )
+    band: list[dict[str, float]] = []
+    if wiring.simulate:
+        sim = wiring.simulate(forecast, horizon)
+        band = band_prices(
+            forecast.spot_price,
+            sim.quantiles(BAND_LEVELS),
+            mean=sim.mean,
+            sigma=sim.sigma,
+            # Only where the gate allows it. A band widened by a correction that
+            # does not apply here would be the picture making a claim the words
+            # beside it refuse.
+            correction=wiring.correction if applies.applies else None,
+        )
     yield result_line(
         run_id=run_id,
         ticker=ticker,
         horizon=horizon,
         exhibit=exhibit,
         forecast=forecast,
-        applies=decide(
-            horizon_days=horizon,
-            filed=exhibit.filed,
-            anchor=anchor,
-            sessions=sessions,
-            failed_screens=failed,
-            unevaluated=unevaluated,
-        ),
+        applies=applies,
         correction=wiring.correction,
+        band=band,
+        relation=relation,
     )

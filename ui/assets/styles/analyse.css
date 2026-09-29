@@ -174,3 +174,10 @@ body > .masthead,
 /* ---- the company page's live section ---- */
 .cmp-live { display: grid; gap: var(--sp-4); }
 .cmp-live-row { display: flex; align-items: end; gap: var(--sp-5); flex-wrap: wrap; }
+
+/* The band: what the forecast actually claims. Two nested ribbons, the inner one
+   darker, so the width reads before any single line does. Drawn in the same
+   colour as the paths, so a raw (amber) fan carries an amber band. */
+.anl-band { fill: var(--accent); opacity: .10; stroke: none; }
+.anl-band[data-level="50"] { opacity: .16; }
+.anl-fan[data-calibration="uncalibrated"] .anl-band { fill: var(--uncal); }

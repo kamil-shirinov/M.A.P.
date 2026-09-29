@@ -134,6 +134,79 @@ describe("the marking says which state it is and why", () => {
   });
 });
 
+describe("the band is the width the forecast claims", () => {
+  const banded = (over = {}) => ({
+    ...RESULT,
+    band: [
+      { level: 0.1, price: 188 },
+      { level: 0.25, price: 195 },
+      { level: 0.75, price: 209 },
+      { level: 0.9, price: 216 },
+    ],
+    ...over,
+  });
+
+  it("draws the band behind the scenario lines", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    const svg = renderFan(host, banded());
+    const kids = svg.children;
+    const bands = kids.filter((n) => n._cls?.has("anl-band"));
+    const paths = kids.filter((n) => n._cls?.has("anl-path"));
+    assert.equal(bands.length, 2, "two nested ribbons");
+    assert.ok(kids.indexOf(bands[0]) < kids.indexOf(paths[0]), "behind the lines");
+  });
+
+  it("takes the axis from the band too, so the ribbon is not clipped", async () => {
+    /* The band is usually wider than the three scenarios. An axis fitted to the
+       scenarios alone cuts it at the frame and it reads as narrower than it is. */
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    renderFan(host, banded());
+    const ticks = [...host.children[0].children].filter((n) => n._cls?.has("anl-ytick"));
+    const levels = ticks.map((t) => Number(t.textContent));
+    assert.ok(Math.min(...levels) <= 190, "the axis reaches the band's floor");
+    assert.ok(Math.max(...levels) >= 210, "and its ceiling");
+  });
+
+  it("carries the marking onto the band, so a raw band is amber too", async () => {
+    const sheet = read("assets/styles/analyse.css");
+    assert.match(sheet, /\.anl-fan\[data-calibration="uncalibrated"\] \.anl-band/);
+  });
+
+  it("renders no band rather than inventing one", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const svg = renderFan(new Node("div"), { ...RESULT, band: [] });
+    assert.equal(svg.children.filter((n) => n._cls?.has("anl-band")).length, 0);
+  });
+});
+
+describe("a live result says how it relates to the corpus", () => {
+  it("uses the journal's own words, not a second vocabulary", async () => {
+    const { RELATIONS } = await import("../assets/js/ui/runs-filters.js");
+    const labels = Object.fromEntries(RELATIONS);
+    assert.equal(labels.repeat_of_exhibit, "repeat");
+    assert.equal(labels.outside_corpus, "outside corpus");
+    assert.match(read("assets/js/analyse-page.js"), /RELATIONS\.find\(\(\[v\]\) => v === event\.corpus_relation\)/);
+  });
+
+  it("never claims the latest filing is new", () => {
+    /* It is not, for most corpus companies: AAPL's most recent Item 2.02 is the
+       one already in its table, and stays so until Q3 arrives. */
+    /* Comments out first: the module explains in prose WHY the old claim was
+       removed, and that explanation quotes it. */
+    const live = read("assets/js/ui/company-live.js").replace(/\/\*[\s\S]*?\*\//g, "");
+    assert.doesNotMatch(live, /is not one of the filings above/);
+    // Joined first: the sentence is split across concatenated string literals.
+    const prose = live.replace(/" \+\s*"/g, "");
+    assert.match(prose, /may be one of the filings above or a newer one/);
+    assert.match(prose, /the result says which/);
+  });
+});
+
 describe("the page, its markup and its rules", () => {
   it("marks the uncalibrated horizons on the control, before anything runs", () => {
     /* A reader choosing 21 sessions should know it is uncalibrated while

@@ -1,10 +1,11 @@
 /* This company's next forecast, offered from its own page.
 
-   It offers the company's LATEST filing, which is a different document from the
-   ones the corpus froze — so a run started here is new work, not a re-run of a
-   panel item, and the journal will relate it on its own terms rather than being
-   told what it is (ADR 0036 §2). The section says so, because a control sitting
-   under a table of frozen filings otherwise reads as extending that table.
+   IT MUST NOT SAY WHICH FILING IT WILL READ. An earlier version told the reader
+   the latest 8-K "is not one of the filings above", and for most corpus companies
+   that is false: AAPL's most recent Item 2.02 is the 2026-07-30 one sitting in
+   the table, and stays so until Q3 arrives. The page cannot know before the run
+   which document EDGAR will return, so it says what is true either way and the
+   result carries the relation tag the journal would give it (ADR 0036 §2).
 
    With no server the page's one stated absence lands here instead (§4). */
 
@@ -35,9 +36,10 @@ export async function renderLive(host, company) {
   box.append(chrome(el("h3", "cmp-h", "Forecast the latest filing"), "a section heading"));
   box.append(chrome(
     el("p", null,
-      "Reads this company's most recent earnings 8-K, which is not one of the filings " +
-      "above: those are the ones the corpus froze. A run started here is new work and " +
-      "is recorded as such, not added to the record on this page."),
+      "Reads whichever earnings 8-K this company has filed most recently. That may be " +
+      "one of the filings above or a newer one, and the result says which. Either way " +
+      "it is a new run, recorded on its own terms rather than added to the record on " +
+      "this page."),
     "what a run from here is",
   ));
 

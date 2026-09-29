@@ -203,11 +203,88 @@ def test_the_marking_is_in_the_same_object_as_the_numbers() -> None:
         assert key in result
 
 
-def test_nothing_in_the_path_asserts_a_corpus_relation() -> None:
-    """ADR 0036 §2: the relation is whatever the journal's own check makes of the
-    document. A corpus company's latest filing may well be a frozen exhibit."""
-    assert "corpus_relation" not in _stream()[-1]
-    assert "outside_corpus" not in str(_stream()[-1])
+def test_the_relation_is_decided_by_the_freeze_never_asserted() -> None:
+    """ADR 0036 §2. A corpus company's latest filing may well BE a frozen exhibit —
+    for AAPL today it is — so the live path must ask rather than assume."""
+    from mapf.serve.analyse import Freeze
+
+    freeze = Freeze(document_ids=frozenset({"sha256:abc"}), accessions=frozenset({"0000-1"}))
+    assert freeze.relate(document_id="sha256:abc", accession="other") == "repeat_of_exhibit"
+    assert freeze.relate(document_id="sha256:zzz", accession="0000-1") == "repeat_of_exhibit"
+    assert freeze.relate(document_id="sha256:zzz", accession="other") == "outside_corpus"
+    # Never `ledger_item`: that names a run the ledger recorded, and this one is
+    # being made now.
+    assert "ledger_item" not in {
+        freeze.relate(document_id=d, accession=a) for d, a in (("sha256:abc", "0000-1"), ("x", "y"))
+    }
+
+
+def test_an_unreadable_freeze_leaves_the_relation_unchecked(tmp_path: Any) -> None:
+    """Unchecked is the journal's own word for "nobody could tell". It must not
+    stop a run, and it must not become `outside_corpus` by default — that would be
+    a claim made from a missing file."""
+    from mapf.serve.analyse import Freeze
+
+    assert (
+        Freeze.load(tmp_path / "absent.json").relate(document_id="x", accession="y") == "unchecked"
+    )
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    assert Freeze.load(broken).relate(document_id="x", accession="y") == "unchecked"
+
+
+def test_the_real_freeze_relates_aapls_latest_filing_as_a_repeat() -> None:
+    """The case that prompted this: the company page claimed a live run always
+    reads something newer than the table above it, and for AAPL it does not."""
+    from pathlib import Path as P
+
+    from mapf.serve.analyse import Freeze
+
+    freeze = Freeze.load(P("corpus/frozen.json"))
+    assert freeze.relate(document_id=None, accession="0000320193-26-000018") == "repeat_of_exhibit"
+    assert freeze.relate(document_id=None, accession="9999999999-99-999999") == "outside_corpus"
+
+
+def test_the_result_carries_the_relation() -> None:
+    assert _stream()[-1]["corpus_relation"] == "unchecked"
+
+
+# --- the band ------------------------------------------------------------------
+
+
+def test_the_band_is_the_forecasts_width_in_prices() -> None:
+    """Without it a corrected fan and a raw one are the same three lines, and the
+    amber box warns about something invisible."""
+    from mapf.serve.analyse import BAND_LEVELS, band_prices
+
+    band = band_prices(100.0, [-0.10, -0.04, 0.04, 0.10], mean=0.0, sigma=0.06)
+    assert [b["level"] for b in band] == list(BAND_LEVELS)
+    prices = [b["price"] for b in band]
+    assert prices == sorted(prices), "quantiles arrive in order and stay in order"
+    assert prices[0] < 100.0 < prices[-1]
+
+
+def test_the_correction_widens_the_band_and_that_is_the_point() -> None:
+    """`b = 1.3305` is greater than one, so a corrected band is genuinely wider.
+    A picture that did not show that would make the marking beside it decorative."""
+    from mapf.serve.analyse import band_prices
+
+    quantiles = [-0.10, -0.04, 0.04, 0.10]
+    raw = band_prices(100.0, quantiles, mean=0.0, sigma=0.06)
+    corrected = band_prices(100.0, quantiles, mean=0.0, sigma=0.06, correction=_Correction())
+    raw_width = raw[-1]["price"] - raw[0]["price"]
+    corrected_width = corrected[-1]["price"] - corrected[0]["price"]
+    assert corrected_width > raw_width * 1.2
+
+
+def test_a_band_is_not_widened_when_the_correction_does_not_apply() -> None:
+    """The gate decides, and the picture follows it. A band widened by a correction
+    the words refuse would be the chart contradicting the box above it."""
+    events = list(run_analysis("AAPL", 21, wiring=_wiring(), typical_seconds=457))
+    result = events[-1]
+    assert result["corrected"] is False
+    # No simulator wired in this stub, so no band — and never a fabricated one.
+    assert result["band"] == []
 
 
 # --- the pieces ----------------------------------------------------------------

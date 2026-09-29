@@ -69,7 +69,13 @@ export function renderFan(host, result) {
   }
 
   const paths = endpoints(result);
-  const prices = [result.spot, ...paths.map((p) => p.price)];
+  const prices = [
+    result.spot,
+    ...paths.map((p) => p.price),
+    // The band is usually wider than the scenarios, so the axis has to cover it
+    // or the ribbon is clipped at the frame and reads as narrower than it is.
+    ...(Array.isArray(result.band) ? result.band.map((b) => b.price) : []),
+  ];
   const lo = Math.min(...prices);
   const hi = Math.max(...prices);
   const pad = (hi - lo) * 0.18 || Math.max(1, result.spot * 0.02);
@@ -98,6 +104,32 @@ export function renderFan(host, result) {
     text.textContent = level.toFixed(2);
     text.dataset.prov = DERIVED;
     svg.append(text);
+  }
+
+  /* THE BAND, behind the lines. It is what M.A.P. actually forecasts: the three
+     scenarios are the shape of the reasoning, and the width is the claim. Drawn
+     first so the lines sit on top of it, and drawn from quantiles the server took
+     off the same simulation the scorer would score — not re-derived here from the
+     three endpoints, which would be a second, prettier distribution.
+
+     When the correction applies the server has already widened these, so a
+     corrected band is visibly wider than its raw twin. That difference is the
+     reason the band exists at all. */
+  const band = Array.isArray(result.band) ? result.band : [];
+  if (band.length >= 2) {
+    const sorted = [...band].sort((a, b) => a.level - b.level);
+    // Pairs from the outside in, so the inner ribbon overlays the outer one.
+    for (let i = 0; i < Math.floor(sorted.length / 2); i++) {
+      const lo = sorted[i];
+      const hi = sorted[sorted.length - 1 - i];
+      const area = svgNode("path", {
+        class: "anl-band",
+        d: `M${x0} ${y(result.spot)} Q${(x0 + x1) / 2} ${(y(result.spot) + y(hi.price)) / 2} ${x1} ${y(hi.price)}`
+          + ` L${x1} ${y(lo.price)} Q${(x0 + x1) / 2} ${(y(result.spot) + y(lo.price)) / 2} ${x0} ${y(result.spot)} Z`,
+      });
+      area.dataset.level = String(Math.round((hi.level - lo.level) * 100));
+      svg.append(area);
+    }
   }
 
   // The anchor: one measured price, which is the only measured number on the

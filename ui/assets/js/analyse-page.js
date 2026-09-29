@@ -21,6 +21,7 @@
 
 import * as source from "./data/source.js";
 import { renderFan, renderMarking } from "./ui/analyse-fan.js";
+import { RELATIONS } from "./ui/runs-filters.js";
 import { renderPageWhy } from "./ui/page-why.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
@@ -186,6 +187,13 @@ function renderResult(host, event) {
   host.textContent = "";
   const head = el("div", "anl-result-head");
   head.append(chrome(el("h3", null, `${event.ticker} · ${event.horizon_days} sessions`), "the run's subject"));
+  /* The same tag the journal puts on a row, with the same words. A live run over
+     a corpus company's latest filing IS a repeat — for AAPL today it is — and the
+     screen has to say so rather than implying every live run reads something new. */
+  const tag = el("span", "runs-tag tag",
+    RELATIONS.find(([v]) => v === event.corpus_relation)?.[1] ?? event.corpus_relation);
+  tag.dataset.rel = event.corpus_relation;
+  head.append(chrome(tag, "how this run relates to the frozen corpus"));
   head.append(chromeText(`anchored ${event.anchor}`, "the anchor date"));
   host.append(head);
 

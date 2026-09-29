@@ -38,8 +38,16 @@ from mapf.core.errors import MapError
 from mapf.core.hashing import new_run_id
 from mapf.data.liquidity import MarketLiquidity
 from mapf.eval.calibration import CalibrationError, load_correction
+from mapf.eval.montecarlo import simulate
 from mapf.pipeline.run import RunRequest, execute
-from mapf.serve.analyse import AnalysisError, Exhibit, Wiring, latest_exhibit, run_analysis
+from mapf.serve.analyse import (
+    AnalysisError,
+    Exhibit,
+    Freeze,
+    Wiring,
+    latest_exhibit,
+    run_analysis,
+)
 from mapf.serve.server import Config, build
 from mapf.settings import ModelRegistry, load
 
@@ -114,6 +122,10 @@ def serve(
     port: int = typer.Option(8765, help="Loopback port for the app and the endpoint."),
     ui_dir: Path = typer.Option(UI_ROOT, help="The app directory to serve."),
     edgar_days: int = typer.Option(120, help="How far back to look for an Item 2.02."),
+    frozen: Path = typer.Option(
+        Path("corpus/frozen.json"),
+        help="The frozen corpus, for relating a live run to it (ADR 0036 section 2).",
+    ),
     spend_path: Path = typer.Option(
         Path("corpus/holdout_spend.jsonl"),
         help="The record carrying the fitted calibration terms (ADR 0032).",
@@ -245,6 +257,11 @@ def serve(
             liquidity=liquidity,
             symbol=symbol_cik,
             correction=correction,
+            freeze=Freeze.load(frozen),
+            # The same `simulate` the scorer runs, with the same default paths and
+            # the same seed, so the band on screen is the distribution that would
+            # be scored and not a second one drawn for the picture.
+            simulate=lambda forecast, horizon: simulate(forecast.scenarios, horizon_days=horizon),
         )
 
         def analyse(ticker: str, horizon: int) -> Iterator[dict[str, object]]:
