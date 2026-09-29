@@ -2922,3 +2922,128 @@ safeguard was real, and what was missing was anything that made it run.
 from inside pytest against the recorded reasoning in `test_definition_of_done.py`.
 Until one of those happens, the contracts hold only because they are run by hand
 before each push.
+
+---
+
+## 66 · The one finding that replicated kept its verdict and lost its numbers
+
+The Phase 2 close recorded the second-band replication of volatility compression in the
+vault's STATE file, `M.A.P.-vault/STATE.md` at `852b1cb` (2026-09-04 19:50; pre-rebase twin
+`24fbedc`):
+
+> **Volatility compression — REPLICATES, fully, against both baselines.** S1 corrected
+> slope 0.409 (RW) / 0.327 (GARCH), both Frisch intervals excluding 1.0; S2 spread
+> ratios 0.516 / 0.468; S3 negative and monotone at all three cut depths.
+
+The Phase 3 write-up, `5ada5aa` (2026-09-05 09:44), replaced that with *"Volatility
+compression replicated out of sample against both baselines (record 6)"*: the verdict
+without a figure. It is the same commit that removed the tails interval (#61). The
+Timeline's re-derivation on the 2026-09-05 vintage says "compression still replicated" and
+gives no number either. So the figures of the one finding the write-ups call established out
+of sample were in a tracked file for fourteen hours, and have been only in history since.
+**No bound was ever recorded.** "Both Frisch intervals excluding 1.0" is all there is.
+
+**Recomputed from the registration on 2026-09-29. The recorded figures reproduce.**
+
+### What survived and what did not
+
+As in #61, the result was committed and removed and the code never was. `git log --all
+-S Frisch` finds the git notes and the vault commits that recorded and removed it, and
+nothing under `src/` or `tests/` on any ref. The estimator is rebuildable from the notes on `ad71b13`
+alone: record 6 for S2, record 8 Part B for S1, record 9 for how to read it. Forward slope
+of log σ(M.A.P.) on log σ(baseline); reverse slope; λ = corr(log σ_RW, log σ_GARCH) on the
+band itself; corrected slope = forward / λ; Frisch bounds [forward, 1/reverse]; cluster-robust
+intervals on ten-day blocks, 4,000 draws, seed 20260813. The replication criterion is the
+random walk's widest interval, the forward slope's lower bound to the inverse reverse
+slope's upper, excluding 1.0. It is now `mapf.eval.compression`, committed with its tests
+before any figure below was written down (`0695e5b`).
+
+### The inputs, and why the original samples are exact rather than reconstructed
+
+σ(M.A.P.) is persisted and the baselines' σ is not. Each item's σ(M.A.P.) is `simulate()`
+over its forecast's scenarios, and it matches the persisted `map_sigma` with a relative gap
+of exactly zero on every item the scoring records hold. The baselines' σ were refit with
+`random_walk` and `garch` on each item's prior window from the pinned 2026-09-05 snapshot,
+which is the scorer's own path.
+
+Both samples are the originals: 178 development items and 177 ambiguous. Today's scoring
+records hold 175 and 174. The three missing from each band are all SCCO, refused since the
+split Yahoo applied late (record 13). A uniform factor leaves log returns unchanged, and σ
+is built from nothing else, so these items' σ are the same before and after it. The
+development row below confirms that: every figure record 8 lists reproduces from today's
+snapshot.
+
+### Development, against record 8 (178 items, 18 occupied blocks)
+
+| | random walk | GARCH |
+| --- | --- | --- |
+| forward | 0.3166 [0.2609, 0.3811] | 0.2119 [0.1375, 0.2933] |
+| 1 / reverse | 0.8102 [0.6548, 0.9993] | 0.9796 [0.8014, 1.2348] |
+| corrected | 0.3765 [0.3144, 0.4659] | 0.2520 [0.1656, 0.3423] |
+| λ | 0.8410 | 0.8410 |
+| spread ratio | 0.5065 | 0.4556 |
+
+**Every point and every bound matches record 8 to four decimals.** That is the check that
+this is the estimator record 8 was computed with, before anything is read off the second
+band.
+
+### The replication, against `852b1cb` (177 items, 24 occupied blocks)
+
+| | random walk | GARCH |
+| --- | --- | --- |
+| corrected, recorded | 0.409 | 0.327 |
+| corrected, computed today | **0.4092** [0.3532, 0.4747] | **0.3268** [0.2869, 0.4281] |
+| forward | 0.3637 [0.3279, 0.4363] | 0.2905 [0.2531, 0.4075] |
+| 1 / reverse | 0.7327 [0.6271, 0.7616] | 0.7525 [0.6081, 0.8032] |
+| Frisch bounds | [0.3637, 0.7327] | [0.2905, 0.7525] |
+| widest | [0.3279, 0.7616] | [0.2531, 0.8032] |
+| spread ratio, recorded / today | 0.516 / 0.5162 | 0.468 / 0.4675 |
+
+λ is 0.8889 [0.8562, 0.9678]. Both slopes and both spread ratios reproduce to the three
+decimals recorded. "Both Frisch intervals excluding 1.0" holds under either reading: the
+bounds and the widest intervals all sit below 1.0 on both baselines. Record 8's predictions
+were a corrected slope of 0.25–0.55 against the random walk with the widest interval below
+1.0, and 0.15–0.40 against GARCH with its upper bound allowed to reach 1.0. All are met, and
+GARCH's did not reach it.
+
+**The intervals in this table are computed today and were never recorded.** They are the
+first bounds written down for the replication, not a check of earlier ones. S3 was not
+rebuilt; its recorded outcome stands as recorded.
+
+### The open choice, and why no verdict turns on it
+
+The registration does not say whether λ is re-estimated in each resample or held at its
+point value. The record settles it: re-estimating reproduces record 8's
+[0.3144, 0.4659], and holding λ fixed gives [0.3102, 0.4532]. On the second band a fixed λ
+would give [0.3689, 0.4908] and [0.2847, 0.4584]. Neither reading changes a verdict,
+because the replication criterion is the widest interval, and λ does not enter it.
+
+### Today's population moves a development bound across 1.0
+
+On the 175 and 174 items the scoring records hold today:
+
+| | development, 175 | second band, 174 |
+| --- | --- | --- |
+| corrected, random walk | 0.3768 [0.3163, 0.4649] | 0.4098 [0.3564, 0.4754] |
+| widest, random walk | [0.2614, **1.0038**] | [0.3307, 0.7577] |
+| corrected, GARCH | 0.2522 [0.1635, 0.3431] | 0.3267 [0.2887, 0.4262] |
+| widest, GARCH | [0.1358, 1.2428] | [0.2542, 0.7977] |
+
+The replication verdict does not move. The development one does. Record 8 said that against
+the random walk compression "survives errors-in-variables, but only just, the upper bound
+landing at 0.9993". On 175 items it lands at 1.0038: three SCCO items move it 0.0045, across
+the line. Neither sample is the wrong one. The 178 is what record 8 and the registration were
+written on, and its σ are exact. The 175 is what the scoring record can produce today.
+Development was never the test; it is the post-hoc finding the replication was registered to
+check. But "against the random walk it survives" is true of one sample and not the other,
+and is not repeated below without the sample it holds on.
+
+### The shape
+
+Same family as [[#61]], out of the same commit, and it reproduced for the same reason: record
+8 names its estimator precisely enough to re-implement, down to which baselines λ comes from.
+The difference is which result was lost. #61 lost the interval that made a replication
+PARTIAL. This one lost every figure behind the finding the write-ups call the only one
+established out of sample, and left the verdict standing in prose since 2026-09-05 with
+nothing in the repository that could produce it. A verdict that outlives its numbers reads
+the same as one that still has them.

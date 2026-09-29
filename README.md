@@ -117,12 +117,23 @@ cannot be re-derived from it.*
 
 **4. One finding did replicate, out of sample: volatility compression.** M.A.P. states too
 narrow a range of volatilities across companies — about right for typical names, far too
-narrow for the ones that move. On development, the slope of log σ(M.A.P.) on log σ(random
-walk) is **0.3166 [0.2609, 0.3811]**, where 1.0 would be right. On the second band the
-pre-registered, attenuation-corrected slope came out **0.409 against the random walk and
-0.327 against GARCH**, both intervals excluding 1.0 — a different estimator, so the two
-are not comparable to each other, only to 1.0. It is the candidate explanation for both
-the heavy tails and the narrow intervals.
+narrow for the ones that move. The measure is the slope of log σ(M.A.P.) on a baseline's
+log σ, corrected for the error in the baseline's own σ; 1.0 would be right. Same estimator
+on both bands, intervals computed on 2026-09-29 from the pre-registration:
+
+| corrected slope | development (178) | second band (177) |
+| --- | --- | --- |
+| against the random walk | 0.3765 [0.3144, 0.4659] | 0.4092 [0.3532, 0.4747] |
+| against GARCH | 0.2520 [0.1656, 0.3423] | 0.3268 [0.2869, 0.4281] |
+
+The second band's point estimates reproduce the recorded **0.409 and 0.327**; its intervals
+were never recorded ([Findings #66](notebook/Findings%20&%20Incidents.md)). The registered
+test used a wider interval that also allows for error in M.A.P.'s σ. On the second band it
+stays below 1.0 against both baselines, [0.33, 0.76] and [0.25, 0.80]. On development its
+upper end was 1.23 against GARCH, and against the random walk 0.9993 on the original 178
+items but 1.0038 on the 175 the scoring record now holds. So the second band is where
+compression was established. It is the candidate explanation for both the heavy tails and
+the narrow intervals.
 
 **What this is not.** Not trading advice, not a signal, not a product. No order execution,
 no position sizing, no broker integration. It is an engineering and methodology exercise

@@ -166,15 +166,36 @@ ambiguous band the corrected slope came out **0.409 against the random walk and 
 against GARCH, both intervals excluding 1.0**; the spread ratios were 0.516 and 0.468; and
 all three cut depths were negative and monotone. Every registered prediction was met.
 
-**Do not compare 0.3166 with 0.409 as if they measured one thing.** The first is the raw
-development slope, the second the corrected replication slope, and the correction raises a
-slope by construction. The claim is that both are far below 1.0, which is what a
-correctly spread set of volatilities would give. These figures are quoted from the one
-place they are recorded — `notebook/STATE.md` at `852b1cb`, 2026-09-04, removed from the
-working tree the next day by the same Phase 3 rewrite that removed the tails interval
-(Findings #61). That record gives the point estimates and says both intervals exclude 1.0;
-it does not give the bounds. None of it can be re-derived from the export, which stores
-M.A.P.'s σ but not the baselines'.
+The ambiguous-band figures in that paragraph are quoted from the one place they were
+written down, `M.A.P.-vault/STATE.md` at `852b1cb`, 2026-09-04 (the vault is now
+`notebook/`). The same Phase 3 rewrite that removed the tails interval removed them the next
+day (Findings #61). That record gives point estimates and says both intervals exclude 1.0.
+It gives no bounds.
+
+**Recomputed from the registration on 2026-09-29, on the original samples**
+([Findings #66](../notebook/Findings%20&%20Incidents.md)). The estimator is now
+`mapf.eval.compression`. Same estimator on both bands, intervals computed on 2026-09-29:
+
+| corrected slope | development, 178 | ambiguous, 177 |
+| --- | --- | --- |
+| against the random walk | 0.3765 [0.3144, 0.4659] | 0.4092 [0.3532, 0.4747] |
+| against GARCH | 0.2520 [0.1656, 0.3423] | 0.3268 [0.2869, 0.4281] |
+| widest interval, random walk | [0.2609, 0.9993] | [0.3279, 0.7616] |
+| widest interval, GARCH | [0.1375, 1.2348] | [0.2531, 0.8032] |
+
+Development reproduces every figure in record 8 to four decimals. The ambiguous band
+reproduces the recorded 0.409, 0.327, 0.516 and 0.468; its intervals are new, not a check of
+recorded ones. The widest interval runs from the forward slope's lower bound to the inverse
+reverse slope's upper, and is record 8's replication criterion. On the ambiguous band it
+excludes 1.0 against both baselines. On development against the random walk it excludes 1.0
+on the original 178 items but not on the 175 the scoring record now holds, where it
+reaches 1.0038. The development result was too close to 1.0 to carry the claim; the
+replication carries it.
+
+**Compare 0.3765 with 0.4092, not 0.3166.** 0.3166 is the raw development slope record 5
+reported, and the correction raises a slope by construction. None of this can be
+re-derived from the export, which stores M.A.P.'s σ but not the baselines'; the
+recomputation refit them from the pinned snapshot.
 
 This is the project's only finding established out of sample.
 
