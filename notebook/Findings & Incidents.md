@@ -2742,3 +2742,54 @@ invisible for as long as it did not matter.
 Not caught by review, and it would not have been: reading `_check` beside `_export` shows one
 argument missing from a list of six, and the reason it is missing is a fact about a different
 file. The thing that found it was adding a reader.
+
+---
+
+## 63 · A test double that stopped matching, and wrote to the real journal
+
+Screenshots of the live-analysis result are taken by intercepting `POST /analyze` in
+Playwright and fulfilling it from a recorded stream, so that a picture costs no run. In
+the same batch of work the endpoint was renamed `/analyse`, for spelling consistency
+across the URL and the labels. The intercept pattern was not renamed with it.
+
+Playwright does not warn about a route that matches nothing. The request went past the
+stub to the live server, which ran the pipeline for real and wrote **a second permanent
+entry to the run journal**.
+
+**It cost no inference.** All three agents were cache hits — same document, same prompts,
+same sampling — and the run completed in four milliseconds. That is why it was invisible:
+the script finished in its usual time and produced a screenshot that looked right. The
+only trace was a run count one higher than it should have been, and a set of prices that
+had moved.
+
+### Why the route fix is not the fix
+
+Renaming the pattern repairs this rename. It does nothing about the next one, and the
+failure mode is not specific to renaming: **an intercept that stops matching fails open.**
+The stub's whole job is to stand between a screenshot and a side effect, and its failure
+gives no signal at all — the request simply proceeds to the thing it was meant to prevent.
+
+Same family as [[#62]], one level further out. There, a test helper passed six paths into
+a temporary directory and a seventh into the repository, and nothing noticed for as long
+as nothing read the seventh. Here, a stub covers one route and the real server is reachable
+on all of them; nothing notices for as long as the pattern happens to match. **Both are
+isolation that holds by coincidence rather than by construction**, and in both cases the
+coincidence was invisible in the code that depended on it.
+
+### The repair
+
+The screenshot server runs against `FakeProvider` and a temporary runs directory. Then a
+missed intercept produces a fixture-backed answer written somewhere that is deleted
+afterwards, and the worst outcome is a wrong picture rather than a permanent record.
+
+The principle: **when a double exists to prevent a side effect, remove the side effect from
+the environment as well as intercepting the call.** An intercept is a claim about what a
+request will do; an environment with nothing to damage is a fact about what it can do. The
+first can stop being true without anybody editing it.
+
+### On the entry itself
+
+It stays. It is a real run of real code over a real document, and the journal is a record
+of what happened rather than of what was intended — the same reason a dirty-tree scoring
+record was kept beside its clean twin rather than deleted. Both KO runs are counted, the
+door says `2 live runs`, and this note is why the second one exists.

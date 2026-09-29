@@ -184,7 +184,7 @@ def test_a_stale_filing_is_amber_because_the_anchor_is_too_far_out() -> None:
         run_analysis("AAPL", 5, wiring=_wiring(fetch_exhibit=lambda _t: old), typical_seconds=397)
     )[-1]
     assert result["corrected"] is False
-    assert any("days after one" in str(r) for r in result["reasons"])
+    assert any("trading days after one" in str(r) for r in result["reasons"])
 
 
 def test_the_longer_periods_are_offered_and_always_amber() -> None:
@@ -921,3 +921,56 @@ def test_a_map_error_while_serving_is_reported_as_one(
     result = CliRunner().invoke(app, ["serve", "--ui-dir", str(ui), "--no-open"])
     assert result.exit_code != 0
     assert "the price cache is unreadable" in result.output
+
+
+def test_the_result_says_which_close_the_spot_is() -> None:
+    """A run anchors on `last_close`, never an intraday quote. Made before a
+    session closes, its own date and its price's date are different days — and
+    the screen said only the first. The two coincided on the first live run,
+    which is why it took a second to show."""
+    result = _stream()[-1]
+    assert result["price_date"] == SESSIONS[-1].isoformat()
+    assert result["anchor"] == ANCHOR.isoformat()
+
+
+def test_the_price_date_is_the_last_session_not_the_run_date() -> None:
+    from mapf.serve.analyse import result_line
+
+    line = result_line(
+        run_id="r",
+        ticker="KO",
+        horizon=5,
+        exhibit=_exhibit(),
+        forecast=_Forecast(),
+        applies=decide(
+            horizon_days=5,
+            filed=FILED,
+            anchor=ANCHOR,
+            sessions=SESSIONS,
+            failed_screens=(),
+            unevaluated=(),
+        ),
+        correction=_Correction(),
+        price_date=date(2026, 9, 28),
+    )
+    assert line["price_date"] == "2026-09-28"
+    # And absent rather than guessed when there is no calendar to read it from.
+    assert (
+        result_line(
+            run_id="r",
+            ticker="KO",
+            horizon=5,
+            exhibit=_exhibit(),
+            forecast=_Forecast(),
+            applies=decide(
+                horizon_days=5,
+                filed=FILED,
+                anchor=ANCHOR,
+                sessions=SESSIONS,
+                failed_screens=(),
+                unevaluated=(),
+            ),
+            correction=_Correction(),
+        )["price_date"]
+        is None
+    )

@@ -173,13 +173,13 @@ function bandLegend(band, result) {
   const line = el("p", "anl-band-key");
   line.append(chromeText(
     `Shaded: the middle ${span(sorted[0], sorted.at(-1))}% and ${span(sorted[1], sorted.at(-2))}% `
-    + "of the forecast's own distribution",
+    + "of the forecast.",
     "what the shaded region is",
   ));
   line.append(chromeText(
     result.corrected
-      ? " — widened by the fitted correction."
-      : " — raw, and this is the width measured too narrow.",
+      ? " The fitted correction widened this."
+      : " This raw width was measured too narrow.",
     "whether the correction was applied to this band",
   ));
   return line;

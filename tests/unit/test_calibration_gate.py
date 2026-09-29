@@ -110,7 +110,7 @@ def test_a_horizon_other_than_five_refuses_and_says_so() -> None:
 def test_an_anchor_too_far_from_the_filing_refuses() -> None:
     decision = _ok(anchor_lag_sessions=3)
     assert decision.applies is False
-    assert any("this forecast is 3 days after one" in r for r in decision.reasons)
+    assert any("this forecast is 3 trading days after one" in r for r in decision.reasons)
 
 
 def test_an_uncountable_anchor_lag_is_a_failure_not_a_pass() -> None:

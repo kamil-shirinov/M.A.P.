@@ -195,7 +195,18 @@ function renderResult(host, event) {
     RELATIONS.find(([v]) => v === event.corpus_relation)?.[1] ?? event.corpus_relation);
   tag.dataset.rel = event.corpus_relation;
   head.append(chrome(tag, "how this run relates to the frozen corpus"));
-  head.append(chromeText(`anchored ${event.anchor}`, "the anchor date"));
+  /* Both dates, because they are not always the same one. A run made before a
+     session closes anchors on the previous close, so saying only "anchored
+     2026-09-29" invites reading a 09-28 price as that day's. */
+  head.append(chromeText(`anchored ${event.anchor}`, "the date the run was made"));
+  if (event.price_date && event.price_date !== event.anchor) {
+    head.append(chromeText(
+      ` · price is the ${event.price_date} close`,
+      "the session the anchor price is the close of",
+    ));
+  } else if (event.price_date) {
+    head.append(chromeText(" · at that day's close", "the session the anchor price is the close of"));
+  }
   host.append(head);
 
   const marking = el("div", "anl-marking-host");

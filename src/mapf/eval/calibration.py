@@ -179,7 +179,8 @@ def applicability(
     elif not 0 <= anchor_lag_sessions <= MAX_ANCHOR_LAG_SESSIONS:
         reasons.append(
             f"the correction was only tested within {MAX_ANCHOR_LAG_SESSIONS} trading "
-            f"day of a filing, and this forecast is {anchor_lag_sessions} days after one"
+            f"day of a filing, and this forecast is {anchor_lag_sessions} trading days "
+            "after one"
         )
     for screen in failed_screens:
         reasons.append(

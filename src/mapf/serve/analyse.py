@@ -256,6 +256,7 @@ def result_line(
     correction: Any,
     band: Sequence[dict[str, float]] = (),
     relation: str = "unchecked",
+    price_date: date | None = None,
 ) -> dict[str, object]:
     """The final line of the stream.
 
@@ -269,6 +270,11 @@ def result_line(
         "ticker": ticker,
         "anchor": forecast.as_of.date().isoformat(),
         "spot": forecast.spot_price,
+        # WHICH CLOSE THE SPOT IS. A run made before a session closes anchors on
+        # the previous one — `last_close`, never an intraday quote — so the run's
+        # own date and its price's date are different days, and the screen said
+        # only the first. They coincided on the first live run, which hid it.
+        "price_date": price_date.isoformat() if price_date else None,
         "horizon_days": horizon,
         "filed": exhibit.filed.isoformat(),
         "accession": exhibit.accession,
@@ -336,6 +342,9 @@ def run_analysis(
     )
 
     sessions = [bar.date for bar in window.bars]
+    # The session the spot is the close of. `run.py` anchors on `last_close`, so
+    # this is the last completed session and not necessarily the run's own date.
+    price_date = sessions[-1] if sessions else None
     anchor = forecast.as_of.date()
     failed, unevaluated = company_screens(
         ticker,
@@ -375,4 +384,5 @@ def run_analysis(
         correction=wiring.correction,
         band=band,
         relation=relation,
+        price_date=price_date,
     )
