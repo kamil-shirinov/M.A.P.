@@ -71,6 +71,22 @@ out over-dispersed, which is the exact failure mode recorded in advance: a scale
 to the log score lets a handful of extreme items pull it up and over-widen the ordinary
 ones.
 
+The condition asked that the corrected MAD-scale of `z` be consistent with 1.0. **Which
+reading of that is the right one was never written down.** Refitting `a` and `b` inside
+each bootstrap resample — the reading that carries the parameter uncertainty — gives
+**[0.6997, 0.9931]**, which excludes 1.0 and so fails, by 0.0069. Holding the fitted
+parameters fixed, it passes. The pre-registration named a threshold without naming its
+estimator, so both readings were legitimate; it was called FAIL on the stricter one, and
+the gap is recorded as a gap in the pre-registration. The rule since: *a threshold is not
+a pre-registration unless the estimator is also pre-registered.*
+
+**Nothing said whether a failed condition still spends the holdout.** That decision could
+not be made from the record, so Kamil made it, having already seen the failed fit, and it
+is recorded as his judgement in git note record 12 rather than smoothed over. The
+reasoning: declining would condition the holdout on a development result, which is the
+selection a holdout exists to prevent — one spent only when the fit looks good is a second
+development set with a publication filter.
+
 The holdout was then spent, once, on **173 items**.
 
 | | corrected | uncorrected | difference |
@@ -139,10 +155,28 @@ Two findings developed on the development half were given pre-registered replica
 tests on the second band, written before any of its items were scored.
 
 **Cross-sectional volatility compression: replicated**, against both baselines. The
-system's volatilities span about half the range a trailing-volatility baseline does — an
-attenuation-corrected slope near 0.4 where 1.0 is correct, with every registered
-prediction met and the effect monotone across three cut depths. This is the project's
-only finding established out of sample.
+system's volatilities span about half the range a trailing-volatility baseline does.
+
+On development (record 5, 178 items at the 2026-09-02 vintage), the raw slope of
+log σ(M.A.P.) on log σ(random walk) was **0.3166 [0.2609, 0.3811]** and the spread ratio
+0.5065. Record 6 registered the replication with those as reference anchors, and record 8
+replaced the raw slope with an **attenuation-corrected** one, because the baseline's σ is
+itself estimated and an error in the regressor biases a slope towards zero. On the
+ambiguous band the corrected slope came out **0.409 against the random walk and 0.327
+against GARCH, both intervals excluding 1.0**; the spread ratios were 0.516 and 0.468; and
+all three cut depths were negative and monotone. Every registered prediction was met.
+
+**Do not compare 0.3166 with 0.409 as if they measured one thing.** The first is the raw
+development slope, the second the corrected replication slope, and the correction raises a
+slope by construction. The claim is that both are far below 1.0, which is what a
+correctly spread set of volatilities would give. These figures are quoted from the one
+place they are recorded — `notebook/STATE.md` at `852b1cb`, 2026-09-04, removed from the
+working tree the next day by the same Phase 3 rewrite that removed the tails interval
+(Findings #61). That record gives the point estimates and says both intervals exclude 1.0;
+it does not give the bounds. None of it can be re-derived from the export, which stores
+M.A.P.'s σ but not the baselines'.
+
+This is the project's only finding established out of sample.
 
 **Heavier-than-normal tails: partial.** On the 177 ambiguous items scored at the time the
 exceedance counts replicated emphatically — 8 past three sigma against 0.48 expected,
@@ -152,6 +186,27 @@ with the disagreeing pair named. Recomputed from the pre-registration four weeks
 the 174 items still persisted, it gives the same verdict under every reading the record
 left open: 17.0× against 0.47 expected, and a lower bound of 0.9947. The Student-t
 successor it would have triggered stays unadopted. See Findings #61.
+
+**On the original 177, the recomputation matches at both ends.** The three items the
+persisted record lacks are all SCCO, refused later by `SpotDriftError` after one uniform
+re-adjustment of that series. Their returns can be rebuilt on the basis they were scored
+on — the anchor from each forecast's recorded spot, the outcome from the realised-bar pin
+taken at first scoring — and the rebuilt returns match today's re-adjusted series to
+1e-8, which is what makes this a reproduction rather than a new measurement. On all 177,
+the interval is **[0.9933, 1.5378] against the recorded [0.9945, 1.5365]**: 0.0012 apart
+at the lower end and 0.0013 at the upper. The development interval reproduces too —
+[1.0169, 1.4368] against record 4's [1.0135, 1.4372]. The three SCCO items are ordinary
+body values (z of −0.95, +1.27 and −0.68); removing them moves the MAD-scale, not the tail,
+which is why they shifted the 174-item upper bound by 0.07 while leaving the verdict alone.
+
+**The comparison with the baselines is quoted, not re-derivable.** On development, the two
+normal-tailed baselines scored on the same outcomes showed far fewer exceedances: past
+2.5 sigma, 6 for the random walk and 3 for GARCH against M.A.P.'s 11 (record 4). Record 5
+then made the comparison paired and narrowed it — the tail *ratio* does **not** separate
+M.A.P. from the baselines (the paired differences cover zero); what does is the exceedances
+past three sigma, six items where M.A.P. passes three sigma and a baseline does not, none
+the other way, over four distinct blocks. The export stores M.A.P.'s σ but not the
+baselines', so none of this can be recomputed from it.
 
 ### Phase 4 — what a reader can verify without re-running anything
 
