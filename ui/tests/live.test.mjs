@@ -244,3 +244,103 @@ describe("the door names the recorded run", () => {
     assert.match(read("assets/js/search-page.js"), /replay: await source\.getReplay\(\)/);
   });
 });
+
+describe("a run in progress engraves a ring per stage, from the run's own events", () => {
+  const STARTED = {
+    event: "started", ticker: "KO", horizon_days: 5, typical_seconds: 457,
+    usual_range_seconds: [331, 692], stages: ["intake", "analyst", "structuralist"],
+  };
+  const rings = (host) => {
+    const out = [];
+    const walk = (n) => { if (n._cls?.has("anl-ring")) out.push(n); (n.children ?? []).forEach(walk); };
+    walk(host);
+    return out;
+  };
+
+  it("draws no rosette until the run has started, then one ring per stage", async () => {
+    installDom();
+    const { createProgress } = await load("ui/live-progress.js");
+    const host = new Node("div");
+    const display = createProgress(host, { ticker: "KO" });
+    assert.match(host.textContent, /Asking for KO/);
+    assert.equal(rings(host).length, 0);
+    display.update(STARTED);
+    assert.deepEqual(rings(host).map((r) => [r.dataset.stage, r.dataset.state]), [
+      ["intake", "running"], ["analyst", "waiting"], ["structuralist", "waiting"],
+    ]);
+    assert.match(host.textContent, /usually 6 to 12 minutes/);
+    display.finish();
+  });
+
+  it("engraves a ring only when the trace says its stage finished", async () => {
+    installDom();
+    const { createProgress } = await load("ui/live-progress.js");
+    const host = new Node("div");
+    const display = createProgress(host, { ticker: "KO" });
+    display.update(STARTED);
+    display.update({ event: "filing", filed: "2026-07-22", accession: "0000021344-26-000031" });
+    assert.equal(rings(host)[0].dataset.state, "running", "a filing is not a stage");
+    display.update({ event: "progress", stage: "intake", detail: "" });
+    assert.deepEqual(rings(host).map((r) => r.dataset.state), ["done", "running", "waiting"]);
+    assert.match(host.textContent, /Analyst — reasoning through three scenarios/);
+    display.update({ event: "result" });
+    assert.deepEqual(rings(host).map((r) => r.dataset.state), ["done", "done", "done"]);
+    assert.match(host.textContent, /took \d+:\d\d · usually/);
+    display.finish();
+  });
+
+  it("stops the ring in progress when the run fails, and says why", async () => {
+    installDom();
+    const { createProgress } = await load("ui/live-progress.js");
+    const host = new Node("div");
+    const display = createProgress(host, { ticker: "KO" });
+    display.update(STARTED);
+    display.update({ event: "failed", why: "the model server went away" });
+    assert.equal(rings(host)[0].dataset.state, "stopped");
+    assert.match(host.textContent, /The run did not finish: the model server went away/);
+    display.finish();
+  });
+
+  it("says on the page when a development server is replaying a recorded run", async () => {
+    installDom();
+    const { createProgress } = await load("ui/live-progress.js");
+    const host = new Node("div");
+    const display = createProgress(host, { ticker: "KO" });
+    display.update({ ...STARTED, replay: { run_id: "b8748710-c5e8", speed: 20 } });
+    assert.match(host.textContent, /Replaying recorded run b8748710 — its own trace, 20× faster than it ran\. Nothing is being computed\./);
+    display.finish();
+  });
+
+  it("counts up in minutes and seconds, and never down", async () => {
+    const { clock } = await load("ui/live-progress.js");
+    assert.equal(clock(0), "0:00");
+    assert.equal(clock(61_000), "1:01");
+    assert.equal(clock(754_000), "12:34");
+    const code = read("assets/js/ui/live-progress.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+    assert.doesNotMatch(code, /setTimeout/, "no stage advances on a timer");
+    assert.equal((code.match(/setInterval\(/g) ?? []).length, 1, "one interval, and it only repaints the clock");
+    assert.match(code, /setInterval\(\(\) => paintClock\(\), 1000\)/);
+    const strings = code.match(/(["`'])(?:(?!\1)[^\n\\]|\\.)*\1/g) ?? [];
+    assert.ok(strings.length > 10, "the check reads the module's strings");
+    // The literal text only: `${s % 60}` is arithmetic, not something printed.
+    const printed = strings.map((t) => t.replace(/\$\{[^}]*\}/g, ""));
+    assert.ok(!printed.some((t) => t.includes("%")), "no percentage in anything it prints");
+    assert.doesNotMatch(code, /\bremaining\b|left to go|\bETA\b/, "no countdown");
+  });
+
+  it("keeps the trace slow and continuous, and still under reduced motion", () => {
+    const sheet = read("assets/styles/analyse.css");
+    assert.match(sheet, /\.anl-ring\[data-state="running"\] \.anl-ring-trace \{[^}]*animation: anl-trace 28s linear infinite/);
+    const reduced = sheet.slice(sheet.indexOf("@media (prefers-reduced-motion: reduce) {\n  /* Still alive"));
+    assert.match(reduced, /\.anl-ring-trace \{ animation: none/);
+    assert.match(reduced, /\.anl-ring-line\.engrave \{ animation: none/);
+  });
+
+  it("opens the fan only when the result arrives", () => {
+    const live = read("assets/js/ui/company-live.js");
+    const run = live.slice(live.indexOf("async function run("));
+    assert.match(run, /event\.event === "result" && event\.replay/);
+    assert.match(run, /recordedNote\(event\.replay, \{ by: "server" \}\)/);
+    assert.match(run, /renderResult\(result, event\)/);
+  });
+});

@@ -24,7 +24,7 @@ const node = (tag, attrs) => {
 
 /** One closed ring: a circle of radius R modulated by two cosines, the second
     at a higher frequency and counter-phased. Returns an SVG path `d`. */
-function ringPath(R, phase, { lobes, harmonic, amplitude }) {
+export function ringPath(R, phase, { lobes, harmonic, amplitude }) {
   let d = "";
   for (let s = 0; s <= SAMPLES; s++) {
     const th = (s / SAMPLES) * Math.PI * 2;

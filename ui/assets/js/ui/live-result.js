@@ -95,8 +95,8 @@ export function replayAsResult(row) {
     marking: "uncalibrated",
     corrected: false,
     reasons: [
-      "this is a recorded run, replayed from the export — the correction is "
-      + "applied when a run is made, and this one was not eligible for it",
+      "this is a recorded run, replayed — the correction is applied when a run "
+      + "is made, and this one was not eligible for it",
     ],
     correction: null,
   };
@@ -104,12 +104,15 @@ export function replayAsResult(row) {
 
 /** The line that stops a recorded run reading as live. No replayed progress and
     no elapsed counter: those would be theatre. A statement, a date, the result. */
-export function recordedNote(row) {
+export function recordedNote(row, { by = "export" } = {}) {
   const note = el("div", "anl-replay-note");
   note.append(chrome(el("strong", null, "A recorded run, not a live one."), "what this is"));
   note.append(chromeText(
-    ` ${row.ticker} on ${row.anchor_date}, kept so this copy shows what an analysis `
-    + "produces. Nothing here was computed just now.",
+    by === "server"
+      ? ` ${row.ticker} on ${row.anchor_date}, replayed by a development server. `
+        + "Nothing here was computed just now, and nothing was written."
+      : ` ${row.ticker} on ${row.anchor_date}, kept so this copy shows what an analysis `
+        + "produces. Nothing here was computed just now.",
     "when the recorded run was made and why it is shown",
   ));
   return note;

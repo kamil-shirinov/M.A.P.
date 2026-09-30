@@ -201,3 +201,38 @@ check      1 of 7 inputs have moved
 
 It reports rather than refuses. Whether a moved input matters depends on which one,
 and only the reader knows that.
+
+## CLI reference — `map serve`
+
+The app, and the endpoints behind it, on one loopback origin (ADR 0036). Every
+company page ends with **Live runs, outside the record**; with a server behind the
+page, Analyse there starts a run and the page shows its progress and its fan.
+
+```bash
+uv run map serve                                         # 127.0.0.1:8765, opens search
+uv run map serve --replay <run_id> --replay-speed 20     # watch a recorded run; runs nothing
+```
+
+| Flag | Default | What it does |
+|---|---|---|
+| `--port` | `8765` | Loopback port for the app and the endpoints. |
+| `--ui-dir` | `ui` | The app directory to serve. |
+| `--edgar-days` | `120` | How far back to look for the latest Item 2.02. |
+| `--fixtures` | off | Replay recorded LLM exchanges instead of calling a model server. A live prompt carries today's filing, date and spot, so a fixture only matches the exact request it was recorded from. |
+| `--runs-dir` | `runs` | Where runs are written, and where a company page's live runs are read from. Point it at a temporary directory for screenshots (Findings #63). |
+| `--replay` | off | Development aid. Analyse is answered by a recorded run: its own trace, each stage at the gap it recorded, then the result the export gives that run. Only for that run's company and horizon. Runs nothing, writes nothing, and says so in the terminal and on the page. |
+| `--replay-speed` | `1` | With `--replay`: how many times faster than recorded, up to 60. |
+| `--frozen` · `--spend-path` | repo paths | The freeze (for the relation tag) and the fitted correction. |
+| `--open/--no-open` | open | Open search in a browser on start. |
+
+Any flag that stops the server making or recording a real run puts **NOT A REAL
+ANALYSIS SERVER** at the top of its output.
+
+| Route | What it answers |
+|---|---|
+| `GET /health` | Whether a server is behind the page. Asked once per page. |
+| `GET /prices?ticker=` | The company's closes through this machine's price cache, with the day they were fetched; the unfinished session is dropped. For companies the export carries no series for. |
+| `GET /runs?ticker=` | The company's `edgar` and `news` runs from the journal, newest first, in the export's row shape. |
+| `POST /analyse` | The only request that makes anything exist. Newline-delimited JSON: `started`, `filing`, one `progress` per stage as the run's trace records it, then `result` — or `failed` with the reason. |
+
+All four check `Host` and `Origin` (ADR 0036 §3).

@@ -17,7 +17,7 @@ import json
 import threading
 import time
 import webbrowser
-from collections.abc import Generator, Iterator
+from collections.abc import Callable, Generator, Iterator
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -31,17 +31,19 @@ from mapf.bootstrap import (
     build_http_client,
     build_llm_provider,
     build_market_data,
+    build_price_snapshot,
     build_run,
     build_symbol_index,
 )
 from mapf.cli.app import app, fail, handle
+from mapf.cli.commands.export import HISTORY_LOOKBACK_DAYS, replay_row
 from mapf.cli.commands.runs import _frozen_exhibits, as_dict
 from mapf.core.errors import MapError
 from mapf.core.hashing import new_run_id
 from mapf.core.sessions import settled
 from mapf.data.liquidity import MarketLiquidity
 from mapf.eval.calibration import CalibrationError, load_correction
-from mapf.eval.journal import read_journal
+from mapf.eval.journal import SOURCES, read_journal
 from mapf.eval.montecarlo import simulate_paths
 from mapf.pipeline.run import RunRequest, execute
 from mapf.serve.analyse import (
@@ -72,6 +74,10 @@ TYPICAL_RUN_SECONDS = 457
 RUN_SECONDS_P10 = 331
 RUN_SECONDS_P90 = 692
 UI_ROOT = Path("ui")
+
+# The pause between replayed stages. A module attribute so a test can replay a
+# ten-minute run in no time; nothing else should ever change it.
+_pause = time.sleep
 
 
 def _drain(path: Path, emit: list[dict[str, object]], seen: list[int]) -> None:
@@ -147,6 +153,17 @@ def serve(
     spend_path: Path = typer.Option(
         Path("corpus/holdout_spend.jsonl"),
         help="The record carrying the fitted calibration terms (ADR 0032).",
+    ),
+    replay: str | None = typer.Option(
+        None,
+        help=(
+            "Development aid: answer Analyse by replaying this recorded run — its own "
+            "trace, at its recorded pace — then its recorded result. Runs nothing, "
+            "writes nothing, and says so on the page."
+        ),
+    ),
+    replay_speed: float = typer.Option(
+        1.0, min=1.0, max=60.0, help="With --replay: how many times faster than recorded."
     ),
     open_browser: bool = typer.Option(True, "--open/--no-open", help="Open the app on start."),
     config: Path | None = typer.Option(None, help="Config file to use instead of the default."),
@@ -356,19 +373,29 @@ def serve(
                 usual_range_seconds=(RUN_SECONDS_P10, RUN_SECONDS_P90),
             )
 
+        answer: Callable[[str, int], Iterator[dict[str, object]]] = (
+            analyse if replay is None else _replayer(settings, exhibits, replay, replay_speed)
+        )
+
         server = build(
-            Config(root=ui_dir, port=port, analyse=analyse, prices=prices, live_runs=live_runs)
+            Config(root=ui_dir, port=port, analyse=answer, prices=prices, live_runs=live_runs)
         )
         # The door, not a company: an analysis starts from the page of the company it
         # is about, and search is how a reader gets there.
         url = f"http://127.0.0.1:{port}/index.html"
-        if fixtures is not None or runs_dir is not None:
+        if fixtures is not None or runs_dir is not None or replay is not None:
             # Said loudly. A server that cannot make a real forecast, or cannot
             # record one, must not be mistaken for the one that can.
             typer.secho(
                 "serve      NOT A REAL ANALYSIS SERVER"
                 + (f" — replaying fixtures from {fixtures}" if fixtures else "")
-                + (f" — runs go to {runs_dir}" if runs_dir else ""),
+                + (f" — runs go to {runs_dir}" if runs_dir else "")
+                + (
+                    f" — Analyse replays recorded run {replay} at {replay_speed:g}x"
+                    " and writes nothing"
+                    if replay
+                    else ""
+                ),
                 fg=typer.colors.YELLOW,
             )
         typer.secho(f"serve      {url}", fg=typer.colors.GREEN)
@@ -386,3 +413,74 @@ def serve(
             server.server_close()
     except (MapError, AnalysisError) as err:
         raise handle(err) from err
+
+
+def _replayer(
+    settings: Any, exhibits: frozenset[str] | None, run_id: str, speed: float
+) -> Callable[[str, int], Iterator[dict[str, object]]]:
+    """`POST /analyse`, answered by a run that already happened.
+
+    For watching the page do its work without spending a run: the loading state
+    exists for the minutes a real analysis takes, and there is no other way to see
+    it on a machine without the models. What it replays is real — the run's own
+    trace, each stage at the gap its trace recorded, then the result the export
+    would give that run — and every event says it is a replay. Nothing runs and
+    nothing is written.
+    """
+    runs = settings.paths.runs_dir
+    journal = read_journal(
+        runs, snapshot=None, today=datetime.now(UTC).date(), frozen_exhibits=exhibits
+    )
+    entry = next(
+        (e for source in SOURCES for e in journal.of(source) if str(e.run_id) == run_id), None
+    )
+    if entry is None:
+        raise fail(f"no recorded run {run_id} under {runs}", 5, hint="Name a run in `map runs`.")
+    row = replay_row(
+        entry,
+        runs / run_id,
+        history_for=lambda ticker, stored_on, end: build_price_snapshot(
+            settings, stored_on
+        ).covering(ticker, end - timedelta(days=HISTORY_LOOKBACK_DAYS), end),
+    )
+    started = datetime.fromisoformat(str(row["price_taken_at"]))
+    stages: list[tuple[str, datetime, bool]] = []
+    for line in (runs / run_id / "trace.jsonl").read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            record = json.loads(line)
+            stages.append(
+                (
+                    str(record["stage"]),
+                    datetime.fromisoformat(record["at"]),
+                    bool(record.get("cache_hit")),
+                )
+            )
+
+    def replayed(ticker: str, horizon: int) -> Iterator[dict[str, object]]:
+        if ticker != entry.ticker or horizon != entry.horizon_days:
+            yield {
+                "event": "failed",
+                "why": (
+                    f"this development server replays one recorded run, {entry.ticker} over "
+                    f"{entry.horizon_days} sessions, and cannot analyse {ticker} over {horizon}"
+                ),
+            }
+            return
+        yield {
+            "event": "started",
+            "ticker": ticker,
+            "horizon_days": horizon,
+            "typical_seconds": TYPICAL_RUN_SECONDS,
+            "usual_range_seconds": [RUN_SECONDS_P10, RUN_SECONDS_P90],
+            "stages": [stage for stage, _, _ in stages],
+            "replay": {"run_id": run_id, "speed": speed},
+        }
+        yield {"event": "filing", "accession": None, "filed": None, "truncated": None}
+        previous = started
+        for stage, at, cached in stages:
+            _pause(max(0.0, (at - previous).total_seconds()) / speed)
+            previous = at
+            yield {"event": "progress", "stage": stage, "detail": "cached" if cached else ""}
+        yield {"event": "result", "replay": row}
+
+    return replayed

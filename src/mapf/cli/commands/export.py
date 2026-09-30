@@ -554,6 +554,27 @@ def _write_replay(
     A visitor who cannot run an analysis otherwise meets an absence where the most
     interesting part of a company page should be, and never sees what the marking,
     the fan or the relation tag look like. This is that run, static and dated.
+    """
+    entry = next((e for e in journal.of("edgar") if str(e.run_id) == REPLAY_RUN_ID), None)
+    if entry is None:
+        return None
+    record = replay_row(entry, runs_dir / REPLAY_RUN_ID, history_for=history_for)
+    name = "live/replay.json"
+    sizes[name] = _write(out / "live" / "replay.json", record)
+    return name
+
+
+def replay_row(
+    entry: Any,
+    run: Path,
+    *,
+    history_for: Callable[[str, date, date], Any] | None = None,
+) -> dict[str, object]:
+    """A recorded run as the page's result view takes it: the journal row, plus the
+    band, the fan, each scenario's curve and the closes before the anchor.
+
+    Shared by the export's replay and by `map serve --replay`, so the hosted copy
+    and a development server show one recorded run the same way.
 
     IT IS THE FORECAST AS RECORDED. The band and the fan are recomputed from the
     run's own scenarios by the same `simulate` the scorer uses — the fan session by
@@ -561,11 +582,7 @@ def _write_replay(
     reproduce them without the models. The expensive part was producing the
     scenarios, and those are on disk.
     """
-    entry = next((e for e in journal.of("edgar") if str(e.run_id) == REPLAY_RUN_ID), None)
-    if entry is None:
-        return None
     record = dict(as_dict(entry))
-    run = runs_dir / REPLAY_RUN_ID
     band: list[dict[str, float]] = []
     record["fan"] = None
     record["scenario_paths"] = []
@@ -598,10 +615,7 @@ def _write_replay(
         # A replay without a band is a smaller page, not a broken one.
         pass
     record["band"] = band
-
-    name = "live/replay.json"
-    sizes[name] = _write(out / "live" / "replay.json", record)
-    return name
+    return record
 
 
 def _replay_history(

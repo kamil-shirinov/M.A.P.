@@ -1335,3 +1335,133 @@ def test_a_run_with_no_simulator_carries_no_fan_rather_than_an_invented_one() ->
     line = _stream()[-1]
     assert line["fan"] is None
     assert line["band"] == []
+
+
+# --- --replay: watching the page work without spending a run --------------------
+
+
+def _recorded(tmp_path: Any) -> tuple[Any, str, Any]:
+    """A recorded run under a temporary runs directory, with a three-stage trace."""
+    import json
+    from datetime import timedelta
+
+    from tests.unit.test_journal import _write_run
+
+    runs = tmp_path / "recorded"
+    run_id = _write_run(runs, ticker="KO", source="edgar")
+    forecast = json.loads((runs / run_id / "forecast.json").read_text())
+    start = datetime.fromisoformat(forecast["as_of"])
+    gaps = {"intake": 104, "analyst": 442, "structuralist": 52}
+    at = start
+    lines = []
+    for stage, seconds in gaps.items():
+        at = at + timedelta(seconds=seconds)
+        lines.append(
+            json.dumps({"at": at.isoformat(), "stage": stage, "cache_hit": stage == "intake"})
+        )
+    (runs / run_id / "trace.jsonl").write_text("\n".join(lines) + "\n")
+    return runs, run_id, start
+
+
+def _replaying(tmp_path: Any, monkeypatch: pytest.MonkeyPatch, runs: Any, extra: list[str]) -> Any:
+    import mapf.cli.commands.serve as command
+    from mapf.settings import load
+
+    real = load(None)
+    paths = real.paths.model_copy(update={"runs_dir": runs})
+    # The price cache too: left real, the replay's history would read this
+    # checkout's gitignored snapshots (Findings #67).
+    cache = real.cache.model_copy(update={"price_dir": tmp_path / "prices"})
+    isolated = real.model_copy(update={"paths": paths, "cache": cache})
+    monkeypatch.setattr(command, "load", lambda _c=None: isolated)
+    ui = tmp_path / "ui"
+    ui.mkdir(exist_ok=True)
+    return _serve_with(monkeypatch, ui, extra)
+
+
+def test_a_replay_streams_the_recorded_stages_at_their_recorded_gaps(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Real events from a real trace, paced by the gaps it recorded and divided by
+    the speed asked for — and every event that could be mistaken for a live run
+    says it is a replay."""
+    import mapf.cli.commands.serve as command
+
+    runs, run_id, _start = _recorded(tmp_path)
+    paused: list[float] = []
+    monkeypatch.setattr(command, "_pause", paused.append)
+    config = _replaying(tmp_path, monkeypatch, runs, ["--replay", run_id, "--replay-speed", "10"])
+    lines = list(config.analyse("KO", 5))
+    assert [line["event"] for line in lines] == [
+        "started",
+        "filing",
+        "progress",
+        "progress",
+        "progress",
+        "result",
+    ]
+    assert lines[0]["replay"] == {"run_id": run_id, "speed": 10.0}
+    assert [line["stage"] for line in lines[2:5]] == ["intake", "analyst", "structuralist"]
+    assert lines[2]["detail"] == "cached"
+    assert paused == pytest.approx([10.4, 44.2, 5.2])
+    row = lines[-1]["replay"]
+    assert row["run_id"] == run_id
+    assert row["fan"] is not None and len(row["fan"]["sessions"]) == 6
+
+
+def test_a_replay_refuses_a_company_it_did_not_record(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runs, run_id, _ = _recorded(tmp_path)
+    config = _replaying(tmp_path, monkeypatch, runs, ["--replay", run_id])
+    for ticker, horizon in (("AAPL", 5), ("KO", 21)):
+        (only,) = list(config.analyse(ticker, horizon))
+        assert only["event"] == "failed"
+        assert "replays one recorded run, KO over 5 sessions" in str(only["why"])
+
+
+def test_a_replay_of_a_run_that_is_not_there_refuses_to_start(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runs, _run_id, _ = _recorded(tmp_path)
+    config = _replaying(tmp_path, monkeypatch, runs, ["--replay", "no-such-run"])
+    assert config is None, "the server was never built"
+
+
+def test_a_replay_server_says_so_before_anything_else(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    import mapf.cli.commands.serve as command
+    from mapf.cli.app import app
+    from mapf.settings import load
+
+    runs, run_id, _ = _recorded(tmp_path)
+    real = load(None)
+    paths = real.paths.model_copy(update={"runs_dir": runs})
+    # The price cache too: left real, the replay's history would read this
+    # checkout's gitignored snapshots (Findings #67).
+    cache = real.cache.model_copy(update={"price_dir": tmp_path / "prices"})
+    isolated = real.model_copy(update={"paths": paths, "cache": cache})
+    monkeypatch.setattr(command, "load", lambda _c=None: isolated)
+
+    class _Server:
+        def serve_forever(self) -> None:
+            raise KeyboardInterrupt
+
+        def server_close(self) -> None:
+            return None
+
+    monkeypatch.setattr(command, "build", lambda _c: _Server())
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    result = CliRunner().invoke(
+        app, ["serve", "--ui-dir", str(ui), "--no-open", "--replay", run_id, "--replay-speed", "10"]
+    )
+    assert result.exit_code == 0, result.output
+    assert (
+        f"NOT A REAL ANALYSIS SERVER — Analyse replays recorded run {run_id} at 10x"
+        in result.output
+    )
+    assert "writes nothing" in result.output

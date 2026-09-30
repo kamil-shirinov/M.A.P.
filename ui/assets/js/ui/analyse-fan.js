@@ -434,7 +434,9 @@ function open(reveal, labels, { from, width }) {
   labels.style.opacity = "0";
   const start = performance.now();
   const step = (now) => {
-    const k = Math.min(1, (now - start) / OPEN_MS);
+    // A frame's timestamp is when the frame began, which can be a little before
+    // `start` was read; clamped, or the first frame asks for a negative width.
+    const k = Math.min(1, Math.max(0, (now - start) / OPEN_MS));
     const eased = 1 - (1 - k) ** 3;
     reveal.setAttribute("width", String(eased * width));
     if (k < 1) {

@@ -159,7 +159,17 @@ async function run(ticker, horizon, { ask, progress, result, table, name, onRows
   const display = createProgress(progress, { ticker, horizon });
   await streamAnalysis(ticker, horizon, (event) => {
     display.update(event);
-    if (event.event === "result") renderResult(result, event);
+    // The fan opens when the run is done: this is the only place it is drawn.
+    if (event.event === "result" && event.replay) {
+      // A development server's replay of a recorded run, labelled as one.
+      result.textContent = "";
+      result.append(recordedNote(event.replay, { by: "server" }));
+      const view = el("div");
+      renderResult(view, replayAsResult(event.replay));
+      result.append(view);
+    } else if (event.event === "result") {
+      renderResult(result, event);
+    }
     applyPageProvenance();
     enforce();
   });
