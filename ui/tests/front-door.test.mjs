@@ -128,8 +128,9 @@ describe("the door's strip", () => {
     host.querySelector = (sel) => (sel === ".door-block" ? block : null);
     globalThis.document = { createElement: (t) => new Node(t) };
     mountDoor(host, { onQuery: () => {}, ...options });
-    const node = host.children.find((c) => c.className === "door-strip");
-    return { node, block, parts: node.children.map((c) => c.textContent) };
+    const foot = host.children.find((c) => c.className === "door-foot");
+    const node = foot.children.find((c) => c.className === "door-strip");
+    return { node, foot, block, parts: node.children.map((c) => c.textContent) };
   }
 
   itNeedsExport("counts runs from the manifest's four counts, summed on the page and marked derived", async () => {
@@ -145,16 +146,18 @@ describe("the door's strip", () => {
        whether `map serve` has been used. A hardcoded list would pass on a clean
        checkout and fail the first time someone ran a live analysis. */
     const outside = ["edgar", "news"].reduce((n, s) => n + exported(`runs/by_source/${s}.json`).length, 0);
+    /* One fact per part, each carrying its trailing separator, so a count never
+       wraps away from its label and no line begins with "·". */
     assert.deepEqual(parts, [
-      String(companies), " companies", "·",
-      // The run count is one part now: a link to the screen it names.
-      `${rowsInFiles.toLocaleString("en-US")} runs recorded`,
-      // Two parts: the figure is marked and the label is chrome, as everywhere else.
-      ...(outside ? ["·", outside.toLocaleString("en-US"), outside === 1 ? " live run" : " live runs"] : []),
-      "·",
+      `${companies} companies·`,
+      // The run count is a link to the screen it names.
+      `${rowsInFiles.toLocaleString("en-US")} runs recorded·`,
+      ...(outside ? [`${outside.toLocaleString("en-US")}${outside === 1 ? " live run" : " live runs"}·`] : []),
       "does not beat a plain random walk or GARCH on the development companies",
     ]);
-    const [companyFig, , , runLink] = node.children;
+    const [companyFact, runFact] = node.children;
+    const companyFig = companyFact.children[0];
+    const runLink = runFact.children[0];
     assert.equal(companyFig.dataset.prov, "derived");
     assert.equal(runLink.href, "runs.html", "the count is the way in to the runs screen");
     const runFig = runLink.children[0];
@@ -163,14 +166,17 @@ describe("the door's strip", () => {
        chrome saying why it holds digits, a separator, or the link. Checked by
        KIND rather than by index, which was hardcoded to 0 and 3 and broke the
        moment the strip gained a fifth part. */
-    for (const [i, child] of node.children.entries()) {
-      assert.ok(
-        child.dataset.prov !== undefined
-          || child.dataset.chrome !== undefined
-          || child.className === "door-dot"
-          || child.className === "door-runs",
-        `part ${i} is marked`,
-      );
+    for (const [i, unit] of node.children.entries()) {
+      assert.match(unit.className, /^door-fact/, `part ${i} is one fact`);
+      for (const child of unit.children) {
+        assert.ok(
+          child.dataset.prov !== undefined
+            || child.dataset.chrome !== undefined
+            || child.className === "door-dot"
+            || child.className === "door-runs",
+          `part ${i} is marked`,
+        );
+      }
     }
     assert.ok(block.children.some((c) => c.className === "door-box"), "the box goes into the static block");
   });
@@ -181,15 +187,15 @@ describe("the door's strip", () => {
     const runsBySource = { corpus: 2, edgar: 1, news: 0, unknown: 4 };
     for (const k of Object.keys(runsBySource)) runsBySource[k] = figure(runsBySource[k], "measured", "int");
     const { parts } = strip({ companies: 120, runsBySource, finding: false });
-    assert.equal(parts[3], "7 runs recorded");
+    assert.equal(parts[1], "7 runs recorded·");
   });
 
   itNeedsExport("states a missing run count instead of reading an old export as zero", async () => {
     const source = await import("../assets/js/data/source.js");
     const { runs, ...older } = exported("manifest.json");
     const { parts, node } = strip({ companies: 120, runsBySource: source.runCountsBySource(older), finding: false });
-    assert.deepEqual(parts, ["120", " companies", "·", "runs not counted"]);
-    assert.match(node.children[3].dataset.chrome, /predates runs\.rows/);
+    assert.deepEqual(parts, ["120 companies·", "runs not counted"]);
+    assert.match(node.children[1].children[0].dataset.chrome, /predates runs\.rows/);
   });
 
   itNeedsExport("makes no claim about baselines when the export carries no development record", async () => {
@@ -365,6 +371,21 @@ describe("front-door.css and the two documents", () => {
     assert.match(block, /\[data-band\] \{ animation: none;/);
     assert.match(block, /\.ground \{ transition: none; \}/);
     assert.match(block, /::view-transition-group\(\*\),\s*::view-transition-old\(\*\),\s*::view-transition-new\(\*\) \{ animation-duration: 1ms !important; \}/);
+  });
+
+  it("moves the door's ground up with the crest and box, in the same transition", () => {
+    assert.match(css, /\.ground:not\(\[data-scope="page"\]\) \{ view-transition-name: map-ground; \}/);
+    assert.match(css, /:root:active-view-transition \.ground \{ transition: none; \}/, "the morph is the one motion");
+  });
+
+  it("stacks the recorded run's line and the counts in one foot, so they cannot overlap", () => {
+    const foot = rulesFor(css, ".door-foot")[0];
+    assert.match(foot, /position: absolute;/);
+    assert.match(foot, /flex-direction: column;/);
+    for (const sel of [".door-strip", ".door-replay"]) {
+      assert.doesNotMatch(rulesFor(css, sel)[0], /position: absolute|bottom:/, `${sel} flows inside the foot`);
+    }
+    assert.match(rulesFor(css, ".door-fact")[0], /white-space: nowrap;/, "a count never parts from its label");
   });
 
   it("puts the ground behind the page rather than level with it", () => {

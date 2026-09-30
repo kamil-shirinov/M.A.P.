@@ -95,7 +95,12 @@ export function mountGround(host, { weight = 0.5 } = {}) {
     }
   };
 
+  // The time last drawn, so a redraw after a resize is the figure as it stood and
+  // not its starting frame: a door that lifts into the page resizes the ground,
+  // and a jump back to the rest frame there read as the drift restarting.
+  let drawnAt = null;
   const draw = (t) => {
+    drawnAt = t;
     const scale = size / 1000;
     const c = size / 2;
     const turn = TURN * t;
@@ -163,7 +168,7 @@ export function mountGround(host, { weight = 0.5 } = {}) {
     }).observe(host);
   }
   if (typeof ResizeObserver === "function") {
-    new ResizeObserver(() => { fit(); if (frame === null) draw(OFFSET); }).observe(host);
+    new ResizeObserver(() => { fit(); if (frame === null) draw(drawnAt ?? OFFSET); }).observe(host);
   }
   // A visitor who turns reduced motion on mid-visit gets a still figure at once;
   // turning it off starts the drift again.

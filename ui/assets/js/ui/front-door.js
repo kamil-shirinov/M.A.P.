@@ -96,18 +96,26 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding, rep
   box.append(el("span", "door-slash", "/"), input);
   block.append(box);
 
+  /* Each fact is one unbreakable unit, and the separator trails the fact it
+     follows: a count never wraps away from its label, and no line of the strip
+     can begin with "·" (the strip's CSS says why). */
   const strip = el("div", "door-strip");
-  const dot = () => el("span", "door-dot", "·");
-  strip.append(count(companies), chromeText(" companies", "companies in the frozen corpus"));
+  const facts = [];
+  const fact = (...parts) => {
+    const unit = el("span", "door-fact");
+    unit.append(...parts);
+    facts.push(unit);
+    return unit;
+  };
+  fact(count(companies), chromeText(" companies", "companies in the frozen corpus"));
 
   /* The pooling happens HERE, in sight. The manifest carries one count per runs
      file and no total, because the export keeps the four populations apart. A
      door's "N runs" is an inventory of everything recorded — repeats and runs
      outside the corpus included, which is why it is not 701 — so the four are
      added, and derive() marks the sum as computed on this page, not read. */
-  strip.append(dot());
   if (isAbsent(runsBySource)) {
-    strip.append(chromeText("runs not counted", runsBySource.why));
+    fact(chromeText("runs not counted", runsBySource.why));
   } else {
     const perSource = Object.values(runsBySource);
     const total = derive(perSource.reduce((n, f) => n + f.value, 0), "int", ...perSource);
@@ -121,7 +129,7 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding, rep
       renderFigure(total),
       chromeText(" runs recorded", "every run recorded, summed here across the four document sources"),
     );
-    strip.append(link);
+    fact(link);
 
     /* "N runs" alone was fine while every run came from the corpus. It is not
        now: live analysis writes runs the panel never asked for, and a reader who
@@ -139,8 +147,7 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding, rep
       .filter((figure) => figure && figure.value > 0);
     if (live.length) {
       const sum = derive(live.reduce((n, f) => n + f.value, 0), "int", ...live);
-      strip.append(dot());
-      strip.append(
+      fact(
         renderFigure(sum),
         chromeText(
           sum.value === 1 ? " live run" : " live runs",
@@ -156,16 +163,19 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding, rep
      sentence and no figure (M.A.P. Findings #57), so the line does not reach it,
      and without the development record it is not stated at all. */
   if (finding) {
-    strip.append(
-      dot(),
-      chromeText(
-        "does not beat a plain random walk or GARCH on the development companies",
-        "stated from the exported development scoring record, where neither baseline is beaten on CRPS or log score",
-      ),
-    );
+    fact(chromeText(
+      "does not beat a plain random walk or GARCH on the development companies",
+      "stated from the exported development scoring record, where neither baseline is beaten on CRPS or log score",
+    )).className = "door-fact door-fact--sentence";
   }
+  facts.forEach((unit, i) => {
+    if (i < facts.length - 1) unit.append(el("span", "door-dot", "·"));
+    strip.append(unit);
+  });
 
-  host.append(strip);
+  /* The foot: the recorded run's line above the counts, in one box, so the two
+     cannot overlap however the counts wrap. */
+  const foot = el("div", "door-foot");
 
   /* The path to the recorded run. On a copy with no models this is the only way
      to see what an analysis produces, and it used to have a nav item of its own;
@@ -182,8 +192,10 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding, rep
       chromeText(" →", "a link arrow"),
     );
     line.append(a);
-    host.append(line);
+    foot.append(line);
   }
+  foot.append(strip);
+  host.append(foot);
 
   input.addEventListener("input", () => onQuery(input.value));
   return { input };

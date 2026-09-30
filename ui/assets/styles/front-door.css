@@ -13,6 +13,15 @@
 .masthead h1 a { view-transition-name: map-crest; }
 .door-box,
 .srch-box { view-transition-name: map-searchbox; }
+/* The ground goes up with them, in the same transition. One element in both
+   modes, so it is named once and the browser moves it from the door's place to
+   the page's; its new image is live, so the drift carries on through the move
+   and nothing restarts. Only the door's ground: the other screens' grounds are
+   fresh on every navigation and have nothing to carry. */
+.ground:not([data-scope="page"]) { view-transition-name: map-ground; }
+/* While the transition moves it, the ground's own scale and fade would move it a
+   second time; the morph is the one motion. */
+:root:active-view-transition .ground { transition: none; }
 
 /* ---- mode visibility ---- */
 body[data-mode="door"] .search-page,
@@ -138,24 +147,39 @@ body[data-mode="door"] .ground { transform: translate(-50%, -50%) scale(1.08); o
   letter-spacing: .02em;
   color: var(--ink-num);
 }
-/* Counts and the measured finding as ambient chrome, not copy. */
-.door-strip {
+/* The door's foot: the recorded run's line, then the counts, stacked in the
+   flow of one box pinned to the bottom. They used to be pinned separately, a
+   fixed distance apart, so when the counts wrapped onto a second line on a
+   narrow window its first line sat under the recorded run's and the two read as
+   one garbled line. */
+.door-foot {
   position: absolute;
   left: var(--sp-5);
   right: var(--sp-5);
   bottom: var(--sp-5);
   display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+/* Counts and the measured finding as ambient chrome, not copy. */
+.door-strip {
+  display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--sp-3) var(--sp-4);
+  gap: var(--sp-2) var(--sp-4);
   font-family: var(--font-mono);
   font-size: var(--step--1);
   letter-spacing: .07em;
   line-height: 1.5;
   color: var(--ink-3);
 }
+/* One fact, one unbreakable unit: a count never parts from its label, and the
+   separator trails the fact it follows, so a wrapped line can end on "·" but
+   never begin with one. The finding is a sentence and may wrap within itself. */
+.door-fact { white-space: nowrap; }
+.door-fact--sentence { white-space: normal; }
 .door-strip .fig { color: var(--ink-2); }
-.door-dot { color: var(--rule-2); }
+.door-dot { color: var(--rule-2); margin-left: var(--sp-4); }
 
 /* ---- masthead: crest in serif, nav beside it ---- */
 .masthead h1 a { color: var(--ink-num); text-decoration: none; }
@@ -179,13 +203,9 @@ body[data-mode="door"] .ground { transform: translate(-50%, -50%) scale(1.08); o
 .door-strip .door-runs { color: inherit; text-decoration: none; }
 .door-strip .door-runs:hover .fig { color: var(--accent); }
 
-/* The recorded run, named once under the strip. Quiet like the strip: it is a
+/* The recorded run, named once above the strip. Quiet like the strip: it is a
    way in, not a claim, and the page it leads to carries the marking. */
 .door-replay {
-  position: absolute;
-  left: var(--sp-5);
-  right: var(--sp-5);
-  bottom: calc(var(--sp-5) + 2.2em);
   font-family: var(--font-mono);
   font-size: var(--step--1);
   letter-spacing: .07em;

@@ -103,6 +103,35 @@ describe("mounting it", () => {
     delete globalThis.matchMedia;
   });
 
+  it("redraws a resize as the figure stood, not from its first frame", async () => {
+    /* A door that lifts into the page resizes the ground. Redrawing its rest
+       frame there read as the drift restarting. */
+    const recording = recordingCanvas();
+    withCanvas(recording);
+    const frames = [];
+    let resized = null;
+    let seen = null;
+    globalThis.requestAnimationFrame = (fn) => frames.push(fn);
+    globalThis.cancelAnimationFrame = () => { frames.length = 0; };
+    globalThis.matchMedia = () => ({ matches: false, addEventListener() {} });
+    globalThis.ResizeObserver = class { constructor(fn) { resized = fn; } observe() {} };
+    globalThis.IntersectionObserver = class { constructor(fn) { seen = fn; } observe() {} };
+    const { mountGround } = await load("ui/ground.js");
+    const ground = mountGround(new Node("div"));
+    frames.shift()(1000);
+    frames.shift()(9000);
+    const moves = () => recording.calls.filter(([k]) => k === "moveTo");
+    const at9 = moves().at(-15);
+    seen([{ isIntersecting: false }]);   // scrolled away: the loop stops
+    recording.calls.length = 0;
+    resized();                           // and the box changes size meanwhile
+    assert.deepEqual(moves()[0], at9, "the same figure, redrawn at its size");
+    ground.stop();
+    for (const name of ["requestAnimationFrame", "cancelAnimationFrame", "matchMedia", "ResizeObserver", "IntersectionObserver"]) {
+      delete globalThis[name];
+    }
+  });
+
   it("falls back to the SVG figure where there is no canvas", async () => {
     installDom();
     const { mountGround } = await load("ui/ground.js");
