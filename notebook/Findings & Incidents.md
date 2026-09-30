@@ -67,6 +67,10 @@ from it. Three separate cases, none related to the others, all found by accident
 | **#8** | the sanitiser is called *somewhere* in `src/` — a positive control | It was false, because nothing called it yet. The control that existed to prove the scan worked was itself asserting nothing. |
 | **#26** | the earnings baseline's CRPS "looks reasonable" | CRPS is dominated by the size of the realised move, so a leak and a large move are indistinguishable in it. |
 
+*Correction, 2026-09-30: the third row's case is written up in #28, "Three adapters, three ways to be
+plausibly wrong" — the earnings baseline and its look-ahead guard — not in #26, which is the guard that
+compared one field of six. The row has cited #26 since it was written (`d01d241`) and is left as it was.*
+
 The repair is the same in all three, and it is not "assert harder". It is to find an input pair the bug
 and the correct behaviour **must** answer differently, and assert on the difference:
 

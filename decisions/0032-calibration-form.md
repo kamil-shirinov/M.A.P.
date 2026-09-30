@@ -123,3 +123,18 @@ outcome.
   rather than the normal the PIT and log score currently assume — is the natural next
   form, and it is named here so that reaching for it later is a recorded change of plan
   rather than a quiet improvement.
+
+## Erratum, 2026-09-30 — two links to a file that never existed
+
+Both links above to ADR 0018 point at `0018-calibration-target.md`. No file of that name
+has ever existed in this repository; ADR 0018 has always been
+[`0018-corpus-band-and-panel-shape.md`](0018-corpus-band-and-panel-shape.md), under
+`docs/decisions/`, then `M.A.P.-vault/decisions/`, then `decisions/`. That is the file the
+**Builds on** line means: it makes calibration on the clean band the primary result.
+
+The second link also says the isotonic quantile map was "as ADR 0018 originally
+sketched". ADR 0018 does not mention isotonic regression. The sketch is in
+[ADR 0015](0015-what-the-corpus-can-actually-answer.md) ("fix it in Phase 3 with
+isotonic regression") and in `CLAUDE.md` §8's Phase 3 plan.
+
+The links are left as they were written. Nothing in the decision depends on them.
