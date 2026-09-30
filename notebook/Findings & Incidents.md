@@ -3039,7 +3039,8 @@ On the 175 and 174 items the scoring records hold today:
 The replication verdict does not move. The development one does. Record 8 said that against
 the random walk compression "survives errors-in-variables, but only just, the upper bound
 landing at 0.9993". On 175 items it lands at 1.0038: three SCCO items move it 0.0045, across
-the line. Neither sample is the wrong one. The 178 is what record 8 and the registration were
+the line. *(2026-09-30: which side of the line is decided by the order tied days
+are sorted in, not by these three items — see #70.)* Neither sample is the wrong one. The 178 is what record 8 and the registration were
 written on, and its σ are exact. The 175 is what the scoring record can produce today.
 Development was never the test; it is the post-hoc finding the replication was registered to
 check. But "against the random walk it survives" is true of one sample and not the other,
@@ -3223,3 +3224,64 @@ it is labelled as that claim.
 
 The `--fixtures` help text and `docs/cli.md` now say a fixture matches only the request it
 was recorded from.
+
+---
+
+## 70 · A development bound decided by the order numpy sorts tied days
+
+Asked afterwards whether the ARM-versus-x86 failure in #67's addendum was a test or a
+verdict: a test. Its panel, `[0.02, 0.98] * 100`, made every bootstrap mean exactly 0.5,
+and the fix replaced that input; no tolerance was added and the statistic did not change.
+But the question pointed somewhere the test did not, and checking it found a real
+dependence of one stated result on something no record pins.
+
+**The resampler sorts days with an unstable sort.** `block_resamples` orders items with
+`np.argsort(starts)`, numpy's default kind, which its documentation says does not guarantee
+the order of equal keys. Ties are the norm here: of the development panel's 178 items, 112
+share a day with another. And the order is not cosmetic, because each resample is
+truncated to `n`: the last block drawn is cut part-way, and which of its tied items survive
+the cut depends on the order they were sorted into. So tie order decides **which items are
+in a resample**, not how a sum is rounded. On this machine the default order differs from a
+stable sort on all four day arrays in use (dev 178 and 175, ambiguous 177 and 174). Turning
+off numpy's optional CPU features here did not change it; I could not run x86 to see what it
+gives there. What is established is that the order is implementation-defined, not that
+x86 produces a different one.
+
+**Measured: every interval verdict, re-run under a stable sort and under random orders of
+the tied days, everything else identical.**
+
+| statistic | bar | this machine | other tie orders | verdict changes |
+| --- | --- | --- | --- | --- |
+| compression, dev 178, RW widest upper | 1.0 | **0.9993** | stable 1.0060; 50 random: 0.9975–1.0071 | **43 of 51** |
+| compression, dev 175, RW widest upper | 1.0 | 1.0038 | 1.0001–1.0091 | 0 |
+| compression, ambiguous 177 / 174 | 1.0 | 0.7616 / 0.7577 | 0.7559–0.7626 | 0 |
+| tail ratio lower, ambiguous 174 | 1.0 | 0.9947 | 0.9917–0.9971 | 0 |
+| tail ratio lower, dev 175 | 1.0 | 1.0169 | 1.0143–1.0191 | 0 |
+| CRPS vs GARCH, dev, lower | 0 | −0.00035 | −0.00035 to −0.00031 | 0 of 30 |
+| CRPS and log score vs the three baselines; calibration ratio; PIT mean | — | — | every bound within 0.005 of its own | 0 of 30 |
+
+**Every registered verdict holds under every order tried.** The tails replication stays
+PARTIAL, the compression replication stays far below 1.0, the headline comparison against
+the baselines does not move, and neither do the calibration intervals.
+
+**One stated result does not.** Record 8 said that against the random walk, development
+compression "survives errors-in-variables, but only just, the upper bound landing at 0.9993".
+That 0.9993 is what this code computes on this machine, and it stays recorded as that. But
+under a stable sort the bound is 1.0060, and under 42 of 50 random tie orders it is above
+1.0. The sentence it supported — the widest interval excludes 1.0 on development — is a
+property of one sort implementation, not of the data. A reader recomputing the same records
+with a different numpy build could get the opposite answer, and neither would be wrong.
+
+**#66 misattributed the gap.** It said three SCCO items "move it 0.0045, across the line"
+between 178 and 175 items. Both figures sit inside the band tie order alone produces; the
+three items are not what decides the side. The README and `docs/results.md` said the same
+and now say this.
+
+**Not changed: the resampler.** Pinning `kind="stable"` would make the order portable, and
+it would also move every bootstrap interval computed so far — including the reproductions
+of records 5 and 8, which match to four decimals only under this machine's default order.
+That is a decision about the estimator, and it is left open. Until it is taken, a
+bootstrap bound within about 0.01 of its bar should be read as undecided.
+
+Same family as [[#67]]: a result that held on the machine that produced it and was never
+checked anywhere else.

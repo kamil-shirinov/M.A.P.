@@ -134,8 +134,9 @@ The second band's point estimates reproduce the recorded **0.409 and 0.327**; it
 were never recorded ([Findings #66](notebook/Findings%20&%20Incidents.md)). The registered
 test used a wider interval that also allows for error in M.A.P.'s σ. On the second band it
 stays below 1.0 against both baselines, [0.33, 0.76] and [0.25, 0.80]. On development its
-upper end was 1.23 against GARCH, and against the random walk 0.9993 on the original 178
-items but 1.0038 on the 175 the scoring record now holds. So the second band is where
+upper end was 1.23 against GARCH, and against the random walk 0.9993 — a figure that turns on
+the order numpy happens to sort tied days in, and lands above 1.0 under most other orders
+([Findings #70](notebook/Findings%20&%20Incidents.md)). So the second band is where
 compression was established. It is the candidate explanation for both the heavy tails and
 the narrow intervals.
 

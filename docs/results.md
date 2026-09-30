@@ -187,10 +187,12 @@ Development reproduces every figure in record 8 to four decimals. The ambiguous 
 reproduces the recorded 0.409, 0.327, 0.516 and 0.468; its intervals are new, not a check of
 recorded ones. The widest interval runs from the forward slope's lower bound to the inverse
 reverse slope's upper, and is record 8's replication criterion. On the ambiguous band it
-excludes 1.0 against both baselines. On development against the random walk it excludes 1.0
-on the original 178 items but not on the 175 the scoring record now holds, where it
-reaches 1.0038. The development result was too close to 1.0 to carry the claim; the
-replication carries it.
+excludes 1.0 against both baselines. On development against the random walk its upper end
+is 0.9993 on the original 178 items and 1.0038 on the 175 the scoring record now holds —
+but which side of 1.0 it lands on is decided by the order numpy sorts tied days in, not by
+the sample: across fifty other orders the 178-item bound runs from 0.9975 to 1.0071, above
+1.0 in forty-two (Findings #70). The development result cannot carry the claim; the
+replication carries it, and does not move.
 
 S3, where the narrowness sits: the median σ(M.A.P.)/σ(baseline) on the largest moves by
 |realised return| against the rest, recomputed the same day. Development reproduces record
