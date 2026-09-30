@@ -3375,3 +3375,73 @@ Every other interval moves by at most 0.006 and keeps its side.
 order the rows arrive in. Sorted by day and then id, it gives [−0.00999, +0.00593]. The
 verdict is the same. Whether to pin it is a decision about a registered statistic, and it
 is left open.
+
+---
+
+## 71 · The history was cleaned once, for privacy
+
+Before this repository went public, a scan of every object in its history found personal
+details that had nothing to do with M.A.P.:
+- a personal email address as the author and committer identity on 135 commits and on 9
+  of the 22 notes appends;
+- a GitHub web-interface handle as the author of two commits;
+- the owner's education and career plans in the old versions of five files, and in the
+  messages of three commits (one of them the commit that removed the lines from the files);
+- one employer named in the first commit;
+- the 87-file graphify cache committed in `bcd91c2`, which held a home-directory path.
+
+The current files held none of it. Kamil decided that the history should contain only
+M.A.P., and on 2026-09-30 it was rewritten once to make that so.
+
+**What changed.**
+- **Files.** The personal lines came out of old file versions. Each was deleted, or, where
+  deleting would break the sentence, replaced by the neutral wording `e9c75d3` had already
+  adopted.
+- **Messages.** Three commit messages were edited, and each now says so in a bracketed line:
+  - `e9c75d3`: its quotations are gone;
+  - `5a16b3e`: the home path is shortened to `~/Desktop/M.A.P.`;
+  - `2388f11`: one word. This one was not on the approved list; the pre-check found it
+    and it got the same substitution.
+- **Identities.** Both became the GitHub noreply identity.
+- **graphify-out/** is gone from every commit, so `5a16b3e`, which only untracked it, is
+  now an empty commit. It is kept so the order is unchanged.
+
+**What did not change, checked commit by commit.**
+- Still 276 commits, in the same topological order and with the same parents, including the
+  merge.
+- Every author and committer date, with its time zone.
+- The other 273 messages, byte for byte, including the old IDs they cite.
+- Every file at every commit apart from the lines above. `corpus/frozen.json` is identical
+  in all 210 commit pairs that hold it, and the final tree is identical.
+- The notes were rebuilt one append at a time. Each of the 22 keeps its own note blob, as
+  the note stood at that append, and its message and both dates. `git notes show` gives the
+  same bytes.
+- A scan of the new history for the same patterns finds nothing, and `git fsck` is clean.
+
+**What changed unavoidably.** Every commit ID changed, because the first commit changed.
+GitHub's signatures on the two web-interface commits were dropped, since a changed author
+voids them.
+
+**No record was edited to follow.** ADRs, Findings, the notes, commit messages and
+`corpus/holdout_spend.jsonl` still cite the old IDs. [`docs/commit-map.tsv`](../docs/commit-map.tsv)
+pairs every one with its new ID: the 276 commits, the 22 notes appends, and the 25 originals
+the 8 September rebase replaced (#58). Those are reachable only locally, under
+`refs/archive/`, which the rewrite left out as #58 requires.
+- 24 of the 25 pair with their published copy on author date, subject and patch-id.
+- `7b2007c` pairs on author date and subject alone. Its replay dropped a README hunk that
+  the two web-interface commits had already made.
+
+The app resolves every commit it shows through the map, and shows the recorded ID beside
+it ([ADR 0038](../decisions/0038-commit-ids-after-the-history-cleanup.md)). Only code that
+runs against an ID was updated: two tests that `git show` a past freeze, and the README's
+`git notes show` command.
+
+**Published in a new repository, not force-pushed over the old one.** After a force-push
+GitHub can keep old commits reachable by ID, and the map would publish exactly those IDs.
+
+**Backup and inputs.** Before anything was rewritten, every ref went into
+`~/Desktop/repo-bundles/M.A.P.-2026-09-30-pre-cleanup.bundle`, including the notes and the
+archive refs (sha256 `c5df9d7c…1e71`). It was verified and test-restored. The filter
+inputs sit beside it and are not in the repository, because they quote what they remove.
+The old history stays on this machine under `refs/archive/pre-cleanup-2026-09-30` and
+`-notes`, so the run ledger's commits still resolve here.

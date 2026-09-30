@@ -199,7 +199,7 @@ fetch them. Ask for the ref:
 ```bash
 git fetch origin 'refs/notes/*:refs/notes/*'
 git log --format='%h %ad %s' --date=iso refs/notes/commits   # 22 appends, in order
-git notes show ad71b13                                        # the records themselves
+git notes show 171a4d6                                        # the records (ad71b13 before the cleanup)
 ```
 
 The second command carries the evidence for the ordering: it is the history of the notes
@@ -214,6 +214,12 @@ work in September that happened earlier. The notes ref was not rebased, and its 
 agree. Evidence rather than proof, since author dates can be set by hand: what the ref
 establishes is that 22 appends exist in a sequence, each recorded before the result it
 constrains.
+
+**The history was cleaned once, for privacy, on 2026-09-30.** Personal details came out of
+old file versions, three commit messages and the commit identities, and an old tool cache
+came out of every commit; dates, order and all other content were kept. Every commit has a
+new ID, the records still cite the old ones, and [docs/commit-map.tsv](docs/commit-map.tsv)
+pairs them ([Findings #71](notebook/Findings%20&%20Incidents.md)).
 
 **Run the checks.** All three pass with no inference server and no network.
 
