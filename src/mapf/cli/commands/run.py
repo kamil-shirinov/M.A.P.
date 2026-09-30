@@ -15,7 +15,7 @@ from mapf.bootstrap import (
     build_llm_provider,
     build_run,
 )
-from mapf.cli.app import app, as_shown, fail, handle
+from mapf.cli.base import app, as_shown, fail, handle
 from mapf.core.errors import MapError
 from mapf.core.hashing import new_run_id
 from mapf.core.models import Document

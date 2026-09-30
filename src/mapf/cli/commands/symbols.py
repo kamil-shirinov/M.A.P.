@@ -12,7 +12,7 @@ from pathlib import Path
 import typer
 
 from mapf.bootstrap import build_http_client
-from mapf.cli.app import app, handle
+from mapf.cli.base import app, handle
 from mapf.core.errors import MapError
 from mapf.data.symbols import Throttle, sync
 from mapf.settings import load

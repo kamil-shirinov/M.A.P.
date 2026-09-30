@@ -23,7 +23,7 @@ from pathlib import Path
 import typer
 
 from mapf.bootstrap import build_market_data
-from mapf.cli.app import app, fail, handle
+from mapf.cli.base import app, fail, handle
 from mapf.core.errors import MapError
 from mapf.settings import load
 

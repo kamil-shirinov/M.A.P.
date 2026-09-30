@@ -7,7 +7,7 @@ from pathlib import Path
 import typer
 
 from mapf.bootstrap import build_symbol_index
-from mapf.cli.app import app, handle
+from mapf.cli.base import app, handle
 from mapf.core.errors import MapError
 from mapf.settings import load
 

@@ -38,7 +38,7 @@ import typer
 from pydantic import ValidationError
 
 from mapf.bootstrap import build_price_snapshot, build_symbol_index
-from mapf.cli.app import app, fail, handle
+from mapf.cli.base import app, fail, handle
 from mapf.cli.commands.evaluate import HOLDOUT_LEDGER, SCORES_DIR, SCORING_VINTAGE
 from mapf.cli.commands.runs import FROZEN, LEDGER, as_dict
 from mapf.core.errors import MapError

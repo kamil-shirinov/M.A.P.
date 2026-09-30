@@ -3445,3 +3445,33 @@ archive refs (sha256 `c5df9d7c…1e71`). It was verified and test-restored. The 
 inputs sit beside it and are not in the repository, because they quote what they remove.
 The old history stays on this machine under `refs/archive/pre-cleanup-2026-09-30` and
 `-notes`, so the run ledger's commits still resolve here.
+
+---
+
+## 72 · A command that failed to import whenever it came first
+
+Found while checking the history cleanup: `test_freeze_digest.py` and
+`test_forecast_digest.py` failed six tests when run on their own, with
+`cannot import name 'HOLDOUT_LEDGER' from partially initialized module
+'mapf.cli.commands.evaluate'`, and passed inside the full suite.
+
+**The cycle.** `mapf.cli.app` defined the Typer app, then imported every command module
+at its foot to register them, and every command imported `mapf.cli.app`. Import a
+command first and it stops at that line, half-built, while `app.py` imports all the
+others. Any of those that takes a name from it then fails. `export` takes three from
+`evaluate` and two from `runs`, and `serve` takes from `export` and `runs`. So importing
+`evaluate`, `runs` or `export` first broke, and the other seven did not.
+
+**Why nothing caught it.** Every test that imports a command runs after something
+has already imported the app, and so does the `map` entry point. The suite could
+never see the one order that failed.
+
+**The fix removes the cycle, not the trigger.** `mapf.cli.base` now holds the app
+object, the exit codes and the error translation, and imports no command.
+`mapf.cli.app` imports `base` and every command, re-exports `base`, and keeps `main`.
+Commands import `base`. Moving the shared constants to a leaf module would have
+fixed today's three names and left the next cross-import to fail the same way.
+- **Two import contracts:** commands and `base` never import `app`, and `base` never
+  imports a command.
+- **A regression test** imports each command module first, in a fresh interpreter.
+  On the old source it fails for `evaluate`, `runs` and `export`.

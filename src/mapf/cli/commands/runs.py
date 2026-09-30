@@ -15,7 +15,7 @@ from pathlib import Path
 import typer
 
 from mapf.bootstrap import build_price_snapshot
-from mapf.cli.app import app, as_shown, fail, handle
+from mapf.cli.base import app, as_shown, fail, handle
 from mapf.cli.commands.evaluate import SCORING_VINTAGE
 from mapf.core.errors import MapError
 from mapf.corpus.ledger import Ledger

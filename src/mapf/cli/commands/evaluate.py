@@ -38,7 +38,7 @@ import typer
 from pydantic import ValidationError
 
 from mapf.bootstrap import build_earnings_calendar, build_http_client, build_market_data
-from mapf.cli.app import app, fail, handle
+from mapf.cli.base import app, fail, handle
 from mapf.core.errors import MapError
 from mapf.core.models import PriceWindow
 from mapf.core.provenance import (

@@ -12,7 +12,7 @@ from pathlib import Path
 import typer
 
 from mapf.bootstrap import build_llm_provider, build_prompts
-from mapf.cli.app import EXIT_OK, app, handle
+from mapf.cli.base import EXIT_OK, app, handle
 from mapf.core.errors import MapError
 from mapf.core.ports import LLMProvider, ModelInfo
 from mapf.pipeline.probe import probe_grammar

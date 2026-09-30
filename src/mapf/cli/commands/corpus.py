@@ -21,7 +21,7 @@ from uuid import UUID
 import typer
 
 from mapf.bootstrap import build_http_client, build_llm_provider, build_run
-from mapf.cli.app import app, fail, handle
+from mapf.cli.base import app, fail, handle
 from mapf.core.errors import ExhibitError, MapError
 from mapf.core.models import Document, EarningsFiling
 from mapf.core.ports import LLMProvider, ModelInfo

@@ -35,7 +35,7 @@ from mapf.bootstrap import (
     build_run,
     build_symbol_index,
 )
-from mapf.cli.app import app, fail, handle
+from mapf.cli.base import app, fail, handle
 from mapf.cli.commands.export import HISTORY_LOOKBACK_DAYS, replay_row
 from mapf.cli.commands.runs import _frozen_exhibits, as_dict
 from mapf.core.errors import MapError

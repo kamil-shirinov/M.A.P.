@@ -233,6 +233,22 @@ source_modules = ["mapf.eval.journal"]
 forbidden_modules = ["mapf.eval.scoring", "mapf.eval.aggregate", "mapf.eval.baselines"]
 
 [[tool.importlinter.contracts]]
+# The commands are registered by `mapf.cli.app` importing them. If anything they
+# import reached back into that assembly, whichever command was imported first
+# would be half-built while the others were, and one taking a name from another
+# would fail — as `export` did from `evaluate` (Findings #72).
+name = "Commands import the CLI base, never the assembly that registers them"
+type = "forbidden"
+source_modules = ["mapf.cli.commands", "mapf.cli.base"]
+forbidden_modules = ["mapf.cli.app"]
+
+[[tool.importlinter.contracts]]
+name = "The CLI base imports no command"
+type = "forbidden"
+source_modules = ["mapf.cli.base"]
+forbidden_modules = ["mapf.cli.commands"]
+
+[[tool.importlinter.contracts]]
 name = "Core is a sink"
 type = "forbidden"
 source_modules = ["mapf.core"]
