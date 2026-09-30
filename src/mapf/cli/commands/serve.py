@@ -42,7 +42,7 @@ from mapf.core.sessions import settled
 from mapf.data.liquidity import MarketLiquidity
 from mapf.eval.calibration import CalibrationError, load_correction
 from mapf.eval.journal import read_journal
-from mapf.eval.montecarlo import simulate
+from mapf.eval.montecarlo import simulate_paths
 from mapf.pipeline.run import RunRequest, execute
 from mapf.serve.analyse import (
     AnalysisError,
@@ -339,10 +339,12 @@ def serve(
             symbol=symbol_cik,
             correction=correction,
             freeze=Freeze.load(frozen),
-            # The same `simulate` the scorer runs, with the same default paths and
-            # the same seed, so the band on screen is the distribution that would
-            # be scored and not a second one drawn for the picture.
-            simulate=lambda forecast, horizon: simulate(forecast.scenarios, horizon_days=horizon),
+            # The scorer's `simulate`, filled in session by session: same paths,
+            # same seed, and the horizon is its sample unchanged, so the fan on
+            # screen is the distribution that would be scored.
+            simulate=lambda forecast, horizon: simulate_paths(
+                forecast.scenarios, horizon_days=horizon
+            ),
         )
 
         def analyse(ticker: str, horizon: int) -> Iterator[dict[str, object]]:

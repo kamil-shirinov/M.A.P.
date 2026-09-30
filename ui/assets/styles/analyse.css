@@ -33,10 +33,10 @@ body > .masthead,
   border-radius: var(--radius);
 }
 .anl-field { display: grid; gap: var(--sp-2); }
-.anl-label { font: var(--mono-sm); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.anl-label { font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
 .anl-input {
-  font: var(--mono-lg);
-  color: var(--ink-1);
+  font-family: var(--font-mono); font-size: var(--step-2);
+  color: var(--ink);
   background: var(--paper);
   border: 1px solid var(--rule-2);
   border-radius: var(--radius);
@@ -51,11 +51,11 @@ body > .masthead,
 
 .anl-periods { display: grid; gap: var(--sp-2); border: 0; padding: 0; margin: 0; }
 .anl-periods legend {
-  font: var(--mono-sm); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+  font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
   padding: 0; margin-bottom: var(--sp-2);
 }
-.anl-period { display: flex; align-items: baseline; gap: var(--sp-3); font: var(--mono-md); }
-.anl-period-note { font: var(--mono-sm); color: var(--ink-3); }
+.anl-period { display: flex; align-items: baseline; gap: var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); }
+.anl-period-note { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
 /* The marking on the control, before anything runs. */
 .anl-period-note[data-calibration="uncalibrated"] {
   color: var(--uncal);
@@ -63,7 +63,7 @@ body > .masthead,
 }
 
 .anl-go {
-  font: var(--mono-md);
+  font-family: var(--font-mono); font-size: var(--step-0);
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--paper);
@@ -77,26 +77,26 @@ body > .masthead,
 .anl-go:hover { background: var(--accent-strong, var(--accent)); }
 .anl-go:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
 
-.anl-cost { margin-top: var(--sp-4); max-width: 62ch; color: var(--ink-3); font: var(--sans-sm); }
-.anl-absence-foot { color: var(--ink-3); font: var(--sans-sm); }
+.anl-cost { margin-top: var(--sp-4); max-width: 62ch; color: var(--ink-3); font-family: var(--font-sans); font-size: var(--step-0); }
+.anl-absence-foot { color: var(--ink-3); font-family: var(--font-sans); font-size: var(--step-0); }
 
 /* ---- progress ---- */
 .anl-progress {
   display: grid; gap: var(--sp-2);
   padding: var(--sp-5);
   border-left: 2px solid var(--rule-2);
-  font: var(--mono-md);
+  font-family: var(--font-mono); font-size: var(--step-0);
   color: var(--ink-2);
 }
-.anl-step:last-child { color: var(--ink-1); }
+.anl-step:last-child { color: var(--ink); }
 
 /* ---- the result ---- */
 .anl-result-head {
   display: flex; align-items: baseline; justify-content: space-between;
   gap: var(--sp-4); margin-bottom: var(--sp-4);
-  border-bottom: 1px solid var(--rule-1); padding-bottom: var(--sp-3);
+  border-bottom: 1px solid var(--rule); padding-bottom: var(--sp-3);
 }
-.anl-result-head h3 { margin: 0; font: var(--serif-lg); }
+.anl-result-head h3 { margin: 0; font-family: var(--font-serif); font-size: var(--step-3); font-weight: 400; }
 
 .anl-marking {
   padding: var(--sp-4) var(--sp-5);
@@ -107,32 +107,65 @@ body > .masthead,
   border-left-color: var(--uncal);
   background: var(--uncal-soft);
 }
-.anl-mark-head { margin: 0 0 var(--sp-3); font: var(--mono-md); letter-spacing: .06em; text-transform: uppercase; }
+.anl-mark-head { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); letter-spacing: .06em; text-transform: uppercase; }
 .anl-marking[data-calibration="uncalibrated"] .anl-mark-head { color: var(--uncal); }
-.anl-marking p { margin: 0 0 var(--sp-3); font: var(--sans-sm); color: var(--ink-2); }
+.anl-marking p { margin: 0 0 var(--sp-3); font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
 .anl-mark-caveat { color: var(--ink-3); }
-.anl-reasons { margin: 0; padding-left: var(--sp-5); font: var(--sans-sm); color: var(--ink-2); }
+.anl-reasons { margin: 0; padding-left: var(--sp-5); font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
 .anl-reasons li { margin-bottom: var(--sp-2); }
 
 .anl-chart { margin-top: var(--sp-6); }
-.anl-fan { display: block; width: 100%; height: auto; }
-.anl-grid { stroke: var(--rule-1); stroke-width: 1; }
-.anl-anchor { stroke: var(--rule-2); stroke-width: 1; }
-.anl-spot { fill: var(--ink-1); }
-.anl-path { fill: none; stroke: var(--accent); stroke-width: 1.6; }
-/* A raw fan is drawn in the marking colour, so the picture itself carries the
-   claim rather than relying on the note above it. */
-.anl-fan[data-calibration="uncalibrated"] .anl-path { stroke: var(--uncal); }
-.anl-ytick { fill: var(--ink-3); font: var(--mono-sm); text-anchor: end; }
-.anl-plabel { fill: var(--ink-3); font: var(--mono-sm); }
 
-.anl-table { width: 100%; border-collapse: collapse; margin-top: var(--sp-5); font: var(--mono-md); }
+/* ---- the fan ----------------------------------------------------------
+   Sizes are in the SVG's own units (the viewBox is 1080 wide), so they scale with
+   the chart rather than with the page's type ramp. */
+.anl-fan-wrap { position: relative; }
+.anl-fan { display: block; width: 100%; height: auto; overflow: visible; }
+.anl-grid { stroke: var(--rule); stroke-width: 1; }
+.anl-ytick, .anl-xtick { fill: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+.anl-ytick { text-anchor: end; }
+.anl-xtick { text-anchor: middle; }
+.anl-xtick--anchor { fill: var(--ink-2); }
+.anl-history { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linejoin: round; }
+.anl-anchor { stroke: var(--rule-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.anl-spot { fill: var(--ink-num); }
+/* The scenarios are the reasoning, drawn thin and neutral over the bands; the
+   bands are the claim, and carry the marking's colour. */
+.anl-path { fill: none; stroke: var(--ink); stroke-width: 1.25; }
+.anl-plabel { fill: var(--ink-2); font-family: var(--font-mono); font-size: 12px; }
+.anl-pweight { fill: var(--ink); }
+/* The bands. Nine layers of one colour, each faint, so the middle of the
+   distribution is darkest by accumulation and the edges fade out — graded, not
+   stepped. Neutral when the correction was applied; amber only when the fan is
+   the raw one measured too narrow. */
+.anl-band { fill: var(--ink-2); fill-opacity: .11; stroke: none; }
+.anl-fan[data-calibration="uncalibrated"] .anl-band { fill: var(--uncal); fill-opacity: .12; }
+/* The crosshair, hidden until the pointer is over the plot. */
+.anl-catch { fill: transparent; cursor: crosshair; }
+.anl-cross { opacity: 0; transition: opacity 120ms ease-out; pointer-events: none; }
+.anl-cross-rule { stroke: var(--ink-3); stroke-width: 1; }
+.anl-cross-dot { fill: var(--ink-num); }
+.anl-tip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity 120ms ease-out;
+  min-width: 18ch; padding: var(--sp-3) var(--sp-4);
+  background: var(--surface); border: 1px solid var(--rule-2); border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2);
+}
+.anl-fan-wrap[data-pointing="true"] .anl-cross,
+.anl-fan-wrap[data-pointing="true"] .anl-tip { opacity: 1; }
+.anl-tip-head { color: var(--ink); margin-bottom: var(--sp-2); }
+.anl-tip-row { display: flex; gap: var(--sp-3); }
+.anl-tip-gap { flex: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .anl-cross, .anl-tip { transition: none; }
+}
+.anl-table { width: 100%; border-collapse: collapse; margin-top: var(--sp-5); font-family: var(--font-mono); font-size: var(--step-0); }
 .anl-table th {
-  text-align: right; font: var(--mono-sm); letter-spacing: .08em; text-transform: uppercase;
-  color: var(--ink-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-1);
+  text-align: right; font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule);
 }
 .anl-table th:first-child, .anl-table .anl-name { text-align: left; }
-.anl-table td { text-align: right; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule-1); }
+.anl-table td { text-align: right; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule); }
 
 @media (max-width: 720px) {
   .anl-ask { grid-template-columns: 1fr; }
@@ -143,7 +176,7 @@ body > .masthead,
    row's own information. On a search row it replaces the "no page" verdict, so
    it sits where the reader's eye already ends. */
 .anl-offer {
-  font: var(--mono-sm);
+  font-family: var(--font-mono); font-size: var(--step--1);
   letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--accent);
@@ -166,9 +199,9 @@ body > .masthead,
   background: var(--sunken);
   max-width: 68ch;
 }
-.anl-absent-head { margin: 0 0 var(--sp-3); font: var(--mono-md); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
-.anl-absent p { margin: 0 0 var(--sp-3); font: var(--sans-sm); color: var(--ink-2); }
-.anl-absent pre { margin: 0 0 var(--sp-3); font: var(--mono-md); color: var(--ink-1); }
+.anl-absent-head { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.anl-absent p { margin: 0 0 var(--sp-3); font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
+.anl-absent pre { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); color: var(--ink); }
 .anl-absent-foot { color: var(--ink-3); }
 
 /* ---- the company page's live section ----
@@ -176,22 +209,16 @@ body > .masthead,
    by colour: the separation is a fact about what the rows are, and it has to read
    in greyscale (ADR 0036, amendment of 2026-09-30). */
 .cmp-live { display: grid; gap: var(--sp-4); }
-.cmp-live-rule { margin: 0; max-width: 72ch; font: var(--sans-sm); color: var(--ink-2); }
-.cmp-live-none { margin: 0; font: var(--sans-sm); color: var(--ink-3); font-style: italic; }
+.cmp-live-rule { margin: 0; max-width: 72ch; font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
+.cmp-live-none { margin: 0; font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-3); font-style: italic; }
 .cmp-live-row { display: flex; align-items: end; gap: var(--sp-5); flex-wrap: wrap; }
 .cmp-live-result:empty, .cmp-live-progress:empty { display: none; }
 .cmp-live-result { display: grid; gap: var(--sp-4); }
 .cmp-live-link { color: inherit; text-decoration: none; }
 .cmp-live-link:hover .fig { color: var(--accent); }
 
-/* The band: what the forecast actually claims. Two nested ribbons, the inner one
-   darker, so the width reads before any single line does. Drawn in the same
-   colour as the paths, so a raw (amber) fan carries an amber band. */
-.anl-band { fill: var(--accent); opacity: .10; stroke: none; }
-.anl-band[data-level="50"] { opacity: .16; }
-.anl-fan[data-calibration="uncalibrated"] .anl-band { fill: var(--uncal); }
-
-.anl-band-key { margin: var(--sp-3) 0 0; font: var(--sans-sm); color: var(--ink-3); }
+.anl-band-key { margin: var(--sp-3) 0 0; font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-3); max-width: 90ch; }
+.anl-band-key p { margin: 0 0 var(--sp-2); }
 
 /* The recorded-run banner. Not amber: nothing here is an unsettled measurement —
    it is a real result, shown after the fact, and the words carry that. */
@@ -199,8 +226,8 @@ body > .masthead,
   padding: var(--sp-4) var(--sp-5);
   border-left: 2px solid var(--rule-2);
   background: var(--sunken);
-  font: var(--sans-sm);
+  font-family: var(--font-sans); font-size: var(--step-0);
   color: var(--ink-2);
   max-width: 68ch;
 }
-.anl-replay-note strong { color: var(--ink-1); }
+.anl-replay-note strong { color: var(--ink); }

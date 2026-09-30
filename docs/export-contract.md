@@ -8,7 +8,7 @@ uv run map export --out ./export          # write it
 uv run map export --out ./export --check  # has anything moved since?
 ```
 
-`export_version` is **1.3.0**. It is the shape of these files, not the age of the data
+`export_version` is **1.4.0**. It is the shape of these files, not the age of the data
 — read it first and refuse a version you do not know. Every size below is at the
 current corpus (120 companies, 709 filings, 779 runs, three scoring passes) and will
 grow with it.
@@ -421,7 +421,7 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 ## 7. The manifest, and what `--check` compares
 
 ```json
-{ "export_version": "1.3.0", "exported_at": "2026-09-29",
+{ "export_version": "1.4.0", "exported_at": "2026-09-30",
   "freeze":  { "version": "2.6.0", "digest": "7cf4ae3d…" },
   "code":    { "commit": "e5a38f2…", "forecast_digest": "fb673274…" },
   "ledger":  { "items_settled": 709 },
@@ -470,11 +470,16 @@ that may not mean the same thing.
 { "run_id": "b8748710-…", "ticker": "KO", "anchor_date": "2026-09-28",
   "anchor_spot": 87.332, "horizon_days": 5, "corpus_relation": "outside_corpus",
   "price_kind": "intraday", "price_taken_at": "2026-09-28T19:52:43+00:00",
-  "band": [{ "level": 0.1, "price": 84.005 }, …], "scenarios": [ … ] }
+  "band": [{ "level": 0.1, "price": 84.005 }, …], "scenarios": [ … ],
+  "fan": { "levels": [0.05, 0.1, …, 0.95],
+           "sessions": [{ "session": 0, "prices": [87.332, …] }, …] },
+  "scenario_paths": [{ "name": "bullish", "weight": 0.25, "prices": [87.332, …] }, …],
+  "history": [["2026-06-26", 84.61], …, ["2026-09-28", 87.332]],
+  "history_vintage": "2026-09-28", "history_why": null }
 ```
 
-A `JournalEntry` as `runs/by_source/edgar.json` writes it, plus three fields the
-replay needs and a journal row does not.
+A `JournalEntry` as `runs/by_source/edgar.json` writes it, plus the fields the replay
+needs and a journal row does not.
 
 **`price_kind` is `close`, `intraday` or `unknown`,** and it is the reason this
 block exists rather than the page simply printing `anchor_date`. A price provider
@@ -490,6 +495,25 @@ from the same `simulate()` the scorer uses with the run's own scenarios and the
 same seed. It is exported rather than sampled in the browser so that one quantity
 has one implementation; a page that samples its own is a second estimator with no
 way to say which answer a score would be computed against.
+
+**`fan`** is the same distribution at every session from the anchor (session 0, every
+level at the spot) to the horizon, at nineteen levels from 5% to 95% — nine central
+intervals, 10% to 90%. It comes from `simulate_paths`, whose last session is
+`simulate()`'s sample unchanged, so at the horizon `fan` and `band` agree to the last
+digit at the four levels they share. The sessions between are a Brownian bridge to
+that sample. Added in 1.4.0.
+
+**`scenario_paths`** is each scenario's expected price at every session,
+`spot × (1 + r)^(t/h)` — the mean the scenario's GBM is built to have, ending on the
+price the scenario states. Added in 1.4.0.
+
+**`history`** is up to 63 `[date, close]` pairs ending on the anchor, read from the
+price vintage the run itself stored (`history_vintage`, the run manifest's
+`prices.fetched_on`) — never fetched, and never the export's older snapshot — so its
+last point is the price the forecast opened from. For this run that last point is the
+intraday quote, as `price_kind` says. **null** with `history_why` stating the reason
+when prices were left out (`--no-prices`) or that vintage holds no window. Added in
+1.4.0.
 
 ### `ledger.items_settled` is **not** a run count
 

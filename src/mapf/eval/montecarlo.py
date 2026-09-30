@@ -147,6 +147,87 @@ def simulate(
     )
 
 
+@dataclass(frozen=True)
+class SimulatedPaths:
+    """The same mixture, session by session: `returns[:, t - 1]` is the log return
+    to the close `t` sessions out.
+
+    `terminal` is `simulate()`'s own result, unchanged. The last column is that
+    sample bit for bit, so anything drawn from these paths at the horizon IS what
+    the scorer scores, not a second sample of the same distribution.
+    """
+
+    returns: NDArray[np.float64]
+    terminal: Simulation
+
+    def quantiles(self, levels: tuple[float, ...]) -> NDArray[np.float64]:
+        """Rows are sessions 1..h, columns are `levels`."""
+        if any(not 0.0 < q < 1.0 for q in levels):
+            raise SimulationError(f"quantile levels must lie in (0, 1): {levels}")
+        return np.asarray(np.quantile(self.returns, levels, axis=0).T, dtype=np.float64)
+
+    @property
+    def means(self) -> NDArray[np.float64]:
+        return np.asarray(np.mean(self.returns, axis=0), dtype=np.float64)
+
+    @property
+    def sigmas(self) -> NDArray[np.float64]:
+        return np.asarray(np.std(self.returns, axis=0, ddof=1), dtype=np.float64)
+
+
+def simulate_paths(
+    scenarios: ScenarioSet,
+    *,
+    horizon_days: int,
+    paths: int = DEFAULT_PATHS,
+    seed: int = 20260813,
+) -> SimulatedPaths:
+    """`simulate()`, filled in between the anchor and the horizon.
+
+    A fan chart needs the distribution at every session, and `simulate` draws only
+    the last one. Drawing whole paths afresh would give a horizon sample that
+    differs from the scored one in every path, so the picture and the score would
+    rest on two samples of one thing. Instead the terminal draws are kept and the
+    sessions before them are filled with a Brownian bridge — the distribution of a
+    scenario's GBM at an earlier time given where it ends. Marginally, session `t`
+    of `h` is then each scenario's GBM at the fraction `u = t / h` of its horizon —
+    mean `u * drift`, variance `u * sigma^2` — mixed by weight, and the horizon
+    itself is untouched. That is NOT `simulate(horizon_days=t)`, which would put a
+    scenario's whole stated return at session `t`.
+
+    The bridge takes its own generator, seeded apart from the terminal one, so the
+    terminal sample cannot move when the bridge changes.
+    """
+    terminal = simulate(scenarios, horizon_days=horizon_days, paths=paths, seed=seed)
+    ordered = (scenarios.bullish, scenarios.base_case, scenarios.bearish)
+    weights = np.array([s.probability_weight for s in ordered], dtype=np.float64)
+    counts = _allocate(weights / float(weights.sum()), paths)
+    years = horizon_days / TRADING_DAYS_PER_YEAR
+    # Per path, the horizon sigma of the scenario it was drawn from, in the order
+    # `simulate` concatenated them.
+    sigma = np.repeat([s.annualised_vol * math.sqrt(years) for s in ordered], counts).astype(
+        np.float64
+    )
+
+    end = terminal.returns
+    out = np.empty((paths, horizon_days), dtype=np.float64)
+    out[:, -1] = end
+    rng = np.random.default_rng(seed + 1)
+    previous = np.zeros(paths, dtype=np.float64)
+    u_prev = 0.0
+    for t in range(1, horizon_days):
+        u = t / horizon_days
+        # X(u) | X(u_prev), X(1): mean moves the remaining gap in proportion,
+        # variance is the bridge's over the step.
+        share = (u - u_prev) / (1.0 - u_prev)
+        mean = previous + share * (end - previous)
+        spread = sigma * math.sqrt((u - u_prev) * (1.0 - u) / (1.0 - u_prev))
+        previous = mean + spread * rng.standard_normal(paths)
+        out[:, t - 1] = previous
+        u_prev = u
+    return SimulatedPaths(returns=out, terminal=terminal)
+
+
 def crps_against(simulation: Simulation, realised: float) -> float:
     """CRPS of the simulated distribution against what happened.
 

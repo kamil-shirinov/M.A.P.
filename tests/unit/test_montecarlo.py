@@ -17,6 +17,7 @@ from mapf.eval.montecarlo import (
     SimulationError,
     crps_against,
     simulate,
+    simulate_paths,
 )
 from tests.conftest import make_scenario_set
 
@@ -248,3 +249,59 @@ def test_a_broken_allocation_is_caught_rather_than_silently_short(
     )
     with pytest.raises(SimulationError, match="expected 100 paths, produced 3"):
         simulate(make_scenario_set(), horizon_days=HORIZON, paths=100)
+
+
+# --- the fan's paths ------------------------------------------------------------
+
+
+def test_the_paths_end_on_the_scored_sample_bit_for_bit() -> None:
+    """The fan at the horizon must be the distribution the scorer scores, not a
+    second sample of it."""
+    scenarios = make_scenario_set()
+    paths = simulate_paths(scenarios, horizon_days=5)
+    scored = simulate(scenarios, horizon_days=5)
+    assert np.array_equal(paths.returns[:, -1], scored.returns)
+    assert paths.terminal.returns is not None
+    assert np.array_equal(paths.terminal.returns, scored.returns)
+
+
+def test_each_session_is_each_scenario_part_of_the_way_to_its_horizon() -> None:
+    """Session t of h: mean u*drift and variance u*sigma^2 per scenario, u = t/h,
+    mixed by weight. Checked against that closed form on a large sample."""
+    scenarios = make_scenario_set()
+    h = 5
+    paths = simulate_paths(scenarios, horizon_days=h, paths=200_000)
+    ordered = (scenarios.bullish, scenarios.base_case, scenarios.bearish)
+    w = np.array([s.probability_weight for s in ordered])
+    w = w / w.sum()
+    sig = np.array([s.annualised_vol * math.sqrt(h / TRADING_DAYS_PER_YEAR) for s in ordered])
+    drift = np.array([math.log1p(s.price_return) for s in ordered]) - 0.5 * sig**2
+    for t in range(1, h + 1):
+        u = t / h
+        mean = float(w @ (u * drift))
+        sd = math.sqrt(float(w @ (u * sig**2 + (u * drift) ** 2)) - mean**2)
+        assert paths.means[t - 1] == pytest.approx(mean, abs=4e-4)
+        assert paths.sigmas[t - 1] == pytest.approx(sd, rel=0.01)
+
+
+def test_the_fan_widens_every_session() -> None:
+    paths = simulate_paths(make_scenario_set(), horizon_days=21)
+    assert np.all(np.diff(paths.sigmas) > 0)
+
+
+def test_a_one_session_horizon_is_just_the_scored_sample() -> None:
+    scenarios = make_scenario_set()
+    paths = simulate_paths(scenarios, horizon_days=1)
+    assert paths.returns.shape == (20_000, 1)
+    assert np.array_equal(paths.returns[:, 0], simulate(scenarios, horizon_days=1).returns)
+
+
+def test_the_quantiles_come_by_session_and_level() -> None:
+    paths = simulate_paths(make_scenario_set(), horizon_days=5)
+    grid = paths.quantiles((0.1, 0.5, 0.9))
+    assert grid.shape == (5, 3)
+    assert np.all(grid[:, 0] < grid[:, 1]) and np.all(grid[:, 1] < grid[:, 2])
+    # At the horizon, the same numbers the terminal sample gives.
+    assert grid[-1] == pytest.approx(paths.terminal.quantiles((0.1, 0.5, 0.9)))
+    with pytest.raises(SimulationError, match="quantile levels"):
+        paths.quantiles((0.0, 0.5))

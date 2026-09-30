@@ -44,8 +44,9 @@ class _Scenarios:
 
 
 class _Bar:
-    def __init__(self, day: date) -> None:
+    def __init__(self, day: date, close: float = 200.0) -> None:
         self.date = day
+        self.close = close
 
 
 class _Window:
@@ -1225,3 +1226,112 @@ def test_the_runs_read_lists_only_live_runs_from_the_journal_it_writes_to(
     assert seen[0] == elsewhere
     assert seen[1:] == ["edgar", "news"], "the two live populations and nothing else"
     assert [r["anchor_date"] for r in rows] == ["2026-09-28", "2026-09-01"], "newest first"
+
+
+# --- the fan: every session, from the scored sample -----------------------------
+
+
+def _paths(horizon: int = 5) -> Any:
+    from mapf.eval.montecarlo import simulate_paths
+    from tests.conftest import make_scenario_set
+
+    return simulate_paths(make_scenario_set(), horizon_days=horizon)
+
+
+def test_the_fan_grades_in_nine_central_intervals() -> None:
+    from mapf.serve.analyse import BAND_LEVELS, FAN_LEVELS
+
+    assert len(FAN_LEVELS) == 19
+    assert FAN_LEVELS[0] == 0.05 and FAN_LEVELS[-1] == 0.95
+    # The band's four levels are among them, so the two cannot disagree.
+    assert set(BAND_LEVELS) <= set(FAN_LEVELS)
+
+
+def test_the_fan_opens_from_the_spot_and_ends_on_the_band() -> None:
+    from mapf.serve.analyse import BAND_LEVELS, FAN_LEVELS, band_prices, fan_prices
+
+    paths = _paths()
+    fan = fan_prices(100.0, paths)
+    sessions = fan["sessions"]
+    assert isinstance(sessions, list)
+    assert sessions[0]["prices"] == [100.0] * 19, "every level starts at the spot"
+    assert [s["session"] for s in sessions] == [0, 1, 2, 3, 4, 5]
+    band = band_prices(
+        100.0,
+        paths.terminal.quantiles(BAND_LEVELS),
+        mean=paths.terminal.mean,
+        sigma=paths.terminal.sigma,
+    )
+    at_horizon = dict(zip(FAN_LEVELS, sessions[-1]["prices"], strict=True))
+    for point in band:
+        assert at_horizon[point["level"]] == pytest.approx(point["price"], rel=1e-12)
+
+
+def test_the_fan_widens_every_session() -> None:
+    from mapf.serve.analyse import fan_prices
+
+    fan = fan_prices(100.0, _paths(21))
+    widths = [s["prices"][-1] - s["prices"][0] for s in fan["sessions"]]
+    assert all(b > a for a, b in zip(widths, widths[1:], strict=False))
+
+
+def test_a_corrected_fan_is_the_corrected_band_at_the_horizon_and_wider_throughout() -> None:
+    from mapf.serve.analyse import BAND_LEVELS, FAN_LEVELS, band_prices, fan_prices
+
+    paths = _paths()
+    raw = fan_prices(100.0, paths)["sessions"]
+    fixed = fan_prices(100.0, paths, correction=_Correction())["sessions"]
+    band = band_prices(
+        100.0,
+        paths.terminal.quantiles(BAND_LEVELS),
+        mean=paths.terminal.mean,
+        sigma=paths.terminal.sigma,
+        correction=_Correction(),
+    )
+    at_horizon = dict(zip(FAN_LEVELS, fixed[-1]["prices"], strict=True))
+    for point in band:
+        assert at_horizon[point["level"]] == pytest.approx(point["price"], rel=1e-12)
+    for r, c in zip(raw[1:], fixed[1:], strict=True):
+        assert c["prices"][-1] - c["prices"][0] > r["prices"][-1] - r["prices"][0]
+
+
+def test_each_scenario_curve_ends_on_the_price_it_states() -> None:
+    from mapf.serve.analyse import scenario_paths
+
+    curves = scenario_paths(200.0, _Scenarios(), 5)
+    assert [c["name"] for c in curves] == ["bullish", "base_case", "bearish"]
+    bull = curves[0]["prices"]
+    assert isinstance(bull, list)
+    assert bull[0] == 200.0
+    assert bull[-1] == pytest.approx(200.0 * 1.06), "a simple return, as the table reads it"
+    assert len(bull) == 6
+
+
+def test_the_history_is_the_last_three_months_of_the_runs_own_window() -> None:
+    from datetime import timedelta
+
+    from mapf.serve.analyse import HISTORY_SESSIONS, history
+
+    bars = [_Bar(date(2026, 1, 1) + timedelta(days=i), 100.0 + i) for i in range(100)]
+    closes = history(bars)
+    assert len(closes) == HISTORY_SESSIONS == 63
+    assert closes[-1] == [bars[-1].date.isoformat(), bars[-1].close]
+    assert len(history(bars[:5])) == 5
+
+
+def test_a_run_carries_its_fan_its_curves_and_its_history() -> None:
+    from mapf.eval.montecarlo import simulate_paths
+
+    line = _stream(simulate=lambda forecast, h: simulate_paths(forecast.scenarios, horizon_days=h))[
+        -1
+    ]
+    fan = line["fan"]
+    assert isinstance(fan, dict) and len(fan["sessions"]) == 6
+    assert len(_listed(line, "scenario_paths")) == 3
+    assert _listed(line, "history")[-1][0] == SESSIONS[-1].isoformat()
+
+
+def test_a_run_with_no_simulator_carries_no_fan_rather_than_an_invented_one() -> None:
+    line = _stream()[-1]
+    assert line["fan"] is None
+    assert line["band"] == []

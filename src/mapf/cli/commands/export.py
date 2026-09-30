@@ -29,8 +29,8 @@ learn *why* from the manifest rather than infer it from a gap. The same discipli
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping, Sequence
-from datetime import UTC, date, datetime
+from collections.abc import Callable, Mapping, Sequence
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -48,15 +48,22 @@ from mapf.corpus.ledger import Ledger
 from mapf.corpus.record import load_frozen
 from mapf.corpus.selection import Corpus
 from mapf.eval.journal import SOURCES, LedgerItem, read_journal
-from mapf.eval.montecarlo import simulate
-from mapf.serve.analyse import BAND_LEVELS, band_prices
+from mapf.eval.montecarlo import simulate_paths
+from mapf.serve.analyse import (
+    BAND_LEVELS,
+    band_prices,
+    fan_prices,
+    history,
+    scenario_paths,
+)
 from mapf.settings import load
 
 # The export's own format version. A front end that reads these files is entitled
 # to refuse a shape it does not know, and a version it can compare is the only way
 # it can. Distinct from every vintage in the manifest, which describe the DATA.
-# 1.2.0 added `runs.rows` to the manifest; nothing was removed or renamed.
-EXPORT_VERSION = "1.3.0"
+# 1.2.0 added `runs.rows` to the manifest; 1.4.0 added the replay's fan, scenario
+# paths and history. Nothing was removed or renamed.
+EXPORT_VERSION = "1.4.0"
 
 # The one recorded live run the hosted copy replays. PINNED by id, in source,
 # where changing it is a visible edit — "the newest one" would republish whatever
@@ -361,7 +368,17 @@ def export(
                     "bars": [[b.date.isoformat(), b.close] for b in series.bars],
                 },
             )
-        replay_file = _write_replay(out, journal, sizes, runs_dir)
+        # The recorded run's closes, from the vintage the run itself stored them
+        # under — read, never fetched — so the history ends on the price the run
+        # opened from. None under --no-prices, for the same reason as the series.
+        history_for: Callable[[str, date, date], Any] | None = (
+            None
+            if no_prices
+            else lambda ticker, stored_on, end: build_price_snapshot(settings, stored_on).covering(
+                ticker, end - timedelta(days=HISTORY_LOOKBACK_DAYS), end
+            )
+        )
+        replay_file = _write_replay(out, journal, sizes, runs_dir, history_for=history_for)
         sizes["corpus.json"] = _write(out / "corpus.json", companies)
         sizes["universe.json"] = _write(
             out / "universe.json",
@@ -519,42 +536,65 @@ def export(
         raise handle(err) from err
 
 
-def _write_replay(out: Path, journal: Any, sizes: dict[str, int], runs_dir: Path) -> str | None:
+# Calendar days to look back for the replay's history: enough to hold the chart's
+# three months of sessions across any run of holidays.
+HISTORY_LOOKBACK_DAYS = 120
+
+
+def _write_replay(
+    out: Path,
+    journal: Any,
+    sizes: dict[str, int],
+    runs_dir: Path,
+    *,
+    history_for: Callable[[str, date, date], Any] | None = None,
+) -> str | None:
     """One recorded live run, for the copy that has no models behind it.
 
     A visitor who cannot run an analysis otherwise meets an absence where the most
-    interesting screen should be, and never sees what the marking, the band or the
-    relation tag look like. This is that run, static and dated.
+    interesting part of a company page should be, and never sees what the marking,
+    the fan or the relation tag look like. This is that run, static and dated.
 
-    IT IS THE FORECAST AS RECORDED. The band is recomputed from the run's own
-    scenarios by the same `simulate` the scorer uses, so anyone with this
-    repository can reproduce it without the models — the expensive part was
-    producing the scenarios, and those are on disk.
+    IT IS THE FORECAST AS RECORDED. The band and the fan are recomputed from the
+    run's own scenarios by the same `simulate` the scorer uses — the fan session by
+    session, ending on that same sample — so anyone with this repository can
+    reproduce them without the models. The expensive part was producing the
+    scenarios, and those are on disk.
     """
     entry = next((e for e in journal.of("edgar") if str(e.run_id) == REPLAY_RUN_ID), None)
     if entry is None:
         return None
     record = dict(as_dict(entry))
-    forecast = runs_dir / REPLAY_RUN_ID / "forecast.json"
+    run = runs_dir / REPLAY_RUN_ID
     band: list[dict[str, float]] = []
+    record["fan"] = None
+    record["scenario_paths"] = []
+    record["history"] = None
+    record["history_why"] = "prices were left out of this export"
     try:
-        stored = Forecast.model_validate_json(forecast.read_text(encoding="utf-8"))
+        stored = Forecast.model_validate_json((run / "forecast.json").read_text(encoding="utf-8"))
         # `price_kind` is already on the row: the journal decides it, once, for
         # every run. This used to be decided here as well, by a rule that compared
         # `as_of` with the anchor session — correct for a live run and wrong for all
         # 701 corpus runs, whose `as_of` sits the evening before the bar they read.
         # One rule in one place, and this reads it.
         record["price_taken_at"] = stored.as_of.isoformat()
-        # ONE implementation of the band, for the same reason. The page used to
-        # sample its own in JavaScript: a second estimator of one quantity.
-        simulation = simulate(stored.scenarios, horizon_days=stored.horizon_days)
+        # ONE implementation of the band and the fan, for the same reason. The page
+        # used to sample its own in JavaScript: a second estimator of one quantity.
+        paths = simulate_paths(stored.scenarios, horizon_days=stored.horizon_days)
         band = band_prices(
             stored.spot_price,
-            simulation.quantiles(BAND_LEVELS),
-            mean=simulation.mean,
-            sigma=simulation.sigma,
+            paths.terminal.quantiles(BAND_LEVELS),
+            mean=paths.terminal.mean,
+            sigma=paths.terminal.sigma,
         )
-    except (OSError, ValidationError, MapError):
+        record["fan"] = fan_prices(stored.spot_price, paths)
+        record["scenario_paths"] = scenario_paths(
+            stored.spot_price, stored.scenarios, stored.horizon_days
+        )
+        if history_for is not None:
+            record.update(_replay_history(run, entry.ticker, entry.anchor_date, history_for))
+    except (OSError, ValidationError, MapError, KeyError, ValueError):
         # A replay without a band is a smaller page, not a broken one.
         pass
     record["band"] = band
@@ -562,6 +602,28 @@ def _write_replay(out: Path, journal: Any, sizes: dict[str, int], runs_dir: Path
     name = "live/replay.json"
     sizes[name] = _write(out / "live" / "replay.json", record)
     return name
+
+
+def _replay_history(
+    run: Path, ticker: str, anchor: date, history_for: Callable[[str, date, date], Any]
+) -> dict[str, object]:
+    """The closes the run's own window held, up to its anchor, from its own vintage.
+
+    The run's manifest records the day its prices were stored. Reading that
+    vintage — not the export's snapshot, which is weeks older, and not a later
+    one, which may hold a settled close where the run read a live quote — is what
+    makes the chart's last point the price the forecast opened from.
+    """
+    manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    stored_on = date.fromisoformat(manifest["prices"]["fetched_on"])
+    window = history_for(ticker, stored_on, anchor)
+    if window is None:
+        return {
+            "history": None,
+            "history_why": f"the {stored_on} price vintage holds no window for {ticker}",
+        }
+    bars = [bar for bar in window.bars if bar.date <= anchor]
+    return {"history": history(bars), "history_why": None, "history_vintage": stored_on.isoformat()}
 
 
 def _funnel(

@@ -31,6 +31,9 @@
   /* Tight vertical rhythm. Every panel and table inherits this. */
   --sp-1: 0.125rem;  --sp-2: 0.25rem;  --sp-3: 0.5rem;
   --sp-4: 0.75rem;   --sp-5: 1.125rem; --sp-6: 1.625rem; --sp-7: 2.25rem;
+  /* Used by system.css since 2026-09-26 and defined only now, so the two rules
+     that read it applied nothing until then. */
+  --sp-8: 3rem;
 
   --radius: 2px;
 

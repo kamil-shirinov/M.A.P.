@@ -13,7 +13,7 @@ from __future__ import annotations
 import inspect
 import json
 import subprocess
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -444,7 +444,7 @@ def test_the_manifest_carries_each_sources_own_stamp_not_one_invented_date(
     assert manifest["freeze"]["digest"]
     assert manifest["prices"]["snapshot"] == VINTAGE.isoformat()
     assert manifest["ledger"]["items_settled"] == 1
-    assert manifest["export_version"] == "1.3.0"
+    assert manifest["export_version"] == "1.4.0"
     # The pre-screen's own stamps, as the set they are: every row carries its
     # `fetched_on` and a resumed walk spans days.
     assert manifest["filers"] == {"rows": 2, "distinct": 2, "vintages": ["2026-09-09"]}
@@ -1267,3 +1267,101 @@ def test_a_replay_whose_forecast_cannot_be_read_still_exports_the_row(
     # losing the forecast file here costs the band and the instant, not the kind.
     assert row["price_kind"] == "close"
     assert "price_taken_at" not in row
+
+
+# --- the replay's fan and history (1.4.0) ----------------------------------------
+
+
+def _pinned(tmp_path: Path) -> Any:
+    """A journal holding the pinned run, with its manifest dated like the real one."""
+    from datetime import UTC, datetime
+
+    from mapf.cli.commands.export import REPLAY_RUN_ID
+    from mapf.eval.journal import read_journal
+
+    _ready(tmp_path)
+    run_id = _write_run(tmp_path / "runs", ticker="KO", source="edgar")
+    (tmp_path / "runs" / run_id).rename(tmp_path / "runs" / REPLAY_RUN_ID)
+    for name in ("forecast.json", "manifest.json"):
+        path = tmp_path / "runs" / REPLAY_RUN_ID / name
+        body = json.loads(path.read_text())
+        body["run_id"] = REPLAY_RUN_ID
+        path.write_text(json.dumps(body))
+    return read_journal(tmp_path / "runs", snapshot=None, today=datetime.now(UTC).date())
+
+
+def test_the_replay_carries_a_fan_that_ends_on_its_band(tmp_path: Path) -> None:
+    from mapf.cli.commands.export import _write_replay
+
+    journal = _pinned(tmp_path)
+    _write_replay(tmp_path / "out", journal, {}, tmp_path / "runs")
+    row = json.loads((tmp_path / "out" / "live" / "replay.json").read_text())
+    fan = row["fan"]
+    assert fan["levels"][0] == 0.05 and len(fan["levels"]) == 19
+    at_horizon = dict(zip(fan["levels"], fan["sessions"][-1]["prices"], strict=True))
+    for point in row["band"]:
+        assert at_horizon[point["level"]] == pytest.approx(point["price"], rel=1e-12)
+    assert [c["name"] for c in row["scenario_paths"]] == ["bullish", "base_case", "bearish"]
+    # No history reader: the export left prices out, and says so.
+    assert row["history"] is None
+    assert row["history_why"] == "prices were left out of this export"
+
+
+def test_the_replay_history_is_read_from_the_runs_own_vintage(tmp_path: Path) -> None:
+    """The run's manifest names the day its prices were stored. That vintage — not
+    the export's snapshot — is where the last point equals the price the run
+    opened from."""
+    from mapf.cli.commands.export import REPLAY_RUN_ID, _write_replay
+
+    journal = _pinned(tmp_path)
+    manifest = json.loads((tmp_path / "runs" / REPLAY_RUN_ID / "manifest.json").read_text())
+    stored_on = date.fromisoformat(manifest["prices"]["fetched_on"])
+    anchor = journal.of("edgar")[0].anchor_date
+    asked: list[tuple[str, date, date]] = []
+
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.date = day
+            self.close = close
+
+    class _Window:
+        bars = [_Bar(anchor - timedelta(days=d), 100.0 + d) for d in range(100, -3, -1)]
+
+    def reader(ticker: str, vintage: date, end: date) -> Any:
+        asked.append((ticker, vintage, end))
+        return _Window()
+
+    _write_replay(tmp_path / "out", journal, {}, tmp_path / "runs", history_for=reader)
+    row = json.loads((tmp_path / "out" / "live" / "replay.json").read_text())
+    assert asked == [("KO", stored_on, anchor)]
+    assert row["history_vintage"] == stored_on.isoformat()
+    assert row["history_why"] is None
+    assert len(row["history"]) == 63
+    assert row["history"][-1][0] == anchor.isoformat(), "nothing after the anchor"
+
+
+def test_a_vintage_with_no_window_is_a_stated_absence(tmp_path: Path) -> None:
+    from mapf.cli.commands.export import _write_replay
+
+    journal = _pinned(tmp_path)
+    _write_replay(tmp_path / "out", journal, {}, tmp_path / "runs", history_for=lambda *_a: None)
+    row = json.loads((tmp_path / "out" / "live" / "replay.json").read_text())
+    assert row["history"] is None
+    assert "price vintage holds no window for KO" in row["history_why"]
+
+
+def test_the_exporter_reads_the_replay_history_without_fetching(tmp_path: Path) -> None:
+    """Through the export command: the reader it builds is a read-only snapshot at
+    the run's own vintage, and --no-prices builds none."""
+    from mapf.cli.commands.export import REPLAY_RUN_ID
+
+    _pinned(tmp_path)
+    ledger = _ledger(tmp_path, REPLAY_RUN_ID)
+    _export(tmp_path, "--ledger-path", str(ledger))
+    row = _read(tmp_path, "live/replay.json")
+    # The fixture's cache holds no window at that vintage: stated, not fetched.
+    assert row["history"] is None
+    assert "holds no window" in row["history_why"]
+    _export(tmp_path, "--ledger-path", str(ledger), "--no-prices")
+    row = _read(tmp_path, "live/replay.json")
+    assert row["history_why"] == "prices were left out of this export"

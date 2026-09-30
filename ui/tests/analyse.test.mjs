@@ -18,6 +18,14 @@ import { Node, installDom } from "./dom.mjs";
 
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
+
+/** Every node under `root`, depth first, in document order. */
+const descendants = (root) => {
+  const out = [];
+  const walk = (n) => { out.push(n); (n.children ?? []).forEach(walk); };
+  (root.children ?? []).forEach(walk);
+  return out;
+};
 const load = (path) => import(`../assets/js/${path}?${Math.random()}`);
 
 const RESULT = {
@@ -153,11 +161,11 @@ describe("the band is the width the forecast claims", () => {
     const { renderFan } = await load("ui/analyse-fan.js");
     const host = new Node("div");
     const svg = renderFan(host, banded());
-    const kids = svg.children;
-    const bands = kids.filter((n) => n._cls?.has("anl-band"));
-    const paths = kids.filter((n) => n._cls?.has("anl-path"));
-    assert.equal(bands.length, 2, "two nested ribbons");
-    assert.ok(kids.indexOf(bands[0]) < kids.indexOf(paths[0]), "behind the lines");
+    const all = descendants(svg);
+    const bands = all.filter((n) => n._cls?.has("anl-band"));
+    const paths = all.filter((n) => n._cls?.has("anl-path"));
+    assert.equal(bands.length, 2, "two nested ribbons from a four-level band");
+    assert.ok(all.indexOf(bands.at(-1)) < all.indexOf(paths[0]), "behind the lines");
   });
 
   it("takes the axis from the band too, so the ribbon is not clipped", async () => {
@@ -166,8 +174,8 @@ describe("the band is the width the forecast claims", () => {
     installDom();
     const { renderFan } = await load("ui/analyse-fan.js");
     const host = new Node("div");
-    renderFan(host, banded());
-    const ticks = [...host.children[0].children].filter((n) => n._cls?.has("anl-ytick"));
+    const svg = renderFan(host, banded());
+    const ticks = descendants(svg).filter((n) => n._cls?.has("anl-ytick"));
     const levels = ticks.map((t) => Number(t.textContent));
     assert.ok(Math.min(...levels) <= 190, "the axis reaches the band's floor");
     assert.ok(Math.max(...levels) >= 210, "and its ceiling");
@@ -607,5 +615,154 @@ describe("each drifted run is labelled by its own cause", () => {
     const header = read("assets/js/ui/runs-header.js");
     assert.doesNotMatch(header, /card\(root, "Re-based since the run"\)/);
     assert.match(header, /drift\.cause === "intraday_anchor"/);
+  });
+});
+
+describe("the fan, session by session", () => {
+  /* A result as the server sends it: nineteen levels at every session from the
+     anchor to the horizon, each scenario's curve, and the closes before it. */
+  const LEVELS = Array.from({ length: 19 }, (_, k) => Math.round((k + 1) * 5) / 100);
+  const fanned = (over = {}) => {
+    const sessions = [0, 1, 2, 3, 4, 5].map((t) => ({
+      session: t,
+      prices: LEVELS.map((q) => 200 * (1 + (q - 0.5) * 0.04 * Math.sqrt(t))),
+    }));
+    return {
+      ...RESULT,
+      band: [],
+      fan: { levels: LEVELS, sessions },
+      scenario_paths: RESULT.scenarios.map((s) => ({
+        name: s.name, weight: s.weight,
+        prices: [0, 1, 2, 3, 4, 5].map((t) => 200 * (1 + s.price_return) ** (t / 5)),
+      })),
+      history: [["2026-07-01", 190], ["2026-08-03", 196], ["2026-09-22", 200]],
+      ...over,
+    };
+  };
+
+  it("grades in nine central intervals, outermost first, from the levels it was given", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const svg = renderFan(new Node("div"), fanned());
+    const bands = descendants(svg).filter((n) => n._cls?.has("anl-band"));
+    assert.deepEqual(bands.map((b) => b.dataset.level), ["90", "80", "70", "60", "50", "40", "30", "20", "10"]);
+  });
+
+  it("puts the fan and the curves in the group that opens, and the history outside it", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const svg = renderFan(new Node("div"), fanned());
+    const opening = descendants(svg).find((n) => n._cls?.has("anl-opening"));
+    assert.match(opening.attrs["clip-path"], /^url\(#anl-open-\d+\)$/);
+    const inside = descendants(opening);
+    assert.equal(inside.filter((n) => n._cls?.has("anl-band")).length, 9);
+    assert.equal(inside.filter((n) => n._cls?.has("anl-path")).length, 3);
+    assert.ok(!inside.some((n) => n._cls?.has("anl-history")));
+    assert.ok(descendants(svg).some((n) => n._cls?.has("anl-history")), "the closes run into the anchor");
+  });
+
+  it("names each curve with its weight, and marks the weight as a figure", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const svg = renderFan(new Node("div"), fanned());
+    const labels = descendants(svg).filter((n) => n._cls?.has("anl-plabel"));
+    assert.deepEqual(labels.map((l) => l.textContent).sort(), ["Base case 50%", "Bearish 25%", "Bullish 25%"]);
+    for (const label of labels) {
+      const [name, weight] = label.children;
+      assert.ok(name.dataset.chrome, "the name is a label");
+      assert.equal(weight.dataset.prov, "derived", "the weight is a figure");
+    }
+  });
+
+  it("says what the shading is, and that the two sides of the anchor are drawn at two scales", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    renderFan(host, fanned({ corrected: false, marking: "uncalibrated" }));
+    const text = host.textContent;
+    assert.match(text, /the middle 10% of the forecast, darkest, out to the middle 90%, in 9 steps/);
+    assert.match(text, /This raw width was measured too narrow\./);
+    assert.match(text, /Left of the anchor: the last 3 closes\. Right of it: 5 sessions ahead, drawn wider/);
+    assert.match(text, /do not know market holidays/);
+  });
+
+  it("says a corrected fan was fitted at the horizon only", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    renderFan(host, fanned());
+    assert.match(host.textContent, /fitted at the horizon; between the anchor and the horizon it is carried in proportion/);
+  });
+
+  it("states why there is no history rather than drawing none silently", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    renderFan(host, fanned({ history: null, history_why: "prices were left out of this export" }));
+    assert.match(host.textContent, /No price history before the anchor: prices were left out of this export\./);
+  });
+
+  it("reads the levels under the pointer, ahead of the anchor and behind it", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const host = new Node("div");
+    const svg = renderFan(host, fanned({ anchor: "2026-09-22" }));
+    svg.getBoundingClientRect = () => ({ left: 0, width: 1080 });
+    const catcher = descendants(svg).find((n) => n._cls?.has("anl-catch"));
+    const tip = descendants(host).find((n) => n._cls?.has("anl-tip"));
+    catcher._on.pointermove({ clientX: 900 });
+    assert.match(tip.textContent, /sessions · ≈ /);
+    for (const range of ["median", "50%", "80%", "90%"]) assert.match(tip.textContent, new RegExp(range));
+    const marked = descendants(tip).filter((n) => n.dataset?.prov === "derived");
+    assert.equal(marked.length, 7, "the median and three ranges, each end a derived figure");
+    catcher._on.pointermove({ clientX: 70 });
+    assert.match(tip.textContent, /close/);
+    assert.equal(descendants(tip).filter((n) => n.dataset?.prov === "measured").length, 1, "a close is measured");
+  });
+
+  it("opens once when motion is welcome, and not at all when it is not", async () => {
+    installDom();
+    const frames = [];
+    globalThis.requestAnimationFrame = (fn) => frames.push(fn);
+    globalThis.matchMedia = () => ({ matches: false });
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const svg = renderFan(new Node("div"), fanned());
+    const reveal = descendants(svg).find((n) => n.tagName === "RECT" && n.attrs.height && !n._cls?.has("anl-catch"));
+    assert.equal(reveal.attrs.width, "0", "closed at the start");
+    while (frames.length) frames.shift()(performance.now() + 5000);
+    assert.ok(Number(reveal.attrs.width) > 300, "fully open at the end");
+
+    globalThis.matchMedia = () => ({ matches: true });
+    frames.length = 0;
+    const still = renderFan(new Node("div"), fanned());
+    const shut = descendants(still).find((n) => n.tagName === "RECT" && n.attrs.height && !n._cls?.has("anl-catch"));
+    assert.notEqual(shut.attrs.width, "0", "reduced motion draws the fan open");
+    assert.equal(frames.length, 0, "and asks for no frames");
+    delete globalThis.requestAnimationFrame;
+    delete globalThis.matchMedia;
+  });
+
+  it("colours the bands amber only when the fan is uncalibrated", () => {
+    const sheet = read("assets/styles/analyse.css").replace(/\/\*[\s\S]*?\*\//g, "");
+    const base = sheet.match(/\.anl-band \{[^}]*\}/)[0];
+    assert.doesNotMatch(base, /--uncal/, "a corrected fan is neutral");
+    assert.match(sheet, /\.anl-fan\[data-calibration="uncalibrated"\] \.anl-band \{[^}]*var\(--uncal\)/);
+  });
+});
+
+describe("every custom property a stylesheet reads is defined", () => {
+  /* Thirty-three declarations in analyse.css and two in system.css read tokens
+     nothing defined — --mono-sm, --sans-sm, --ink-1, --rule-1, --sp-8 — so they
+     applied nothing and the analysis screens never looked as written. A var()
+     with a fallback is allowed; one without must resolve. */
+  it("resolves every var() that has no fallback", () => {
+    const dir = new URL("../assets/styles/", import.meta.url);
+    const sheets = readdirSync(dir).filter((f) => f.endsWith(".css")).map((f) => [f, readFileSync(new URL(f, dir), "utf8")]);
+    const defined = new Set(sheets.flatMap(([, css]) => [...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1])));
+    for (const [file, css] of sheets) {
+      for (const [, name] of css.matchAll(/var\((--[a-z0-9-]+)\s*\)/g)) {
+        assert.ok(defined.has(name), `${file} reads ${name}, which nothing defines`);
+      }
+    }
   });
 });

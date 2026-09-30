@@ -245,6 +245,72 @@ def band_prices(
     return out
 
 
+# The fan's levels: nine central intervals, 10% to 90% in steps of ten, so the
+# shading grades rather than stepping once. Every one is a quantile of the same
+# simulated paths the band is taken from; the band's four levels are among them.
+FAN_LEVELS: tuple[float, ...] = tuple(round(0.05 * k, 2) for k in range(1, 20))
+
+# About three months of sessions before the anchor, which is what the chart shows
+# running into it. Enough to see where the price has been; not a record.
+HISTORY_SESSIONS = 63
+
+
+def fan_prices(spot: float, paths: Any, *, correction: Any = None) -> dict[str, Any]:
+    """The fan, session by session, as prices.
+
+    Quantiles of `simulate_paths`, whose last session is the scored sample, so at
+    the horizon these are the band's numbers to the last digit. A correction is
+    applied to each session exactly as `band_prices` applies it at the horizon —
+    mean `mu + a*sigma`, spread `b*sigma` — using that session's own mean and
+    spread. It was fitted at the horizon only; in between it is carried in
+    proportion, and the page says so rather than implying it was tested there.
+    """
+    grid = paths.quantiles(FAN_LEVELS)
+    means = paths.means
+    sigmas = paths.sigmas
+    sessions: list[dict[str, object]] = [
+        {"session": 0, "prices": [spot] * len(FAN_LEVELS)},
+    ]
+    for t in range(grid.shape[0]):
+        row = grid[t]
+        if correction:
+            row = means[t] + correction.a * sigmas[t] + correction.b * (row - means[t])
+        sessions.append({"session": t + 1, "prices": [spot * math.exp(float(q)) for q in row]})
+    return {"levels": list(FAN_LEVELS), "sessions": sessions}
+
+
+def scenario_paths(spot: float, scenarios: Any, horizon: int) -> list[dict[str, object]]:
+    """Each scenario's expected price at every session: `spot * (1 + r) ** (t / h)`.
+
+    That is the mean the GBM in `simulate` is built to have — its drift is chosen
+    so the expected simple return over the horizon is the stated `r` — so the
+    curve ends on the price the scenario states and the readout table prints.
+    """
+    out: list[dict[str, object]] = []
+    for name in ("bullish", "base_case", "bearish"):
+        scenario = getattr(scenarios, name)
+        out.append(
+            {
+                "name": name,
+                "weight": scenario.probability_weight,
+                "prices": [
+                    spot * (1.0 + scenario.price_return) ** (t / horizon)
+                    for t in range(horizon + 1)
+                ],
+            }
+        )
+    return out
+
+
+def history(bars: Sequence[Any], *, sessions: int = HISTORY_SESSIONS) -> list[list[object]]:
+    """The closes the chart runs into the anchor, as `[date, close]` pairs.
+
+    From the window the run itself anchored on, so the last point is the price
+    the forecast opens from rather than a later fetch that could disagree.
+    """
+    return [[bar.date.isoformat(), bar.close] for bar in list(bars)[-sessions:]]
+
+
 def result_line(
     *,
     run_id: str,
@@ -257,6 +323,8 @@ def result_line(
     band: Sequence[dict[str, float]] = (),
     relation: str = "unchecked",
     price_date: date | None = None,
+    fan: dict[str, Any] | None = None,
+    closes: Sequence[Sequence[object]] = (),
 ) -> dict[str, object]:
     """The final line of the stream.
 
@@ -289,6 +357,9 @@ def result_line(
             for name in ("bullish", "base_case", "bearish")
         ],
         "band": list(band),
+        "fan": fan,
+        "scenario_paths": scenario_paths(forecast.spot_price, forecast.scenarios, horizon),
+        "history": [list(pair) for pair in closes],
         # Decided by the freeze, never asserted by the page (ADR 0036 section 2).
         "corpus_relation": relation,
         "marking": applies.marking,
@@ -362,18 +433,21 @@ def run_analysis(
         unevaluated=unevaluated,
     )
     band: list[dict[str, float]] = []
+    fan: dict[str, Any] | None = None
     if wiring.simulate:
-        sim = wiring.simulate(forecast, horizon)
+        # Only where the gate allows it. A fan widened by a correction that does
+        # not apply here would be the picture making a claim the words beside it
+        # refuse.
+        correction = wiring.correction if applies.applies else None
+        paths = wiring.simulate(forecast, horizon)
         band = band_prices(
             forecast.spot_price,
-            sim.quantiles(BAND_LEVELS),
-            mean=sim.mean,
-            sigma=sim.sigma,
-            # Only where the gate allows it. A band widened by a correction that
-            # does not apply here would be the picture making a claim the words
-            # beside it refuse.
-            correction=wiring.correction if applies.applies else None,
+            paths.terminal.quantiles(BAND_LEVELS),
+            mean=paths.terminal.mean,
+            sigma=paths.terminal.sigma,
+            correction=correction,
         )
+        fan = fan_prices(forecast.spot_price, paths, correction=correction)
     yield result_line(
         run_id=run_id,
         ticker=ticker,
@@ -385,4 +459,6 @@ def run_analysis(
         band=band,
         relation=relation,
         price_date=price_date,
+        fan=fan,
+        closes=history(window.bars),
     )
