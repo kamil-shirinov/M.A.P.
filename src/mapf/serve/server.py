@@ -82,6 +82,9 @@ class Config:
     # from what this machine holds. Neither can start a run or write anything.
     prices: Callable[[str], dict[str, object]] | None = None
     live_runs: Callable[[str], list[dict[str, object]]] | None = None
+    # The latest trade and whether the market is open (ADR 0039). A read like the
+    # other two: it fetches for this machine and writes nothing.
+    quote: Callable[[str], dict[str, object]] | None = None
 
 
 def host_allowed(header: str | None, *, port: int, allowed: frozenset[str]) -> bool:
@@ -208,13 +211,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok":true}')
             return
-        if path in ("/prices", "/runs"):
+        if path in ("/prices", "/runs", "/quote"):
             self._read(path, parse_qs(parts.query).get("ticker", [""])[0])
             return
         self._static(path)
 
     def _read(self, path: str, raw: str) -> None:
-        """One company's price window or live runs, as JSON.
+        """One company's price window, live runs or latest quote, as JSON.
 
         The ticker is checked with the same pattern `POST /analyse` uses, because it
         reaches a cache path and a provider query exactly as that one does.
@@ -223,7 +226,11 @@ class Handler(BaseHTTPRequestHandler):
         if not TICKER.match(ticker):
             self._refuse(400, "bad_ticker", f"{raw!r} is not a ticker this server will look up.")
             return
-        reader = self.config.prices if path == "/prices" else self.config.live_runs
+        reader = {
+            "/prices": self.config.prices,
+            "/runs": self.config.live_runs,
+            "/quote": self.config.quote,
+        }[path]
         if reader is None:
             self._refuse(404, "no_such_endpoint", "This server was started without that read.")
             return

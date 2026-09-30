@@ -231,8 +231,10 @@ ANALYSIS SERVER** at the top of its output.
 | Route | What it answers |
 |---|---|
 | `GET /health` | Whether a server is behind the page. Asked once per page. |
-| `GET /prices?ticker=` | The company's closes through this machine's price cache, with the day they were fetched; the unfinished session is dropped. For companies the export carries no series for. |
+| `GET /prices?ticker=` | The company's closes over exactly the last two years to New York's today, split-adjusted like the pinned snapshot, through this machine's price cache, with the window and the day they were fetched; the unfinished session is dropped. The company page draws them in place of the snapshot, with the snapshot beside them (ADR 0039). |
+| `GET /quote?ticker=` | The latest trade from Yahoo Finance, the time it traded, whether the market is open — New York's clock inside regular hours **and** a trade dated today — and when to ask again: about a minute while open, the next opening bell while shut. For the page only; no run reads it (ADR 0039). |
 | `GET /runs?ticker=` | The company's `edgar` and `news` runs from the journal, newest first, in the export's row shape. |
 | `POST /analyse` | The only request that makes anything exist. Newline-delimited JSON: `started`, `filing`, one `progress` per stage as the run's trace records it, then `result` — or `failed` with the reason. |
 
-All four check `Host` and `Origin` (ADR 0036 §3).
+All five check `Host` and `Origin` (ADR 0036 §3). The hosted copy has no server and so
+no quote and no two-year window: Yahoo's data is not this project's to republish.

@@ -168,6 +168,20 @@ class Bar(DomainModel):
         return self
 
 
+class Quote(DomainModel):
+    """The latest trade a provider reports for a ticker, and when it happened.
+
+    NOT A CLOSE, and never an input to a forecast: a run anchors on a settled
+    close (`mapf.core.sessions`). This exists for a page that shows the market as
+    it stands, and it carries its own time so the page can say how old it is.
+    """
+
+    ticker: str = Field(min_length=1)
+    price: float = Field(gt=0)
+    at: UtcDatetime
+    provider: str = Field(min_length=1)
+
+
 class PriceWindow(DomainModel):
     """A contiguous price series with its provenance attached.
 

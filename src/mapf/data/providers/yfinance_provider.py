@@ -14,12 +14,12 @@ which is exactly the contamination ADR 0003 exists to prevent.
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date
 
 import pandas as pd
 
 from mapf.core.errors import EmptyPriceWindowError, MarketDataUnavailableError
-from mapf.core.models import ADJUSTMENT_BASIS, PriceWindow
+from mapf.core.models import ADJUSTMENT_BASIS, PriceWindow, Quote
 from mapf.data.providers.frames import frame_to_window
 
 NAME = "yfinance"
@@ -71,4 +71,57 @@ class YFinanceProvider:
             adjustment=ADJUSTMENT_BASIS,
             start=start,
             end=end,
+        )
+
+
+def _default_minutes(ticker: str) -> pd.DataFrame:  # pragma: no cover - network path
+    import yfinance
+
+    # Five days of one-minute bars, not one: on a Monday before the open, or the
+    # day after a holiday, the last trade is days back, and "1d" can come back empty.
+    frame: pd.DataFrame = yfinance.Ticker(ticker).history(
+        period="5d",
+        interval="1m",
+        auto_adjust=False,
+        actions=False,
+        prepost=False,
+        raise_errors=True,
+    )
+    return frame
+
+
+class YFinanceQuotes:
+    """`QuoteSource` over Yahoo Finance: the last one-minute bar's close and its time.
+
+    A one-minute bar rather than a "regular market price" field because the bar
+    carries WHEN, and a price without its time cannot say how old it is. Regular
+    hours only: an after-hours print is not the market this page says is open or
+    closed. Yahoo's quotes can lag the exchange, and the page says so.
+    """
+
+    def __init__(self, minutes: Callable[[str], pd.DataFrame] | None = None) -> None:
+        self._minutes = minutes or _default_minutes
+
+    @property
+    def name(self) -> str:
+        return NAME
+
+    def latest(self, ticker: str) -> Quote:
+        try:
+            frame = self._minutes(ticker)
+        except Exception as err:  # noqa: BLE001 - a scraper raises anything
+            raise MarketDataUnavailableError(NAME, f"{type(err).__name__}: {err}") from err
+        closes = None if frame is None or frame.empty else frame["Close"].dropna()
+        if closes is None or closes.empty:
+            raise EmptyPriceWindowError(NAME, ticker)
+        stamp = pd.Timestamp(closes.index[-1])
+        if stamp.tzinfo is None:
+            # Yahoo stamps its bars in the exchange's zone; a bare stamp is read
+            # as that zone rather than as whatever this machine's clock is set to.
+            stamp = stamp.tz_localize("America/New_York")
+        return Quote(
+            ticker=ticker,
+            price=float(closes.iloc[-1]),
+            at=stamp.tz_convert(UTC).to_pydatetime(),
+            provider=NAME,
         )

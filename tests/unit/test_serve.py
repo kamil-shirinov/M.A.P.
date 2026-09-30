@@ -329,11 +329,22 @@ def _live_runs(ticker: str) -> list[dict[str, object]]:
     return [{"run_id": "r-1", "ticker": ticker, "anchor_date": "2026-09-29"}]
 
 
+def _quote(ticker: str) -> dict[str, object]:
+    return {"ticker": ticker, "price": 70.12, "market": "open", "next_check_s": 60}
+
+
 @pytest.fixture
 def reads(tmp_path: Path) -> Iterator[httpx.Client]:
     (tmp_path / "index.html").write_text("<!doctype html>", encoding="utf-8")
     server = build(
-        Config(root=tmp_path, port=READ_PORT, analyse=_lines, prices=_prices, live_runs=_live_runs)
+        Config(
+            root=tmp_path,
+            port=READ_PORT,
+            analyse=_lines,
+            prices=_prices,
+            live_runs=_live_runs,
+            quote=_quote,
+        )
     )
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -357,6 +368,12 @@ def test_a_company_page_can_read_its_live_runs(reads: httpx.Client) -> None:
     response = reads.get("/runs", params={"ticker": "KO"})
     assert response.status_code == 200
     assert response.json()[0]["run_id"] == "r-1"
+
+
+def test_a_company_page_can_read_its_latest_quote(reads: httpx.Client) -> None:
+    response = reads.get("/quote", params={"ticker": "ko"})
+    assert response.status_code == 200
+    assert response.json() == {"ticker": "KO", "price": 70.12, "market": "open", "next_check_s": 60}
 
 
 def test_a_read_refuses_a_string_that_is_not_a_ticker(reads: httpx.Client) -> None:

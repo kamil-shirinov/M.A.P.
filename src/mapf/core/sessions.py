@@ -19,13 +19,14 @@ bar on a day the market never opened costs nothing, because there was no bar.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime, time
-from typing import Protocol
+from datetime import date, datetime, time, timedelta
+from typing import Literal, Protocol
 from zoneinfo import ZoneInfo
 
 # The exchange's own clock. Fixed offsets would be wrong for seven months of the
 # year and, worse, wrong in a way that only shows in March and November.
 EXCHANGE_TZ = ZoneInfo("America/New_York")
+REGULAR_OPEN = time(9, 30)
 REGULAR_CLOSE = time(16, 0)
 # The bell is not the close. The official closing price comes out of the closing
 # auction and can post several minutes after 16:00, and a provider's bar for the
@@ -72,3 +73,55 @@ def settled[Bar: _Dated](bars: Sequence[Bar], *, now: datetime) -> tuple[Bar, ..
     if session_has_settled(now, session=bars[-1].date):
         return tuple(bars)
     return tuple(bars[:-1])
+
+
+MarketState = Literal["open", "closed"]
+
+# How soon a page asks again. Open: about once a minute, which is as fresh as a
+# possibly delayed quote can usefully be. Inside hours with no trade today: a
+# holiday, or a provider still catching up after the bell, so a few minutes.
+REFRESH_OPEN_S = 60
+REFRESH_UNSURE_S = 300
+
+
+def _in_hours(local: datetime) -> bool:
+    return local.weekday() < 5 and REGULAR_OPEN <= local.time() < REGULAR_CLOSE
+
+
+def market_state(now: datetime, *, last_trade: datetime | None) -> MarketState:
+    """Open, or closed, as of `now`.
+
+    Open needs TWO things: New York's clock inside regular hours on a weekday, and
+    a trade dated today. The clock alone would call a holiday open — this module
+    knows no holidays — and the trade alone would call a market open whose last
+    print was yesterday's close.
+    """
+    if now.tzinfo is None:
+        raise ValueError("market_state needs an aware datetime, not a local one")
+    local = now.astimezone(EXCHANGE_TZ)
+    traded_today = (
+        last_trade is not None and last_trade.astimezone(EXCHANGE_TZ).date() == local.date()
+    )
+    return "open" if _in_hours(local) and traded_today else "closed"
+
+
+def next_open(now: datetime) -> datetime:
+    """The next weekday 09:30 in New York strictly after `now`. A holiday is not
+    known here; a page that asks then finds no trade and waits a little longer."""
+    local = now.astimezone(EXCHANGE_TZ)
+    day = local.date()
+    while True:
+        candidate = datetime.combine(day, REGULAR_OPEN, tzinfo=EXCHANGE_TZ)
+        if candidate.weekday() < 5 and candidate > local:
+            return candidate
+        day += timedelta(days=1)
+
+
+def seconds_until_next_check(now: datetime, state: MarketState) -> int:
+    """When a page showing the market should ask again, in seconds."""
+    if state == "open":
+        return REFRESH_OPEN_S
+    local = now.astimezone(EXCHANGE_TZ)
+    if _in_hours(local):
+        return REFRESH_UNSURE_S
+    return max(REFRESH_OPEN_S, int((next_open(now) - local).total_seconds()))

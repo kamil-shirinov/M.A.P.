@@ -112,6 +112,19 @@
 }
 
 .cmp-line { fill: none; stroke: var(--ink-2); stroke-width: 1; }
+/* Closes newer than the pinned snapshot (ADR 0039): the same kind of close, but
+   not the one the record was scored against, so they sit on a faint region of
+   their own, brighter, after a rule labelled where it starts. Not dashed — a dash
+   over daily moves reads as a broken line — and not amber: these are settled
+   closes, only unpinned. */
+.cmp-line--after { stroke: var(--ink); }
+.cmp-snap-region { fill: var(--ink-2); fill-opacity: .06; }
+.cmp-snap-rule { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 2 3; }
+.cmp-snap-label {
+  fill: var(--ink-2); font-family: var(--font-mono); font-size: 10.5px;
+  paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round;
+}
+.cmp-series-note { margin: var(--sp-2) 0 0; font-size: var(--step--1); color: var(--ink-3); max-width: 90ch; }
 .cmp-anchor { stroke: var(--accent); stroke-width: 1; opacity: .5; }
 .cmp-anchor--drift { stroke: var(--down); opacity: .8; }
 /* An open window is a fact about the calendar: nothing is wrong, nothing is
@@ -131,6 +144,7 @@
 .cmp-swatch.cmp-anchor { border-color: var(--accent); }
 .cmp-swatch.cmp-anchor--drift { border-color: var(--down); }
 .cmp-swatch.cmp-anchor--open { border-color: var(--ink-3); border-top-style: dashed; }
+.cmp-swatch.cmp-line--after { border-color: var(--ink); }
 .cmp-swatch.cmp-dot--outcome { border: 1px solid var(--ink); height: .5rem; width: .5rem; border-radius: 50%; }
 
 /* ---- filings ----------------------------------------------------- */
@@ -355,3 +369,17 @@ a.cmp-score-row:hover .cmp-score-go { color: var(--accent); }
 .cmp-read[data-flip="true"] { transform: translateX(-100%); }
 .cmp-read-head { display: flex; gap: var(--sp-3); align-items: baseline; color: var(--ink-num); }
 .cmp-read-run { margin-top: var(--sp-1); color: var(--ink-3); }
+
+/* ---- the market now, at the top (local app only, ADR 0039) ----------- */
+.cmp-quote { margin: 0 0 var(--sp-5); }
+.cmp-quote:empty { display: none; }
+.cmp-quote-line {
+  margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-4);
+  font-family: var(--font-mono); font-size: var(--step-1); color: var(--ink-2);
+}
+.cmp-quote-line .fig { font-size: var(--step-2); color: var(--ink-num); }
+.cmp-quote-state { font-size: var(--step--1); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); }
+.cmp-quote-line[data-market="open"] .cmp-quote-state { color: var(--up); }
+.cmp-quote-source, .cmp-quote-none {
+  margin: var(--sp-2) 0 0; font-size: var(--step--1); color: var(--ink-3); max-width: 90ch;
+}

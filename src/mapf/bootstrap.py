@@ -22,7 +22,7 @@ import httpx
 from mapf.agents.analyst import AnalystAgent
 from mapf.agents.intake import IntakeAgent
 from mapf.agents.structuralist import StructuralistAgent
-from mapf.core.ports import DividendSource, LLMProvider, MarketDataProvider, ModelInfo
+from mapf.core.ports import DividendSource, LLMProvider, MarketDataProvider, ModelInfo, QuoteSource
 from mapf.data.cache import ParquetPriceCache, PriceSnapshot
 from mapf.data.earnings import EdgarEarningsCalendar
 from mapf.data.exhibits import EdgarExhibits
@@ -30,7 +30,7 @@ from mapf.data.filings import EdgarFilings
 from mapf.data.providers.chain import ProviderChain
 from mapf.data.providers.dividends import NullDividendSource, YFinanceDividendSource
 from mapf.data.providers.stooq import StooqProvider
-from mapf.data.providers.yfinance_provider import YFinanceProvider
+from mapf.data.providers.yfinance_provider import YFinanceProvider, YFinanceQuotes
 from mapf.data.symbols import SqliteSymbolIndex, Throttle
 from mapf.pipeline.run import TRACE_FILE, Agents
 from mapf.pipeline.trace import CountingTrace, JsonlTrace
@@ -76,6 +76,13 @@ def build_market_data(settings: Settings, *, vintage: date | None = None) -> Mar
     if vintage is None:
         return ParquetPriceCache(chain, settings.cache.price_dir)
     return ParquetPriceCache(chain, settings.cache.price_dir, today=lambda: vintage, frozen=True)
+
+
+def build_quotes() -> QuoteSource:
+    """The latest trade, for the local app's company page (ADR 0039). One source
+    and no chain: a page can say "no quote" honestly, and a second provider's
+    price beside the first's would be two answers to one question."""
+    return YFinanceQuotes()
 
 
 def build_price_snapshot(settings: Settings, vintage: date) -> PriceSnapshot:

@@ -31,6 +31,7 @@ from mapf.core.models import (
     DomainModel,
     EarningsFiling,
     PriceWindow,
+    Quote,
     Symbol,
     SymbolMatch,
     TrustedText,
@@ -176,6 +177,21 @@ class MarketDataProvider(Protocol):
         plausible-looking zero-length series (ADR 0003).
         """
         ...
+
+
+class QuoteSource(Protocol):
+    """The latest trade for a ticker, for a page showing the market now.
+
+    A separate port from `MarketDataProvider` because a quote is not a bar and must
+    not be mistaken for one: nothing that forecasts or scores takes this type.
+    """
+
+    @property
+    def name(self) -> str:
+        """Said beside the price, with the warning that it may be delayed."""
+        ...
+
+    def latest(self, ticker: str) -> Quote: ...
 
 
 class PriceSnapshotIndex(Protocol):

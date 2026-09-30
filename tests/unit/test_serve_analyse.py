@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -1204,6 +1204,97 @@ def test_the_price_read_refuses_with_the_providers_reason(
     config = _serve_with(monkeypatch, ui, build_market_data=lambda _s: empty)
     with pytest.raises(ReadRefusedError, match="no settled session"):
         config.prices("KO")
+
+
+def test_the_price_read_covers_exactly_two_years_to_new_yorks_today(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rolling daily on the market's calendar (ADR 0039): a close from before the
+    window's first day is not drawn, and the window says where it starts and ends."""
+    from datetime import UTC, datetime
+
+    from mapf.cli.commands.serve import years_before
+    from mapf.core.sessions import EXCHANGE_TZ
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    today = datetime.now(UTC).astimezone(EXCHANGE_TZ).date()
+    start = years_before(today, 2)
+    asked: list[tuple[date, date]] = []
+    market = _market([(start - timedelta(days=1), 9.0), (start, 10.0), (date(2026, 1, 5), 11.0)])
+    original = market.get_ohlcv
+
+    def spy(ticker: str, first: date, last: date) -> Any:
+        asked.append((first, last))
+        return original(ticker, first, last)
+
+    market.get_ohlcv = spy
+    config = _serve_with(monkeypatch, ui, build_market_data=lambda _s: market)
+    body = config.prices("KO")
+    from mapf.core.sessions import session_has_settled
+
+    closed = (
+        today
+        if session_has_settled(datetime.now(UTC), session=today)
+        else today - timedelta(days=1)
+    )
+    assert asked == [(start, closed)], "asked to the last session that could have closed"
+
+    assert body["window"] == {"start": start.isoformat(), "end": today.isoformat()}
+    assert [d for d, _ in body["bars"]][0] == start.isoformat(), "nothing before the window"
+    assert body["adjustment"] == "split_adjusted", "the snapshot's basis"
+
+
+def test_the_quote_read_says_the_price_its_time_and_whether_the_market_is_open(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+
+    from mapf.core.models import Quote
+    from mapf.core.sessions import market_state, seconds_until_next_check
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    traded = datetime.now(UTC).replace(microsecond=0)
+
+    class _Quotes:
+        name = "yfinance"
+
+        def latest(self, ticker: str) -> Quote:
+            return Quote(ticker=ticker, price=70.12, at=traded, provider="yfinance")
+
+    config = _serve_with(monkeypatch, ui, build_quotes=lambda: _Quotes())
+    body = config.quote("KO")
+    now = datetime.now(UTC)
+    assert body["price"] == 70.12
+    assert body["at"] == traded.isoformat()
+    assert body["provider"] == "yfinance"
+    assert body["market"] == market_state(now, last_trade=traded)
+    assert body["next_check_s"] in {
+        seconds_until_next_check(now, body["market"]),
+        seconds_until_next_check(now, body["market"]) - 1,
+    }
+    assert str(body["new_york"]).endswith(("-04:00", "-05:00")), "New York's clock, with its offset"
+
+
+def test_the_quote_read_refuses_with_the_providers_reason(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mapf.core.errors import EmptyPriceWindowError
+    from mapf.serve.server import ReadRefusedError
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+
+    class _Nothing:
+        name = "yfinance"
+
+        def latest(self, ticker: str) -> Any:
+            raise EmptyPriceWindowError("yfinance", ticker)
+
+    config = _serve_with(monkeypatch, ui, build_quotes=lambda: _Nothing())
+    with pytest.raises(ReadRefusedError, match="no quote for KO"):
+        config.quote("KO")
 
 
 def test_the_runs_read_lists_only_live_runs_from_the_journal_it_writes_to(

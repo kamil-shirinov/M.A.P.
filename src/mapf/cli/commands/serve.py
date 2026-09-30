@@ -32,6 +32,7 @@ from mapf.bootstrap import (
     build_llm_provider,
     build_market_data,
     build_price_snapshot,
+    build_quotes,
     build_run,
     build_symbol_index,
 )
@@ -40,7 +41,13 @@ from mapf.cli.commands.export import HISTORY_LOOKBACK_DAYS, replay_row
 from mapf.cli.commands.runs import _frozen_exhibits, as_dict
 from mapf.core.errors import MapError
 from mapf.core.hashing import new_run_id
-from mapf.core.sessions import settled
+from mapf.core.sessions import (
+    EXCHANGE_TZ,
+    market_state,
+    seconds_until_next_check,
+    session_has_settled,
+    settled,
+)
 from mapf.data.liquidity import MarketLiquidity
 from mapf.eval.calibration import CalibrationError, load_correction
 from mapf.eval.journal import SOURCES, read_journal
@@ -126,6 +133,18 @@ def _trace_watcher(
     while not stop.is_set():
         _drain(path, emit, seen)
         stop.wait(0.5)
+
+
+# The company page's price window, in years to today (ADR 0039).
+PAGE_YEARS = 2
+
+
+def years_before(day: date, years: int) -> date:
+    """The same calendar date `years` earlier; 29 February falls back to the 28th."""
+    try:
+        return day.replace(year=day.year - years)
+    except ValueError:
+        return day.replace(year=day.year - years, day=28)
 
 
 @app.command()
@@ -283,25 +302,34 @@ def serve(
             return str(run_id), outcome.forecast, outcome.window  # type: ignore[attr-defined]
 
         market = build_market_data(settings)
+        quotes = build_quotes()
         screen = MarketLiquidity(market)
         symbols = build_symbol_index(settings)
         journal_dir = runs_dir if runs_dir is not None else settings.paths.runs_dir
         exhibits = _frozen_exhibits(frozen)
 
         def prices(ticker: str) -> dict[str, object]:
-            """A company page's price history, for a company the export has none for.
+            """A company page's closes over exactly the last two years to today.
 
-            Through the same cache every run reads, keyed on today's UTC date, so the
-            vintage the page prints is the one the cache stored it under. The
-            unfinished session is dropped exactly as a run drops it: a bar still
-            trading is not a close (Findings #64).
+            Today is New York's, because that is the market's calendar: at 20:00
+            there, it is still that day, whatever the UTC date. The window rolls
+            daily — 30 Sep 2024 to 30 Sep 2026 today, 1 Oct 2024 to 1 Oct 2026
+            tomorrow. Split-adjusted, like the pinned snapshot, so a recorded run's
+            marks land on this line (ADR 0039). Through the same cache every run
+            reads; the unfinished session is dropped exactly as a run drops it: a bar
+            still trading is not a close (Findings #64).
             """
             now = datetime.now(UTC)
-            today = now.date()
+            today = now.astimezone(EXCHANGE_TZ).date()
+            start = years_before(today, PAGE_YEARS)
+            # Asked up to the last session that could have closed. The cache keeps
+            # a window for the whole UTC day, so one fetched before the bell would
+            # otherwise be served all evening without the day's close; asking for
+            # yesterday before 16:30 and today after it makes those two windows,
+            # and the second is fetched once the close exists.
+            closed = today if session_has_settled(now, session=today) else today - timedelta(days=1)
             try:
-                window = market.get_ohlcv(
-                    ticker, today - timedelta(days=settings.data.history_days), today
-                )
+                window = market.get_ohlcv(ticker, start, closed)
             except MapError as error:
                 raise ReadRefusedError(f"no price history for {ticker}: {error}") from error
             bars = settled(window.bars, now=now)
@@ -311,8 +339,33 @@ def serve(
                 "ticker": ticker,
                 "provider": window.provider,
                 "adjustment": window.adjustment,
-                "fetched_on": today.isoformat(),
-                "bars": [[bar.date.isoformat(), bar.close] for bar in bars],
+                "fetched_on": now.date().isoformat(),
+                "window": {"start": start.isoformat(), "end": today.isoformat()},
+                "bars": [[bar.date.isoformat(), bar.close] for bar in bars if bar.date >= start],
+            }
+
+        def quote(ticker: str) -> dict[str, object]:
+            """The latest trade, when it happened, and whether the market is open.
+
+            For the page only (ADR 0039): nothing here reaches a run or a record.
+            The page is told when to ask again — about a minute while the market is
+            open, the next opening bell while it is shut — so it never has to know
+            New York's hours itself.
+            """
+            now = datetime.now(UTC)
+            try:
+                latest = quotes.latest(ticker)
+            except MapError as error:
+                raise ReadRefusedError(f"no quote for {ticker}: {error}") from error
+            state = market_state(now, last_trade=latest.at)
+            return {
+                "ticker": ticker,
+                "price": latest.price,
+                "at": latest.at.isoformat(),
+                "provider": latest.provider,
+                "market": state,
+                "new_york": now.astimezone(EXCHANGE_TZ).isoformat(timespec="minutes"),
+                "next_check_s": seconds_until_next_check(now, state),
             }
 
         def live_runs(ticker: str) -> list[dict[str, object]]:
@@ -384,7 +437,14 @@ def serve(
         )
 
         server = build(
-            Config(root=ui_dir, port=port, analyse=answer, prices=prices, live_runs=live_runs)
+            Config(
+                root=ui_dir,
+                port=port,
+                analyse=answer,
+                prices=prices,
+                live_runs=live_runs,
+                quote=quote,
+            )
         )
         # The door, not a company: an analysis starts from the page of the company it
         # is about, and search is how a reader gets there.

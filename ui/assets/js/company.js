@@ -25,7 +25,8 @@ import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { mountGround } from "./ui/ground.js";
 import { liveRows, renderLive } from "./ui/company-live.js";
 import { noServerNotes } from "./ui/analyse-offer.js";
-import { fetchPrices, serverPresent } from "./data/server.js";
+import { fetchPrices, fetchQuote, serverPresent } from "./data/server.js";
+import { mountQuote } from "./ui/company-quote.js";
 import { renderPageWhy } from "./ui/page-why.js";
 import { COMPANY_WHY, LIVE_WHY } from "./ui/company-why.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
@@ -131,17 +132,42 @@ async function paint() {
   enforce();
 }
 
+/** The market now, at the top, where a local server can ask for it (ADR 0039).
+    The hosted copy has no server and no quote, and the slot is removed rather
+    than left empty. */
+async function paintQuote(ticker) {
+  if (await serverPresent()) mountQuote($("quote"), { ticker, fetchQuote });
+  else $("quote")?.remove();
+}
+
 /** A corpus company: the record, then the live section. */
 async function paintRecord(company, record, live) {
-  const [series, scoring] = await Promise.all([
+  const [snapshot, scoring, local] = await Promise.all([
     source.getPriceSeries(company.ticker),
     source.listScoringRecords(),
+    serverPresent(),
   ]);
   renderTitle(company);
+  await paintQuote(company.ticker);
   const identity = (rows) =>
     renderIdentity($("identity"), { company, runs: record, liveRuns: rows.length });
   identity(live);
-  renderSeries($("series"), { series, runs: record });
+  /* In the local app the line is the last two years to today, fetched by this
+     machine, with the snapshot beside it to say where the newer part begins
+     (ADR 0039). If the fetch fails, the snapshot, and the reason. */
+  const served = local ? await fetchPrices(company.ticker) : null;
+  if (served && !source.isAbsent(served)) {
+    renderSeries($("series"), { series: served, runs: record, snapshot });
+  } else {
+    renderSeries($("series"), { series: snapshot, runs: record });
+    if (served) {
+      const said = document.createElement("p");
+      said.className = "cmp-series-note";
+      said.textContent = `The two years to today could not be fetched: ${served.why}. This is the pinned snapshot.`;
+      said.dataset.chrome = "why the local window is missing";
+      $("series").append(said);
+    }
+  }
   renderFilings($("filings"), { company, runs: record });
   paintRuns(company, record);
   renderScoring($("scoring"), { scoring, company });
@@ -172,6 +198,7 @@ function paintRuns(company, record) {
     than left empty, because there is no record to be empty. */
 async function paintFiler(filer, record, live) {
   renderFilerTitle(filer);
+  await paintQuote(filer.ticker);
   const earlier = source.RECORD_SOURCES.reduce((n, name) => n + record.bySource[name].length, 0);
   const identity = (rows) =>
     renderFilerIdentity($("identity"), { filer, liveRuns: rows.length, earlierRuns: earlier });

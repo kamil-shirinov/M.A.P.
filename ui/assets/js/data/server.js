@@ -61,10 +61,39 @@ export async function fetchPrices(ticker) {
     provider: body.provider,
     adjustment: body.adjustment,
     fetched_on: body.fetched_on,
+    // The two years to New York's today that the server fetched (ADR 0039).
+    window: body.window ?? null,
     served: true,
     last_close: figure(last[1], MEASURED, "price"),
     last_close_date: last[0],
     provenance: MEASURED,
+  };
+}
+
+/** The latest trade, when it happened, and whether the market is open, from a
+    running `map serve` (ADR 0039). An absence when there is no server or it could
+    not answer: this is the market now, and a copy with no server has no such thing
+    to say. `next_check_s` is the server's, so the page never needs New York's hours. */
+export async function fetchQuote(ticker) {
+  if (!(await serverPresent())) {
+    return absent(NOT_COMPUTED, "no server is behind these files to ask for a quote");
+  }
+  let response;
+  try {
+    response = await fetch(`quote?ticker=${encodeURIComponent(ticker)}`);
+  } catch {
+    return absent(NOT_COMPUTED, "the server did not answer the quote request");
+  }
+  if (!response.ok) return absent(NOT_COMPUTED, await refusal(response));
+  const body = await response.json();
+  return {
+    ticker: body.ticker,
+    price: figure(body.price, MEASURED, "price"),
+    at: body.at,
+    provider: body.provider,
+    market: body.market,
+    new_york: body.new_york,
+    next_check_s: body.next_check_s,
   };
 }
 
