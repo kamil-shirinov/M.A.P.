@@ -686,6 +686,32 @@ describe("the fan, session by session", () => {
     assert.match(text, /do not know market holidays/);
   });
 
+  it("breaks the axis at the anchor and captions the two scales on the chart itself", async () => {
+    /* The legend said the forecast side is drawn wider; a reader looks at the fan
+       first. So the break is drawn where it happens, not only described below. */
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const svg = renderFan(new Node("div"), fanned());
+    const brk = descendants(svg).find((n) => n._cls?.has("anl-break"));
+    assert.ok(brk, "a break is drawn");
+    const marks = descendants(brk).filter((n) => n._cls?.has("anl-break-mark"));
+    assert.equal(marks.length, 2, "two slanted strokes");
+    const anchor = descendants(svg).find((n) => n._cls?.has("anl-anchor"));
+    const x = Number(anchor.attrs.x1);
+    for (const m of marks) assert.ok(Math.abs((Number(m.attrs.x1) + Number(m.attrs.x2)) / 2 - x) <= 3, "at the anchor");
+    const [left, right] = descendants(brk).filter((n) => n._cls?.has("anl-baseline"));
+    assert.ok(Number(left.attrs.x2) < x && Number(right.attrs.x1) > x, "the baseline stops short either side");
+    const captions = descendants(brk).filter((n) => n._cls?.has("anl-scale-caption")).map((n) => n.textContent);
+    assert.deepEqual(captions, ["← last 3 closes", "5 sessions ahead, drawn wider →"]);
+  });
+
+  it("draws no break when there is only one scale", async () => {
+    installDom();
+    const { renderFan } = await load("ui/analyse-fan.js");
+    const svg = renderFan(new Node("div"), fanned({ history: null }));
+    assert.ok(!descendants(svg).some((n) => n._cls?.has("anl-break")));
+  });
+
   it("says a corrected fan was fitted at the horizon only", async () => {
     installDom();
     const { renderFan } = await load("ui/analyse-fan.js");

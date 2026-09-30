@@ -34,7 +34,8 @@ import { prefersReducedMotion } from "../lib/motion.js";
 const SVG = "http://www.w3.org/2000/svg";
 const W = 1080;
 const H = 420;
-const PAD = { top: 24, right: 150, bottom: 40, left: 64 };
+// The top holds the two scale captions, one either side of the anchor.
+const PAD = { top: 40, right: 150, bottom: 40, left: 64 };
 // Of the plot's width, the share the history side gets when there is history.
 const HISTORY_SHARE = 0.55;
 const OPEN_MS = 1100;
@@ -293,6 +294,7 @@ export function renderFan(host, result, { opening = true } = {}) {
 
   // The anchor: the one measured price the fan opens from.
   svg.append(svgNode("line", { class: "anl-anchor", x1: today, x2: today, y1: PAD.top, y2: H - PAD.bottom }));
+  if (history.length > 1) svg.append(scaleBreak({ x0, x1, today, h, closes: history.length }));
   svg.append(svgNode("circle", { class: "anl-spot", cx: today, cy: y(result.spot), r: 3.5 }));
   const anchorLabel = svgNode("text", { class: "anl-xtick anl-xtick--anchor", x: today, y: base });
   anchorLabel.textContent = result.anchor ? spoken(result.anchor) : "anchor";
@@ -328,6 +330,46 @@ export function renderFan(host, result, { opening = true } = {}) {
 
   if (opening) open(reveal, labels, { from: today, width: W - today + 1 });
   return svg;
+}
+
+/** The change of scale, drawn where it happens.
+
+    The axis is broken at the anchor — the baseline stops short on each side and
+    two slanted strokes cross the gap, the mark a reader already knows means "the
+    scale is not continuous here" — and each side is captioned with what it shows.
+    Said on the chart itself, because a reader looks at the fan before the legend
+    and would otherwise read a session on the right as the same width as one on
+    the left. */
+function scaleBreak({ x0, x1, today, h, closes }) {
+  const group = svgNode("g", { class: "anl-break" });
+  const base = H - PAD.bottom;
+  const gap = 7;
+  group.append(
+    svgNode("line", { class: "anl-baseline", x1: x0, x2: today - gap, y1: base, y2: base }),
+    svgNode("line", { class: "anl-baseline", x1: today + gap, x2: x1, y1: base, y2: base }),
+  );
+  for (const dx of [-3, 3]) {
+    group.append(svgNode("line", {
+      class: "anl-break-mark",
+      x1: today + dx - 3, x2: today + dx + 3, y1: base + 6, y2: base - 6,
+    }));
+  }
+  const caption = (text, x, anchor, why) => {
+    const node = svgNode("text", { class: "anl-scale-caption", x, y: PAD.top - 14, "text-anchor": anchor });
+    node.textContent = text;
+    node.dataset.chrome = why;
+    return node;
+  };
+  group.append(
+    caption(`← last ${closes} closes`, today - 10, "end", "how many closes the history side shows"),
+    caption(
+      `${h} ${h === 1 ? "session" : "sessions"} ahead, drawn wider →`,
+      today + 10,
+      "start",
+      "how many sessions the forecast side shows, and that its scale is wider",
+    ),
+  );
+  return group;
 }
 
 /** Names and weights at the end of each curve, pushed apart where they would
