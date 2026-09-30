@@ -52,9 +52,8 @@ export function mountMastheadNav(host, { current }) {
     // and its controls, and "scores" is the word the export uses for the records
     // themselves — several of which the screen deliberately does not show.
     { key: "results", label: "results", href: "results.html" },
-    // The only screen that makes something rather than reading it. Last, because
-    // it is the one that costs six minutes and a permanent journal entry.
-    { key: "analyse", label: "live analysis", href: "analyse.html" },
+    // No "live analysis" item. A run is started from the page of the company it
+    // is about (ADR 0036, amendment of 2026-09-30), so there is no screen to name.
   ];
   /* Every item is a link, including the current one. The current screen is
      marked with `aria-current`, which the stylesheet draws as a rule rather than
@@ -83,7 +82,7 @@ export function mountMastheadNav(host, { current }) {
     `companies` from universe.json, `runsBySource` as the boundary reads the
     manifest's four counts (or its absence), and `finding` true only when the
     export carries the development scoring record the finding is stated from. */
-export function mountDoor(host, { onQuery, companies, runsBySource, finding }) {
+export function mountDoor(host, { onQuery, companies, runsBySource, finding, replay = null }) {
   const block = host.querySelector(".door-block");
 
   const box = el("div", "door-box");
@@ -167,6 +166,25 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding }) {
   }
 
   host.append(strip);
+
+  /* The path to the recorded run. On a copy with no models this is the only way
+     to see what an analysis produces, and it used to have a nav item of its own;
+     now it lives on the company's page, so the door names it once. Only when the
+     export carries one — the link names the run the manifest pins, never a
+     hardcoded company. */
+  if (replay && !isAbsent(replay)) {
+    const line = el("div", "door-replay");
+    const a = el("a", "door-replay-link");
+    a.href = `company.html?ticker=${encodeURIComponent(replay.ticker)}#live`;
+    a.append(
+      chromeText("A recorded live run: ", "what the link leads to"),
+      chromeText(`${replay.ticker}, ${replay.anchor_date}`, "the recorded run's company and date"),
+      chromeText(" →", "a link arrow"),
+    );
+    line.append(a);
+    host.append(line);
+  }
+
   input.addEventListener("input", () => onQuery(input.value));
   return { input };
 }

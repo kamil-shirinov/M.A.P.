@@ -479,13 +479,12 @@ describe("the page, its nav and its files", () => {
     const nav = mountMastheadNav(host, { current: "results" });
     assert.deepEqual(
       nav.children.map((c) => c.textContent),
-      ["find a company", "runs", "results", "live analysis"],
+      ["find a company", "runs", "results"],
     );
     assert.equal(nav.children.filter((c) => c.attrs["aria-current"]).length, 1);
-    // Results is third now that live analysis sits last: it is the only screen
-    // that makes something rather than reading it, so it goes at the end.
     assert.equal(nav.children[2].attrs["aria-current"], "page");
-    for (const page of ["index.html", "company.html", "runs.html", "results.html", "analyse.html"]) {
+    // analyse.html is a redirect now and has no nav to host.
+    for (const page of ["index.html", "company.html", "runs.html", "results.html"]) {
       assert.match(file(page), /<div id="masthead-nav"><\/div>/, `${page} has a nav host`);
     }
   });

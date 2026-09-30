@@ -153,3 +153,44 @@ offered and are always amber under rule 1, since nothing was fitted at either. W
 fitted correction *should* apply to live five-session runs at all is the question rule 1
 answers conservatively; if a later phase measures live runs against outcomes, that evidence
 replaces the rule rather than adjusting it.
+
+## Amendment, 2026-09-30 — one page per company
+
+**Context.** The separate live-analysis screen put a run on a page about nothing in
+particular. A reader went from a company's record to another screen to ask about the same
+company, and back again to compare; the result had no company around it. And every filer
+that publishes earnings but is not one of the 120 had no page at all — search said "no
+page" beside a row it could otherwise offer a run for.
+
+**Decision.** The live-analysis screen is retired. A run is started from the page of the
+company it is about, and its progress and result appear there.
+
+- **Every company that files earnings has a page.** The 120 corpus companies keep their
+  record. Any other filer whose recent filings carry an Item 2.02 gets a page with what the
+  export knows about it — name, exchange, CIK, the pre-screen — and no record facts, because
+  it has no record. Its price history comes through the local server, labelled with the day
+  it was fetched; on a copy with no server that is a stated absence.
+- **The separation rule is kept, as layout.** Every page ends with "Live runs, outside the
+  record": the company's live runs (`edgar` and `news` sources), newest first, then the
+  horizon control and Analyse. Nothing in that section is in the record above it: live runs
+  are not rows in the record's table, not counted in its facts, not drawn on its chart. They
+  are counted in a fact of their own that points at the section. Runs whose manifest
+  predates the source field stay where they were, in the record's table, because they make
+  no claim either way.
+- **§4 is unchanged in substance.** The one stated absence on a copy with no server is now in
+  the company page's live section. Search no longer offers a run, so it no longer states an
+  absence. If the export's recorded run is this company's, it is shown under the absence,
+  labelled as recorded; the door names it once, so a copy with no models keeps a path to it.
+- **The server gains two reads.** `GET /prices` and `GET /runs`, both behind the same Host and
+  Origin checks as everything else. Neither can start a run or write anything; `POST
+  /analyse` is still the only request that makes anything exist.
+- **Old links keep working.** `analyse.html` is a redirect: a ticker and a horizon go to that
+  company's live section, where the horizon preselects the control and nothing starts. With
+  no ticker it goes to the recorded run's company, read from the export's manifest.
+
+**Consequences.** One page now holds both the record and live runs, which is exactly the
+proximity this ADR's option B was rejected for at the data layer. It is accepted here
+because the two stay apart in every structure a number can travel through — separate
+arrays from the export, separate sections, separate counts — and a test pins each of those.
+If a later change needs a live run and a record figure in one table, that change needs a new
+decision, not an edit to this one.

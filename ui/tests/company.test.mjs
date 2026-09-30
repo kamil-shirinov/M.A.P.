@@ -213,15 +213,17 @@ describe("company page, against the real export", () => {
     assert.match(why, /corpus\.json, which this page already opens/);
   });
 
-  itNeedsExport("names the page a record rather than a projection", async () => {
+  itNeedsExport("names the record and the live runs as two halves", async () => {
     const { roots, why } = await renderCompany("ACHC");
-    /* This moved from a paragraph under the fact strip into the disclosure, and
-       the strip gained two facts that make the same point without a sentence:
-       CLOSED n of n, and LIVE FORECAST none in export. */
-    assert.match(roots.identity.textContent, /Live forecast/i);
-    assert.match(roots.identity.textContent, /none in export/);
-    assert.match(why, /record of forecasts already made/);
-    assert.match(why, /not a current projection/);
+    /* The strip said "Live forecast: none in export" until live runs moved onto
+       this page. Now it counts them — in their own fact, pointing at their own
+       section — and the notes say the page has two halves that do not mix. */
+    assert.match(roots.identity.textContent, /Live runs/);
+    assert.match(roots.identity.textContent, /below, outside the record/);
+    assert.doesNotMatch(roots.identity.textContent, /none in export/);
+    assert.match(why, /Above the last section is the record/);
+    assert.match(why, /forecasts already made/);
+    assert.match(why, /listed, counted and drawn there and nowhere else/);
   });
 
   itNeedsExport("draws a y-axis, and marks every level as derived", async () => {
@@ -451,7 +453,7 @@ describe("the four screen defects", () => {
     assert.equal(panel, 12);
     assert.equal(all, 16);
     assert.match(roots.identity.textContent, /Panel runs/);
-    assert.match(roots.identity.textContent, /Runs on this page/);
+    assert.match(roots.identity.textContent, /Runs in the record/);
   });
 
   itNeedsExport("colours neither half of the split", () => {

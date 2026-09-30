@@ -275,6 +275,9 @@
   color: var(--ink-2); letter-spacing: .04em; margin-right: var(--sp-4);
 }
 .page-title-split { margin-left: var(--sp-4); vertical-align: middle; }
+/* No record, so no split. Neutral: being outside the corpus is where a company
+   stands, not a warning about it. */
+.page-title-split[data-split="outside"] { color: var(--ink-3); border-color: var(--rule-2); }
 
 .cmp-facts dt { font-family: var(--font-mono); font-size: var(--step--1);
   text-transform: uppercase; letter-spacing: .32em; color: var(--ink-3); }

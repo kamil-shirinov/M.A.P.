@@ -822,7 +822,8 @@ def test_the_browser_is_opened_only_when_asked(
 
     result = CliRunner().invoke(app, ["serve", "--ui-dir", str(ui)])
     assert result.exit_code == 0
-    assert opened == ["http://127.0.0.1:8765/analyse.html"]
+    # The door: a run starts from a company's page, and search is the way there.
+    assert opened == ["http://127.0.0.1:8765/index.html"]
     assert "ctrl-c to stop" in result.output
 
 
@@ -1113,3 +1114,114 @@ def test_a_redirected_runs_dir_is_where_the_run_lands(
 
     assert seen == [redirected], "the run was written to the throwaway directory"
     assert not any(real.iterdir()), "and nothing reached the real one"
+
+
+# --- the two reads, as the command wires them ----------------------------------
+
+
+def _market(bars: list[tuple[date, float]], *, fails: bool = False) -> Any:
+    class _Bar:
+        def __init__(self, day: date, close: float) -> None:
+            self.date = day
+            self.close = close
+
+    class _Window:
+        provider = "yfinance"
+        adjustment = "split_adjusted"
+
+    window = _Window()
+    window.bars = tuple(_Bar(d, c) for d, c in bars)  # type: ignore[attr-defined]
+
+    class _Market:
+        def get_ohlcv(self, _t: str, _start: date, _end: date) -> Any:
+            if fails:
+                from mapf.core.errors import MapError
+
+                raise MapError("the provider has no such symbol")
+            return window
+
+        def median_dollar_volume(self, *_: Any) -> float:
+            return 9.0e8
+
+    return _Market()
+
+
+def test_the_price_read_drops_an_unfinished_session_and_names_its_vintage(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A company page outside the corpus draws what this returns, so it follows the
+    run's own rule: a bar still trading is not a close (Findings #64)."""
+    from datetime import UTC, datetime
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    today = datetime.now(UTC).date()
+    old = date(2026, 1, 5)
+    market = _market([(old, 10.0), (today, 11.0)])
+    config = _serve_with(monkeypatch, ui, build_market_data=lambda _s: market)
+    body = config.prices("KO")
+    assert body["fetched_on"] == today.isoformat()
+    assert body["provider"] == "yfinance"
+    closes = dict(body["bars"])
+    assert closes[old.isoformat()] == 10.0
+    # Today's bar survives only once its session has settled.
+    from mapf.core.sessions import session_has_settled
+
+    settled_now = session_has_settled(datetime.now(UTC), session=today)
+    assert (today.isoformat() in closes) is settled_now
+
+
+def test_the_price_read_refuses_with_the_providers_reason(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from mapf.serve.server import ReadRefusedError
+
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    failing = _market([], fails=True)
+    config = _serve_with(monkeypatch, ui, build_market_data=lambda _s: failing)
+    with pytest.raises(ReadRefusedError, match="no price history for KO"):
+        config.prices("KO")
+    empty = _market([])
+    config = _serve_with(monkeypatch, ui, build_market_data=lambda _s: empty)
+    with pytest.raises(ReadRefusedError, match="no settled session"):
+        config.prices("KO")
+
+
+def test_the_runs_read_lists_only_live_runs_from_the_journal_it_writes_to(
+    tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Read from `--runs-dir` when given, so a screenshot server lists what it
+    wrote and never the real journal."""
+    ui = tmp_path / "ui"
+    ui.mkdir()
+    seen: list[Any] = []
+
+    class _Entry:
+        def __init__(self, ticker: str, day: str) -> None:
+            self.ticker = ticker
+            self.day = day
+
+    class _Journal:
+        def of(self, source: str) -> tuple[Any, ...]:
+            seen.append(source)
+            if source == "edgar":
+                return (_Entry("KO", "2026-09-01"), _Entry("AAPL", "2026-09-02"))
+            return (_Entry("KO", "2026-09-28"),)
+
+    def _read(runs_dir: Any, **kw: Any) -> Any:
+        seen.append(runs_dir)
+        return _Journal()
+
+    elsewhere = tmp_path / "elsewhere"
+    config = _serve_with(
+        monkeypatch,
+        ui,
+        ["--runs-dir", str(elsewhere)],
+        read_journal=_read,
+        as_dict=lambda e: {"ticker": e.ticker, "anchor_date": e.day},
+    )
+    rows = config.live_runs("KO")
+    assert seen[0] == elsewhere
+    assert seen[1:] == ["edgar", "news"], "the two live populations and nothing else"
+    assert [r["anchor_date"] for r in rows] == ["2026-09-28", "2026-09-01"], "newest first"

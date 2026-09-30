@@ -171,9 +171,18 @@ body > .masthead,
 .anl-absent pre { margin: 0 0 var(--sp-3); font: var(--mono-md); color: var(--ink-1); }
 .anl-absent-foot { color: var(--ink-3); }
 
-/* ---- the company page's live section ---- */
+/* ---- the company page's live section ----
+   Set apart from the record above by the section rule and its own heading, never
+   by colour: the separation is a fact about what the rows are, and it has to read
+   in greyscale (ADR 0036, amendment of 2026-09-30). */
 .cmp-live { display: grid; gap: var(--sp-4); }
+.cmp-live-rule { margin: 0; max-width: 72ch; font: var(--sans-sm); color: var(--ink-2); }
+.cmp-live-none { margin: 0; font: var(--sans-sm); color: var(--ink-3); font-style: italic; }
 .cmp-live-row { display: flex; align-items: end; gap: var(--sp-5); flex-wrap: wrap; }
+.cmp-live-result:empty, .cmp-live-progress:empty { display: none; }
+.cmp-live-result { display: grid; gap: var(--sp-4); }
+.cmp-live-link { color: inherit; text-decoration: none; }
+.cmp-live-link:hover .fig { color: var(--accent); }
 
 /* The band: what the forecast actually claims. Two nested ribbons, the inner one
    darker, so the width reads before any single line does. Drawn in the same

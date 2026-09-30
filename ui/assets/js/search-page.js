@@ -26,7 +26,6 @@ import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { mountPageRosette } from "./ui/rosette.js";
 import { createModeController, mountDoor, mountMastheadNav } from "./ui/front-door.js";
-import { noServerNotes, renderNoServer, serverPresent } from "./ui/analyse-offer.js";
 import { renderNoExport } from "./ui/no-export.js";
 
 const $ = (id) => document.getElementById(id);
@@ -91,8 +90,6 @@ const state = {
   // The export's counted funnel, read once at boot. Null on an export written
   // before `map export` counted one.
   funnel: null,
-  // Whether a server is behind these files. Probed once at boot, never per row.
-  canAnalyse: false,
   matched: 0,
   screened: 0,
   groups: {},
@@ -210,7 +207,6 @@ function paint() {
     query: state.query,
     groups: state.groups,
     matched: state.matched,
-    canAnalyse: state.canAnalyse,
   });
   renderFunnel($("funnel"), { symbolCount: state.symbolCount, funnel: state.funnel });
   applyPageProvenance();
@@ -254,26 +250,11 @@ async function boot() {
   renderMastheadVintage($("masthead-vintage"), exportState.manifest);
   renderFooter($("footer"), exportState.manifest);
   state.funnel = exportState.manifest?.funnel ?? null;
-  state.canAnalyse = await serverPresent();
-  /* ONE absence, on the page, rather than a disabled control on each readable
-     row (ADR 0036 §4). It sits with the disclosure because that is where the
-     screen already explains what it will not do. */
-  if (!state.canAnalyse) {
-    const absence = document.createElement("section");
-    absence.id = "no-server";
-    renderNoServer(absence, {
-      where: "The companies above that publish earnings results have no page here.",
-    });
-    $("why").before(absence);
-  }
-  renderPageWhy($("why"), {
-    groups: [
-      ...whyGroups(state.funnel),
-      // Only when it applies. A note explaining an absent button on a screen that
-      // has one is noise.
-      ...(state.canAnalyse ? [] : [noServerNotes()]),
-    ],
-  });
+  /* No absence here any more. This screen used to offer Analyse on readable rows
+     and so stated, once, when no server was there to take it (ADR 0036 §4). A run
+     is now started from the company's own page, so that is where the absence is
+     stated; this screen offers nothing that needs a server. */
+  renderPageWhy($("why"), { groups: whyGroups(state.funnel) });
 
   mountMastheadNav($("masthead-nav"), { current: "search" });
   box = mountBox($("box"), { onQuery });
@@ -282,6 +263,7 @@ async function boot() {
     companies: state.corpus.length,
     runsBySource: source.runCountsBySource(exportState.manifest),
     finding: source.devScoringRecordExported(exportState.manifest),
+    replay: await source.getReplay(),
   });
   mode = createModeController({ doorInput: door.input, pageInput: box.input });
 

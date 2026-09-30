@@ -43,11 +43,14 @@ parties see what is asked of them.
 
 ### Live analysis
 
-`uv run map serve` adds the one thing that is not a read of the record: type a ticker,
-and it fetches that company's latest earnings 8-K, runs the three agents over it, and
-draws the forecast fanning out from the latest close. A run usually takes six to twelve
-minutes and is a permanent entry in the run journal. **It only runs on a machine with the
-models on it**; the published site is static files and says so.
+`uv run map serve` adds the one thing that is not a read of the record. Every company that
+files earnings has a page, and at its foot, under **Live runs, outside the record**, Analyse
+fetches that company's latest earnings 8-K, runs the three agents over it, and draws the
+forecast fanning out from the latest settled close, on the same page. A run usually takes
+six to twelve minutes and is a permanent entry in the run journal. Live runs stay in that
+section: never in the record's table, its counts or its chart. **It only runs on a machine
+with the models on it**; the published site is static files, says so, and shows one
+recorded run instead.
 
 Most live fans are drawn **raw and marked uncalibrated**. The correction below was tested
 on a panel — five sessions, anchored within one trading day of a filing, companies the
@@ -234,12 +237,12 @@ corpus, and five named absences. See [docs/publishing.md](docs/publishing.md).
 **Make one yourself.** With the three models loaded on your own machine:
 
 ```bash
-uv run map serve            # the app and one endpoint, on 127.0.0.1:8765
+uv run map serve            # the app and its endpoints, on 127.0.0.1:8765
 ```
 
-It opens the live-analysis screen. Type a ticker and watch the run happen — the stages
-come off the run's own trace, not a timer. This is the one command here that changes the
-record rather than reading it.
+It opens search. Find a company, press Analyse at the foot of its page, and watch the run
+happen there — the stages come off the run's own trace, not a timer. This is the one
+command here that writes to the run journal rather than reading it.
 
 ---
 

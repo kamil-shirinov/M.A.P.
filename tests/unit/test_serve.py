@@ -309,3 +309,86 @@ def test_a_get_with_a_rebound_host_never_reaches_the_files(
     response = client.get("/", headers={"Host": "evil.example"})
     assert response.status_code == 421
     assert "<title>app</title>" not in response.text
+
+
+# --- the two reads a company page makes ----------------------------------------
+
+
+READ_PORT = 8792
+
+
+def _prices(ticker: str) -> dict[str, object]:
+    if ticker == "GONE":
+        from mapf.serve.server import ReadRefusedError
+
+        raise ReadRefusedError("no price history for GONE: delisted")
+    return {"ticker": ticker, "fetched_on": "2026-09-30", "bars": [["2026-09-29", 10.5]]}
+
+
+def _live_runs(ticker: str) -> list[dict[str, object]]:
+    return [{"run_id": "r-1", "ticker": ticker, "anchor_date": "2026-09-29"}]
+
+
+@pytest.fixture
+def reads(tmp_path: Path) -> Iterator[httpx.Client]:
+    (tmp_path / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    server = build(
+        Config(root=tmp_path, port=READ_PORT, analyse=_lines, prices=_prices, live_runs=_live_runs)
+    )
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        with httpx.Client(base_url=f"http://127.0.0.1:{READ_PORT}", timeout=10.0) as client:
+            yield client
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_a_company_page_can_read_a_price_window(reads: httpx.Client) -> None:
+    response = reads.get("/prices", params={"ticker": "ko"})
+    assert response.status_code == 200
+    assert response.json()["ticker"] == "KO", "upper-cased before it reaches the reader"
+    assert response.json()["fetched_on"] == "2026-09-30"
+
+
+def test_a_company_page_can_read_its_live_runs(reads: httpx.Client) -> None:
+    response = reads.get("/runs", params={"ticker": "KO"})
+    assert response.status_code == 200
+    assert response.json()[0]["run_id"] == "r-1"
+
+
+def test_a_read_refuses_a_string_that_is_not_a_ticker(reads: httpx.Client) -> None:
+    """The same pattern `POST /analyse` uses, because the string reaches a cache
+    path and a provider query just as that one does."""
+    for bad in ("../etc", "", "TOOLONGX", "A B"):
+        response = reads.get("/prices", params={"ticker": bad})
+        assert response.status_code == 400, bad
+        assert response.json()["refused"] == "bad_ticker"
+
+
+def test_a_read_that_cannot_answer_says_why(reads: httpx.Client) -> None:
+    response = reads.get("/prices", params={"ticker": "GONE"})
+    assert response.status_code == 502
+    assert response.json()["why"] == "no price history for GONE: delisted"
+
+
+def test_a_read_is_checked_at_the_boundary_like_everything_else(reads: httpx.Client) -> None:
+    rebound = {"Host": f"evil.example:{READ_PORT}"}
+    response = reads.get("/runs", params={"ticker": "KO"}, headers=rebound)
+    assert response.status_code == 421
+
+
+def test_a_server_started_without_a_reader_says_so(served: tuple[str, httpx.Client]) -> None:
+    _base, client = served
+    for path in ("/prices", "/runs"):
+        response = client.get(path, params={"ticker": "KO"})
+        assert response.status_code == 404
+        assert response.json()["refused"] == "no_such_endpoint"
+
+
+def test_no_read_can_start_a_run(reads: httpx.Client) -> None:
+    """Reads are GETs and the only route that makes anything exist is the POST.
+    A GET to the analysis path is static-file handling, and there is no file."""
+    assert reads.get("/analyse", params={"ticker": "KO"}).status_code == 404

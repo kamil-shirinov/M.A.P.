@@ -38,9 +38,9 @@ const svgEl = (tag, attrs = {}) => {
   return n;
 };
 
-export function renderSeries(root, { series, runs }) {
+export function renderSeries(root, { series, runs, title = "Price series and when runs opened" }) {
   root.textContent = "";
-  root.append(header(series));
+  root.append(header(series, title));
 
   if (isAbsent(series)) {
     root.append(absence(series.why));
@@ -50,15 +50,16 @@ export function renderSeries(root, { series, runs }) {
   const rows = Object.values(runs.bySource).flatMap((r) => r);
   const drawn = [];
   root.append(plot(series, rows, drawn));
-  root.append(legend(rows));
+  // A key to run marks on a chart that has none would describe nothing on it.
+  if (rows.length) root.append(legend(rows));
   // Now in the document, so the paths have a length.
   for (const path of drawn) draw(path, { duration: 600 });
 }
 
-function header(series) {
+function header(series, title) {
   const h = document.createElement("div");
   h.className = "cmp-series-head";
-  h.append(Object.assign(document.createElement("h2"), { className: "cmp-h", textContent: "Price series and when runs opened" }));
+  h.append(Object.assign(document.createElement("h2"), { className: "cmp-h", textContent: title }));
   if (isAbsent(series)) return h;
 
   const right = document.createElement("div");
@@ -69,7 +70,12 @@ function header(series) {
     document.createTextNode(" on "),
     chromeText(series.last_close_date, "the trading date of the last close"),
     document.createTextNode(" · "),
-    chromeText(`${series.snapshot} snapshot`, "the pinned price vintage"),
+    /* A served series is not a snapshot anyone can re-read: it is what the
+       provider said today, through this machine's cache. The label says which,
+       because "snapshot" beside it would claim a pin that does not exist. */
+    series.served
+      ? chromeText(`fetched ${series.fetched_on} by this machine`, "the day the local server fetched this series")
+      : chromeText(`${series.snapshot} snapshot`, "the pinned price vintage"),
   );
   h.append(right);
   return h;

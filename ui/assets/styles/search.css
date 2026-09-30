@@ -161,9 +161,11 @@ body > .masthead,
 }
 .srch-group .srch-row:first-of-type { border-top: 0; }
 .srch-row--corpus { box-shadow: inset 2px 0 0 var(--accent); }
-/* Only the corpus row navigates, so only it gets the hover. */
-.srch-row--corpus:hover { background: var(--surface); }
-.srch-row:not(.srch-row--corpus) { cursor: default; }
+/* The corpus row and a readable filer's row navigate: both have a page. Only the
+   corpus row keeps the accent edge, because only it has a record. */
+.srch-row--earnings { color: inherit; text-decoration: none; }
+.srch-row--corpus:hover, .srch-row--earnings:hover { background: var(--surface); }
+.srch-row--none, .srch-row--unfiled { cursor: default; }
 
 /* The group head takes the shared section voice; the count sits beside it. */
 .srch-group-head { display: flex; align-items: baseline; gap: var(--sp-4); margin-bottom: var(--sp-3); }

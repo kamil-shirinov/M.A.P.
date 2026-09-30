@@ -1,4 +1,5 @@
-/* The live-analysis screen — ADR 0036 §1 and §4.
+/* Live analysis, on the company page — ADR 0036 §1 and §4, and its amendment
+   of 2026-09-30 that retired the separate screen.
 
    The load-bearing property is that a fan cannot reach the screen without its
    marking. That is asserted as a refusal rather than as a rendering detail: if a
@@ -191,7 +192,7 @@ describe("a live result says how it relates to the corpus", () => {
     const labels = Object.fromEntries(RELATIONS);
     assert.equal(labels.repeat_of_exhibit, "repeat");
     assert.equal(labels.outside_corpus, "outside corpus");
-    assert.match(read("assets/js/analyse-page.js"), /RELATIONS\.find\(\(\[v\]\) => v === event\.corpus_relation\)/);
+    assert.match(read("assets/js/ui/live-result.js"), /RELATIONS\.find\(\(\[v\]\) => v === event\.corpus_relation\)/);
   });
 
   it("never claims the latest filing is new", () => {
@@ -203,7 +204,7 @@ describe("a live result says how it relates to the corpus", () => {
     assert.doesNotMatch(live, /is not one of the filings above/);
     // Joined first: the sentence is split across concatenated string literals.
     const prose = live.replace(/" \+\s*"/g, "");
-    assert.match(prose, /may be one of the filings above or a newer one/);
+    assert.match(prose, /may be one of those above or a newer one/);
     assert.match(prose, /the result says which/);
   });
 });
@@ -224,21 +225,24 @@ describe("the page, its markup and its rules", () => {
     const offer = read("assets/js/ui/analyse-offer.js");
     assert.match(offer, /No analysis server/);
     assert.match(offer, /nothing is pending/);
-    // Nowhere, on any screen that can offer a run.
-    for (const file of ["analyse-page.js", "search-page.js", "ui/analyse-offer.js", "ui/search-box.js"]) {
+    // Nowhere, on any screen that can offer a run — not even while one streams:
+    // the control is marked busy and a second press does nothing.
+    for (const file of ["company.js", "search-page.js", "ui/analyse-offer.js", "ui/search-box.js", "ui/company-live.js"]) {
       assert.doesNotMatch(read(`assets/js/${file}`), /\.disabled = true/, file);
     }
+    assert.match(read("assets/js/ui/company-live.js"), /setAttribute\("aria-busy", "true"\)/);
   });
 
   it("gives every screen the same absence, in the same words", () => {
-    /* One module, so the three screens that can offer a run cannot drift into
-       three different explanations of the same missing thing. */
+    /* One module, so a screen that offers a run cannot drift into its own
+       explanation of the same missing thing. Only the company page offers one
+       now, and search — which no longer does — states no absence at all. */
     const offer = read("assets/js/ui/analyse-offer.js");
     assert.equal((offer.match(/No analysis server/g) ?? []).length, 1);
-    for (const file of ["analyse-page.js", "search-page.js"]) {
-      assert.match(read(`assets/js/${file}`), /renderNoServer\(/, file);
-      assert.doesNotMatch(read(`assets/js/${file}`), /No analysis server/, file);
-    }
+    const live = read("assets/js/ui/company-live.js");
+    assert.match(live, /renderNoServer\(/);
+    assert.doesNotMatch(live, /No analysis server/);
+    assert.doesNotMatch(read("assets/js/search-page.js"), /renderNoServer|noServerNotes|serverPresent/);
   });
 
   it("states the absence in one line and puts the reasoning in the notes", () => {
@@ -258,61 +262,82 @@ describe("the page, its markup and its rules", () => {
   });
 
   it("adds those notes only on a screen that has no button", () => {
-    for (const file of ["analyse-page.js", "search-page.js", "company.js"]) {
-      const page = read(`assets/js/${file}`);
-      assert.match(page, /noServerNotes\(\)/, file);
-      assert.match(page, /\? \[\] : \[noServerNotes\(\)\]/, `${file} adds them conditionally`);
-    }
+    const page = read("assets/js/company.js");
+    assert.match(page, /noServerNotes\(\)/);
+    assert.match(page, /\? \[\] : \[noServerNotes\(\)\]/, "added conditionally");
   });
 
   it("asks whether a server is there without being able to start a run", () => {
     // `health` with GET. A speculative POST would cost seven minutes to find out.
-    const offer = read("assets/js/ui/analyse-offer.js");
-    const body = offer.slice(offer.indexOf("export function serverPresent()"));
+    const server = read("assets/js/data/server.js");
+    const body = server.slice(server.indexOf("export function serverPresent()"));
     assert.match(body.slice(0, 300), /fetch\("health", \{ method: "GET" \}\)/);
   });
 
   it("probes once per page, not once per row", () => {
-    /* A screen with forty readable rows must ask once. A row is never the thing
-       that decides whether the feature exists. */
-    const offer = read("assets/js/ui/analyse-offer.js");
-    assert.match(offer, /probe \?\?= fetch/);
-    assert.match(read("assets/js/search-page.js"), /state\.canAnalyse = await serverPresent\(\)/);
+    /* One answer per page, from one module. The offer module re-exports it
+       rather than keeping a second memo that could disagree. */
+    const server = read("assets/js/data/server.js");
+    assert.match(server, /probe \?\?= fetch/);
+    assert.match(read("assets/js/ui/analyse-offer.js"), /export \{ resetProbe, serverPresent \} from "\.\.\/data\/server\.js"/);
+    assert.doesNotMatch(read("assets/js/ui/analyse-offer.js"), /probe \?\?=/);
     assert.doesNotMatch(read("assets/js/ui/search-box.js"), /serverPresent/);
   });
 
-  it("hands a ticker over as a link rather than posting from the row", () => {
-    /* The run belongs to the screen built to show one. Starting seven minutes of
-       work from a search row would leave the reader with nowhere to put it. */
-    const offer = read("assets/js/ui/analyse-offer.js");
-    assert.match(offer, /link\.href = `analyse\.html\?ticker=/);
-    assert.doesNotMatch(offer, /method: "POST"/);
+  it("sends a search row to the company's page rather than posting from it", () => {
+    /* The run belongs to the page of the company it is about, where its progress
+       and result have somewhere to go. A readable filer's row is a link there. */
+    const box = read("assets/js/ui/search-box.js");
+    assert.match(box, /node\.href = `company\.html\?ticker=/);
+    assert.doesNotMatch(box, /analyse\.html|method: "POST"|no page/);
+    // The one POST in the app, in the one module that talks to the server.
+    for (const file of ["ui/analyse-offer.js", "ui/company-live.js", "company.js", "search-page.js"]) {
+      assert.doesNotMatch(read(`assets/js/${file}`), /method: "POST"/, file);
+    }
+    assert.match(read("assets/js/data/server.js"), /fetch\("analyse", \{\s*method: "POST"/);
   });
 
-  it("seeds an arriving ticker without starting a run", () => {
-    const page = read("assets/js/analyse-page.js");
-    const boot = page.slice(page.indexOf("async function boot()"));
-    assert.match(boot, /params\.get\("ticker"\)/);
-    assert.match(boot, /\.anl-input"\)\.value = seeded/);
-    // The seeded value fills the box; nothing calls analyse() from boot.
-    assert.doesNotMatch(boot, /analyse\(seeded/);
+  it("carries an old link's horizon to the control without starting a run", () => {
+    /* A link that spent minutes and wrote a permanent journal entry on arrival
+       would make the back button expensive. The horizon preselects; only the
+       button runs. */
+    const page = read("assets/js/company.js");
+    assert.match(page, /params\.get\("horizon"\)/);
+    const live = read("assets/js/ui/company-live.js");
+    const render = live.slice(live.indexOf("export async function renderLive"), live.indexOf("function paintRows"));
+    assert.match(render, /onRun: \(days\) => run\(/, "run() only behind the button");
+    assert.doesNotMatch(render.replace(/onRun: \(days\) => run\(/, ""), /\brun\(/);
   });
 
   it("reads the stream as it arrives rather than buffering it", () => {
     /* Buffering would turn a six-minute progress display into a six-minute
        blank, which is the whole reason the response is newline-delimited. */
-    const page = read("assets/js/analyse-page.js");
-    assert.match(page, /getReader\(\)/);
-    assert.match(page, /TextDecoder/);
-    assert.doesNotMatch(page, /await response\.text\(\)/);
+    const server = read("assets/js/data/server.js");
+    assert.match(server, /getReader\(\)/);
+    assert.match(server, /TextDecoder/);
+    assert.doesNotMatch(server, /await response\.text\(\)/);
   });
 
-  it("has a host for every section the module fills", () => {
-    const html = read("analyse.html");
-    for (const id of ["ground", "masthead-nav", "masthead-vintage", "ask", "progress", "result", "why", "footer"]) {
-      assert.match(html, new RegExp(`id="${id}"`), id);
-    }
+  it("puts the live section last on the company page, after the record", () => {
+    const html = read("company.html");
+    const order = ["identity", "series", "filings", "runs", "scoring", "live", "why"]
+      .map((id) => html.indexOf(`id="${id}"`));
+    assert.ok(order.every((i) => i > 0), "every section has a host");
+    assert.deepEqual(order, [...order].sort((a, b) => a - b), "in page order, live after the record");
     assert.match(html, /analyse\.css/);
+  });
+
+  it("redirects the retired screen's links to the company page", () => {
+    /* Old links keep working. A ticker and a horizon go to that company's live
+       section; no ticker goes to the recorded run's company, read from the
+       manifest rather than hardcoded; failing that, to search. */
+    const html = read("analyse.html");
+    assert.doesNotMatch(html, /type="module"/, "no app script: it only moves the reader on");
+    assert.match(html, /company\.html\?ticker=/);
+    assert.match(html, /#live/);
+    assert.match(html, /m\.replay && m\.replay\.exported_as/);
+    assert.match(html, /location\.replace\("index\.html"\)/);
+    assert.doesNotMatch(html, /\bKO\b/, "the recorded company is read, not written in");
   });
 
   it("keeps amber to the one meaning, in this stylesheet too", () => {
@@ -328,8 +353,9 @@ describe("the page, its markup and its rules", () => {
     }
   });
 
-  it("is listed in the nav on every screen", () => {
+  it("gives every screen a nav host, except the redirect that has no screen", () => {
     for (const page of readdirSync(new URL("../", import.meta.url)).filter((f) => f.endsWith(".html"))) {
+      if (page === "analyse.html") continue;
       assert.match(read(page), /<div id="masthead-nav"><\/div>/, page);
     }
   });
@@ -340,8 +366,8 @@ describe("a shared component's rules reach every page that renders it", () => {
      and company pages while `analyse.css` was linked only from analyse.html, so
      the absence block appeared unstyled — no border, no background, no measure.
      Nothing in the markup was wrong and no test could see it. */
-  const OFFER_CLASSES = ["anl-absent", "anl-offer", "anl-periods", "anl-period-note"];
-  const PAGES = { "index.html": "search-page.js", "company.html": "company.js", "analyse.html": "analyse-page.js" };
+  const OFFER_CLASSES = ["anl-absent", "anl-periods", "anl-period-note"];
+  const PAGES = { "index.html": "search-page.js", "company.html": "company.js" };
 
   it("links analyse.css from every page that can render the offer", () => {
     for (const page of Object.keys(PAGES)) {
@@ -498,24 +524,26 @@ describe("the hosted copy replays one recorded run", () => {
   it("labels it as recorded and offers no theatre", () => {
     /* No replayed progress stream, no elapsed counter. Making a record look like
        an event is the one thing this page must not do. */
-    const page = read("assets/js/analyse-page.js");
-    const fn = page.slice(page.indexOf("async function renderReplay"), page.indexOf("function bandFrom"));
+    const result = read("assets/js/ui/live-result.js");
+    const fn = result.slice(result.indexOf("export function recordedNote"));
     assert.match(fn, /A recorded run, not a live one/);
     assert.match(fn, /Nothing here was computed just now/);
     assert.doesNotMatch(fn, /setInterval|setTimeout|requestAnimationFrame/);
   });
 
-  it("shows it only when there is no server", () => {
-    const page = read("assets/js/analyse-page.js");
-    const boot = page.slice(page.indexOf("async function boot()"));
-    const branch = boot.slice(boot.indexOf("} else {"));
-    assert.match(branch, /renderReplay/);
-    assert.doesNotMatch(boot.slice(0, boot.indexOf("} else {")), /renderReplay/);
+  it("shows it only when there is no server, and only on its own company's page", () => {
+    const live = read("assets/js/ui/company-live.js");
+    const render = live.slice(live.indexOf("export async function renderLive"), live.indexOf("function paintRows"));
+    const served = render.slice(render.indexOf("if (live) {"), render.indexOf("return box;") );
+    assert.doesNotMatch(served, /replay/);
+    const hosted = render.slice(render.indexOf("return box;"));
+    assert.match(hosted, /replay\.ticker === ticker/);
+    assert.match(hosted, /recordedNote\(replay\)/);
   });
 
   it("marks the replayed fan uncalibrated, like any other raw one", () => {
-    const page = read("assets/js/analyse-page.js");
-    const fn = page.slice(page.indexOf("async function renderReplay"), page.indexOf("function bandFrom"));
+    const result = read("assets/js/ui/live-result.js");
+    const fn = result.slice(result.indexOf("export function replayAsResult"), result.indexOf("export function recordedNote"));
     assert.match(fn, /marking: "uncalibrated"/);
     assert.match(fn, /corrected: false/);
   });
@@ -525,10 +553,10 @@ describe("the hosted copy replays one recorded run", () => {
        quantity is the quickest way to have two answers and no way to say which
        is the one a score would be computed against — they agreed to 0.6% here,
        which is a property of large samples and not a guarantee. */
-    const page = read("assets/js/analyse-page.js");
-    assert.doesNotMatch(page, /bandFrom/);
-    assert.doesNotMatch(page, /xorshift/);
-    assert.match(page, /band: row\.band \?\? \[\]/);
+    const result = read("assets/js/ui/live-result.js");
+    assert.doesNotMatch(result, /bandFrom/);
+    assert.doesNotMatch(result, /xorshift/);
+    assert.match(result, /band: row\.band \?\? \[\]/);
   });
 
   itNeedsExport("and that band came from simulate(), with the run's own scenarios", () => {
@@ -549,7 +577,7 @@ describe("the hosted copy replays one recorded run", () => {
     const row = JSON.parse(readFileSync(new URL("../assets/export/live/replay.json", import.meta.url), "utf8"));
     assert.equal(row.price_kind, "intraday");
     assert.match(row.price_taken_at, /^2026-09-28T19:52/);
-    assert.match(read("assets/js/analyse-page.js"), /price taken during that session/);
+    assert.match(read("assets/js/ui/live-result.js"), /price taken during that session/);
   });
 });
 

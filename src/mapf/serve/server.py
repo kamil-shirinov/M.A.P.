@@ -33,7 +33,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import structlog
 
@@ -77,6 +77,11 @@ class Config:
     port: int
     analyse: Callable[[str, int], Iterator[dict[str, object]]]
     bound_hosts: frozenset[str] = field(default_factory=lambda: LOOPBACK_HOSTS)
+    # Reads, not runs. A company page outside the corpus has no exported series and
+    # no exported live runs newer than the last export, so the server answers both
+    # from what this machine holds. Neither can start a run or write anything.
+    prices: Callable[[str], dict[str, object]] | None = None
+    live_runs: Callable[[str], list[dict[str, object]]] | None = None
 
 
 def host_allowed(header: str | None, *, port: int, allowed: frozenset[str]) -> bool:
@@ -127,8 +132,16 @@ def origin_allowed(header: str | None, *, port: int, allowed: frozenset[str]) ->
     return parsed.hostname in {h.strip("[]") for h in allowed} and parsed.port == port
 
 
+class ReadRefusedError(Exception):
+    """A read endpoint could not answer, with a sentence the page can print."""
+
+
 class Handler(BaseHTTPRequestHandler):
-    """Routes three things and refuses everything else."""
+    """Routes five things and refuses everything else.
+
+    `GET /health`, `GET /prices`, `GET /runs` and the static app are reads.
+    `POST /analyse` is the only request that makes anything exist.
+    """
 
     config: Config
     protocol_version = "HTTP/1.1"
@@ -190,11 +203,36 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         if not self._checked():
             return
-        path = urlsplit(self.path).path
+        parts = urlsplit(self.path)
+        path = parts.path
         if path == "/health":
             self._send(200, "application/json; charset=utf-8", b'{"ok":true}')
             return
+        if path in ("/prices", "/runs"):
+            self._read(path, parse_qs(parts.query).get("ticker", [""])[0])
+            return
         self._static(path)
+
+    def _read(self, path: str, raw: str) -> None:
+        """One company's price window or live runs, as JSON.
+
+        The ticker is checked with the same pattern `POST /analyse` uses, because it
+        reaches a cache path and a provider query exactly as that one does.
+        """
+        ticker = raw.strip().upper()
+        if not TICKER.match(ticker):
+            self._refuse(400, "bad_ticker", f"{raw!r} is not a ticker this server will look up.")
+            return
+        reader = self.config.prices if path == "/prices" else self.config.live_runs
+        if reader is None:
+            self._refuse(404, "no_such_endpoint", "This server was started without that read.")
+            return
+        try:
+            body = reader(ticker)
+        except ReadRefusedError as refusal:
+            self._refuse(502, "read_failed", str(refusal))
+            return
+        self._send(200, "application/json; charset=utf-8", json.dumps(body).encode())
 
     def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler's name
         if not self._checked():

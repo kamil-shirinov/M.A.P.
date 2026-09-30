@@ -1,10 +1,9 @@
 /* Offering an analysis, wherever it is offered from.
 
-   Three screens can start one — the search rows, a company page, and the live
-   analysis screen itself — and all three need the same three things: to know
-   whether a server is there, to let a reader pick a horizon, and to say the same
-   thing when there is no server. One module, so those three answers cannot drift
-   apart between screens.
+   One screen starts a run now — the company page, for the company the run is
+   about (ADR 0036, amendment of 2026-09-30). This module still holds the three
+   things that screen needs, so they are written once: whether a server is
+   there, the horizon choice, and the same sentence when there is no server.
 
    THE PROBE RUNS ONCE PER PAGE. `serverPresent()` memoises its promise, so a
    screen with forty rows asks once rather than forty times, and a row never
@@ -36,23 +35,9 @@ const el = (tag, className, text) => {
   return node;
 };
 
-let probe = null;
-
-/** Is a server behind these files? One GET, once per page load.
-
-    `health` rather than a speculative POST: asking the question must never be
-    able to start a run, because a run costs seven minutes and is permanent. */
-export function serverPresent() {
-  probe ??= fetch("health", { method: "GET" })
-    .then((response) => response.ok)
-    .catch(() => false);
-  return probe;
-}
-
-/** For tests: forget the memoised answer. */
-export function resetProbe() {
-  probe = null;
-}
+/* One probe per page, owned by the module that owns every server call. Re-exported
+   so the screens that already ask here keep one answer between them. */
+export { resetProbe, serverPresent } from "../data/server.js";
 
 /** The horizon control, shared by every screen that offers a run.
 
@@ -122,17 +107,4 @@ export function noServerNotes() {
         "permanent entry to the run journal; there is no discard.",
     ],
   };
-}
-
-/** A link into the live-analysis screen, carrying a ticker and a horizon.
-
-    A LINK, not a button that posts from here. The run belongs to the screen built
-    to show one: that screen owns the progress display, the marking and the fan,
-    and starting a seven-minute run from a search row would leave the reader on a
-    page with nowhere to put the answer. */
-export function analyseLink(ticker, { horizon = DEFAULT_HORIZON, label = "Analyse" } = {}) {
-  const link = el("a", "anl-offer", label);
-  link.href = `analyse.html?ticker=${encodeURIComponent(ticker)}&horizon=${horizon}`;
-  link.title = `Run a forecast for ${ticker} on this machine`;
-  return chrome(link, "an action, not a measurement");
 }

@@ -179,6 +179,21 @@ body[data-mode="door"] .ground { transform: translate(-50%, -50%) scale(1.08); o
 .door-strip .door-runs { color: inherit; text-decoration: none; }
 .door-strip .door-runs:hover .fig { color: var(--accent); }
 
+/* The recorded run, named once under the strip. Quiet like the strip: it is a
+   way in, not a claim, and the page it leads to carries the marking. */
+.door-replay {
+  position: absolute;
+  left: var(--sp-5);
+  right: var(--sp-5);
+  bottom: calc(var(--sp-5) + 2.2em);
+  font-family: var(--font-mono);
+  font-size: var(--step--1);
+  letter-spacing: .07em;
+}
+.door-replay-link { color: var(--ink-3); text-decoration: none; }
+.door-replay-link:hover { color: var(--accent); }
+body[data-mode="open"] .door-replay { display: none; }
+
 @media (prefers-reduced-motion: reduce) {
   [data-band] { animation: none; will-change: auto; }
   .ground { transition: none; }

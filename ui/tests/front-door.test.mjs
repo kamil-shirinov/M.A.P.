@@ -321,12 +321,13 @@ describe("masthead nav", () => {
     };
     const nav = mountMastheadNav(host, { current: "search" });
     const labels = nav.children.map((c) => c.textContent);
-    assert.deepEqual(labels, ["find a company", "runs", "results", "live analysis"]);
+    // No "live analysis": a run starts from the company's own page now.
+    assert.deepEqual(labels, ["find a company", "runs", "results"]);
     assert.ok(!labels.some((l) => /company$/.test(l) && l !== "find a company"));
     // A detail page marks neither section rather than inventing a third.
     const none = mountMastheadNav(host, { current: null });
     assert.equal(none.children.filter((c) => c.attrs["aria-current"]).length, 0);
-    for (const current of ["search", "runs", "results", "analyse"]) {
+    for (const current of ["search", "runs", "results"]) {
       assert.equal(mountMastheadNav(host, { current }).children.filter((c) => c.attrs["aria-current"]).length, 1, `${current} marks itself`);
     }
   });

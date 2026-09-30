@@ -202,10 +202,10 @@ const RESOLUTIONS = [
     paras: [
       "Item 2.02 is the document M.A.P. reads, so a filer carrying one is readable. It has not been " +
         "read: the corpus was frozen and this company is not in it.",
-      "There is no page, and this browser cannot make one. What you are reading is a directory of " +
-        "static files — there is nothing behind it to accept a request, so nothing is queued, pending " +
-        "or retrying. Reading it would be a run on a machine with the model on it, and it would appear " +
-        "in a later freeze.",
+      "It has a page, with what the export knows about it and the live runs made for it — none of " +
+        "which is part of the record. A run is started from that page, and only on a machine with the " +
+        "models: a published copy is a directory of static files with nothing behind it to accept a " +
+        "request, so nothing is queued, pending or retrying.",
       "The word recent names a block of the filer's filing history, not a calendar window. A filer that " +
         "stopped reporting three years ago can still answer true with a most-recent date in 2023. The row " +
         "prints the date it has.",

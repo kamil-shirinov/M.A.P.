@@ -1,8 +1,8 @@
 /* The search box and its results.
 
    The box is the whole point of this screen, so it is first and the rows come
-   immediately under it. No prose sits between them: the three groups and the
-   "no page" / "nothing to read" cells say what a row is, and anything that
+   immediately under it. No prose sits between them: the groups, the arrows and
+   the "nothing to read" cells say what a row is, and anything that
    argues rather than reports lives in the disclosure at the foot of the page.
 
    Three phases, and the cold one is not dead. `universe.json` is 7.5 KB and
@@ -21,7 +21,6 @@ import { DERIVED, chrome, chromeText, figure, renderFigure } from "../lib/figure
    provenance-stamped instead. */
 const prose = (node, why) => chrome(node, why);
 import { isAbsent } from "../data/source.js";
-import { analyseLink } from "./analyse-offer.js";
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -163,20 +162,21 @@ function corpusRow(row) {
 /** A filer row. The date is the most recent Item 2.02 in the submissions
     *recent block*, which is a slice of filing history and not a calendar window
     — CNTX answers true with a most-recent date in 2023. The row prints the date
-    it has and lets the reader judge it. */
-/* Set once per render by `renderResults`, from the page's single probe. A module
-   flag rather than a parameter threaded through `GROUPS`: the row functions are
-   referenced by the group table, and adding an argument to every one of them to
-   carry a page-wide fact would be the wrong shape. */
-let offerAnalysis = false;
+    it has and lets the reader judge it.
 
+    A filer that publishes earnings is a LINK, like a corpus row: every such
+    company has a page now, where its live runs are listed and a run is started
+    (ADR 0036, amendment of 2026-09-30). The others keep their verdict, because
+    there is nothing for M.A.P. to read and so nothing for a page to hold. */
 function filerRow(row, kind) {
-  const div = el("div", `srch-row srch-row--${kind}`);
+  const readable = kind === "earnings";
+  const node = el(readable ? "a" : "div", `srch-row srch-row--${kind}`);
+  if (readable) node.href = `company.html?ticker=${encodeURIComponent(row.ticker)}`;
   const screen = row.screen;
   const detail = el("span", "srch-detail");
   if (isAbsent(screen)) {
     detail.append(chrome(el("span", null, screen.why), "the pre-screen could not answer for this filer"));
-  } else if (kind === "earnings") {
+  } else if (readable) {
     detail.append(
       chromeText("latest " + screen.most_recent + " · ", "the most recent Item 2.02 in the filer's recent block"),
       renderFigure(screen.count),
@@ -188,23 +188,14 @@ function filerRow(row, kind) {
       chromeText(" earnings filings", "Item 2.02 filings in the filer's recent block"),
     );
   }
-  div.append(
+  node.append(
     el("span", "srch-ticker", row.ticker),
     nameNode(row.name),
     exchangeNode(row.exchange),
     detail,
+    readable ? el("span", "srch-go", "→") : el("span", "srch-verdict", "nothing to read"),
   );
-  /* A readable filer the freeze did not take is the one row an analysis can be
-     started from — and only when a server is there. Without one the row keeps
-     the verdict it always had, and the PAGE states the absence once (ADR 0036
-     §4). A disabled control here would assert, forty times a screen, that the
-     feature is temporarily unavailable. */
-  if (kind === "earnings" && offerAnalysis) {
-    div.append(analyseLink(row.ticker));
-  } else {
-    div.append(el("span", "srch-verdict", kind === "earnings" ? "no page" : "nothing to read"));
-  }
-  return div;
+  return node;
 }
 
 const GROUPS = [
@@ -217,7 +208,7 @@ const GROUPS = [
   {
     key: "earnings",
     title: "Files earnings — not read",
-    note: "readable, and outside the freeze — no page",
+    note: "readable, and outside the freeze — a page for live runs",
     row: (r) => filerRow(r, "earnings"),
   },
   {
@@ -240,8 +231,7 @@ const GROUPS = [
 
 const PER_GROUP = 4;
 
-export function renderResults(host, { phase, query, groups, matched, canAnalyse = false }) {
-  offerAnalysis = canAnalyse;
+export function renderResults(host, { phase, query, groups, matched }) {
   host.textContent = "";
   if (!query.trim()) return;
 

@@ -9,9 +9,10 @@ export const COMPANY_WHY = [
   {
     title: "Company",
     notes: [
-      "This is a record of forecasts already made for this company, not a current projection. " +
-        "The export holds no live forecast, and the CLOSED count above says how many of the runs " +
-        "on this page have an outcome at all.",
+      "The page has two halves. Above the last section is the record: forecasts already made " +
+        "for this company from the frozen corpus, and the CLOSED count says how many have an " +
+        "outcome at all. The last section holds live runs, made on demand; they are listed, " +
+        "counted and drawn there and nowhere else.",
       "Exchange comes from corpus.json, which this page already opens. It used to be absent " +
         "here because the field lived only in the 864 KB symbol index; the export copies it " +
         "onto the corpus row now, so a fact the app plainly knew stopped reading as missing.",
@@ -79,6 +80,46 @@ export const COMPANY_WHY = [
       "A reconstructed band. Scored items carry map_sigma but no p10, p50 or p90. Building a band " +
         "from sigma is modelling presented as reading. The percentiles do not exist, so the column " +
         "does not either.",
+    ],
+  },
+];
+
+/* The live section's notes, used on every company page: the corpus's and the
+   ones outside it. Carried over from the retired live-analysis screen. */
+export const LIVE_WHY = [
+  {
+    title: "What a live run is",
+    notes: [
+      "The company's most recent 8-K Item 2.02 exhibit, read by three models running on the " +
+        "machine serving this page. No hosted API is called and no data is sent to a model provider.",
+      "It is a run, not a score. Nothing in the live section is compared to an outcome, because " +
+        "the outcome does not exist yet when the run is made.",
+      "Every run is permanent. It lands in the journal, it is counted, and it is exported. There " +
+        "is no discard.",
+      "Why a separate section rather than rows in the table above: a live run is not part of the " +
+        "pre-registered panel, and a table that mixed them would put one row away from a corpus " +
+        "figure. ADR 0036 keeps them apart in the data; this page keeps them apart on screen.",
+    ],
+  },
+  {
+    title: "Why most fans are amber",
+    meta: "ADR 0036",
+    metaWhy: "the decision record the live section implements",
+    notes: [
+      "The fitted correction was measured on a panel: 175 development items at five sessions, " +
+        "anchored within one trading day of the filing, from companies that passed the corpus " +
+        "filters. Applying it anywhere else is extrapolation.",
+      "So it is applied only where all three of those hold, and the fan is raw and marked " +
+        "otherwise, with the failing condition named. The liquidity floor alone is $50M median " +
+        "daily dollar volume, so a great many companies land here.",
+      "A raw fan is not a neutral one. The uncorrected fan is the version measured too narrow — " +
+        "calibration ratio 0.733 on development and 0.592 on the holdout, both intervals " +
+        "excluding 1.0.",
+      "Ten and twenty-one sessions are always uncalibrated. Nothing was fitted at either, and " +
+        "the horizon control says so before the run rather than after it.",
+      "A corrected fan still does not claim to be calibrated. A live run reads a filing the " +
+        "correction was never tested on, even for a corpus company, and the three conditions " +
+        "make applying it defensible, not verified.",
     ],
   },
 ];

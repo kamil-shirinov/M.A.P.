@@ -3,45 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>M.A.P. — live analysis</title>
-<link rel="stylesheet" href="assets/styles/tokens.css">
-<link rel="stylesheet" href="assets/styles/base.css">
-<link rel="stylesheet" href="assets/styles/components.css">
-<link rel="stylesheet" href="assets/styles/company.css">
-<link rel="stylesheet" href="assets/styles/front-door.css">
-<link rel="stylesheet" href="assets/styles/analyse.css">
-<link rel="stylesheet" href="assets/styles/system.css">
+<title>M.A.P. — moved to the company page</title>
+<!-- RETIRED (ADR 0036, amendment of 2026-09-30). Live analysis happens on the page
+     of the company it is about. Old links keep working: a ticker and a horizon
+     are carried to that company's live section, which the horizon preselects and
+     never starts. With no ticker, this goes to the company whose recorded run the
+     export carries, which is what this screen used to show on a copy with no
+     server; failing that, to search. -->
+<noscript><meta http-equiv="refresh" content="0; url=index.html"></noscript>
 <script>
-  try {
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      document.documentElement.dataset.enter = "";
-    }
-  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var ticker = (params.get("ticker") || "").trim().toUpperCase();
+    var horizon = params.get("horizon");
+    var to = function (t) {
+      return "company.html?ticker=" + encodeURIComponent(t)
+        + (horizon ? "&horizon=" + encodeURIComponent(horizon) : "") + "#live";
+    };
+    if (ticker) { location.replace(to(ticker)); return; }
+    fetch("assets/export/manifest.json")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (m) {
+        var named = m && m.replay && m.replay.exported_as;
+        return named ? fetch("assets/export/" + named).then(function (r) { return r.ok ? r.json() : null; }) : null;
+      })
+      .then(function (row) { location.replace(row && row.ticker ? to(row.ticker) : "index.html"); })
+      .catch(function () { location.replace("index.html"); });
+  })();
 </script>
 </head>
 <body>
-  <div class="ground" id="ground" data-scope="page"></div>
-
-  <header class="masthead">
-    <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
-    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
-    <div id="masthead-nav"></div>
-    <div class="masthead-vintage" id="masthead-vintage"></div>
-  </header>
-
-  <main class="anl-page" id="analyse-page">
-    <h2 class="page-title">Live analysis</h2>
-    <!-- Filled by the module, or replaced wholesale by the stated absence when
-         no server is behind these files. Nothing here is markup a hosted copy
-         would render as a control that cannot work. -->
-    <section id="ask"      class="anl-section"></section>
-    <section id="progress" class="anl-section"></section>
-    <section id="result"   class="anl-section"></section>
-    <section id="why"></section>
-  </main>
-
-  <footer class="cmp-footer" id="footer"></footer>
-
-  <script type="module" src="assets/js/analyse-page.js"></script>
+  <p>Live analysis now happens on each company's page. <a href="index.html">Find a company</a>.</p>
 </body>
 </html>

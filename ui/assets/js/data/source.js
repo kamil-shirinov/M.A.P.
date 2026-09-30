@@ -289,6 +289,31 @@ export async function getFilerScreen(ticker) {
   };
 }
 
+/** A company the corpus never read, as far as the export knows it.
+
+    From the symbol index and the Item 2.02 pre-screen, which is everything the
+    export holds about a filer outside the freeze: a name, an exchange, a CIK, and
+    whether its recent filings carry an earnings 8-K. Nothing here is a forecast
+    and nothing is a score. */
+export async function getFiler(ticker) {
+  const rows = await readJson("symbols.json");
+  if (rows === null) {
+    return absent(NOT_COMPUTED, "the symbol index was not exported");
+  }
+  const row = rows.find((r) => r.ticker === ticker);
+  if (!row) {
+    return absent(NOT_APPLICABLE, `${ticker} is not in the SEC symbol index`);
+  }
+  return {
+    ticker: row.ticker,
+    name: row.name ?? null,
+    exchange: row.exchange ?? null,
+    cik: row.cik,
+    screen: await getFilerScreen(row.ticker),
+    provenance: MEASURED,
+  };
+}
+
 // --------------------------------------------------------------------------
 // One company: its filings, and the runs that read them
 // --------------------------------------------------------------------------
@@ -336,6 +361,13 @@ export async function getCompany(ticker) {
 // --------------------------------------------------------------------------
 
 export const SOURCES = ["corpus", "edgar", "news", "unknown"];
+
+/* The company page's two halves, named once. The record is what the corpus
+   holds and what predates the source field; live runs are the two populations
+   positively recorded as made on demand. A page draws them in separate sections
+   and never in one table or one count (ADR 0036, amendment of 2026-09-30). */
+export const RECORD_SOURCES = ["corpus", "unknown"];
+export const LIVE_SOURCES = ["edgar", "news"];
 
 /** Runs for one company, KEPT APART by document source.
 
@@ -396,6 +428,10 @@ export async function listUnrunFilings() {
   }
   return out;
 }
+
+/** The row adapter, for a caller holding rows that did not come from a file
+    here — the local server's live runs, which are the same shape. */
+export const adaptRunRow = (run) => adaptRun(run);
 
 function adaptRun(run) {
   const spot = run.anchor_spot;

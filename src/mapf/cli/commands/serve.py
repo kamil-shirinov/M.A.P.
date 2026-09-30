@@ -19,7 +19,7 @@ import time
 import webbrowser
 from collections.abc import Generator, Iterator
 from dataclasses import replace
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -35,10 +35,13 @@ from mapf.bootstrap import (
     build_symbol_index,
 )
 from mapf.cli.app import app, fail, handle
+from mapf.cli.commands.runs import _frozen_exhibits, as_dict
 from mapf.core.errors import MapError
 from mapf.core.hashing import new_run_id
+from mapf.core.sessions import settled
 from mapf.data.liquidity import MarketLiquidity
 from mapf.eval.calibration import CalibrationError, load_correction
+from mapf.eval.journal import read_journal
 from mapf.eval.montecarlo import simulate
 from mapf.pipeline.run import RunRequest, execute
 from mapf.serve.analyse import (
@@ -49,7 +52,7 @@ from mapf.serve.analyse import (
     latest_exhibit,
     run_analysis,
 )
-from mapf.serve.server import Config, build
+from mapf.serve.server import Config, ReadRefusedError, build
 from mapf.settings import ModelRegistry, load
 
 # Measured from the 701 completed corpus runs that recorded an `elapsed_s`, which
@@ -259,8 +262,59 @@ def serve(
             outcome = done[0]
             return str(run_id), outcome.forecast, outcome.window  # type: ignore[attr-defined]
 
-        screen = MarketLiquidity(build_market_data(settings))
+        market = build_market_data(settings)
+        screen = MarketLiquidity(market)
         symbols = build_symbol_index(settings)
+        journal_dir = runs_dir if runs_dir is not None else settings.paths.runs_dir
+        exhibits = _frozen_exhibits(frozen)
+
+        def prices(ticker: str) -> dict[str, object]:
+            """A company page's price history, for a company the export has none for.
+
+            Through the same cache every run reads, keyed on today's UTC date, so the
+            vintage the page prints is the one the cache stored it under. The
+            unfinished session is dropped exactly as a run drops it: a bar still
+            trading is not a close (Findings #64).
+            """
+            now = datetime.now(UTC)
+            today = now.date()
+            try:
+                window = market.get_ohlcv(
+                    ticker, today - timedelta(days=settings.data.history_days), today
+                )
+            except MapError as error:
+                raise ReadRefusedError(f"no price history for {ticker}: {error}") from error
+            bars = settled(window.bars, now=now)
+            if not bars:
+                raise ReadRefusedError(f"no settled session for {ticker} in the window fetched")
+            return {
+                "ticker": ticker,
+                "provider": window.provider,
+                "adjustment": window.adjustment,
+                "fetched_on": today.isoformat(),
+                "bars": [[bar.date.isoformat(), bar.close] for bar in bars],
+            }
+
+        def live_runs(ticker: str) -> list[dict[str, object]]:
+            """This company's live runs, newest first, in the export's own row shape.
+
+            Read from the journal this server writes to, so a run made a minute ago
+            is listed without an export. Only the two populations recorded as live:
+            `unknown` makes no claim either way and stays in the record's table.
+            """
+            journal = read_journal(
+                journal_dir,
+                snapshot=None,
+                today=datetime.now(UTC).date(),
+                frozen_exhibits=exhibits,
+            )
+            rows = [
+                as_dict(entry)
+                for source in ("edgar", "news")
+                for entry in journal.of(source)
+                if entry.ticker == ticker
+            ]
+            return sorted(rows, key=lambda row: str(row["anchor_date"]), reverse=True)
 
         def liquidity(ticker: str, start: date, end: date) -> float | None:
             try:
@@ -300,8 +354,12 @@ def serve(
                 usual_range_seconds=(RUN_SECONDS_P10, RUN_SECONDS_P90),
             )
 
-        server = build(Config(root=ui_dir, port=port, analyse=analyse))
-        url = f"http://127.0.0.1:{port}/analyse.html"
+        server = build(
+            Config(root=ui_dir, port=port, analyse=analyse, prices=prices, live_runs=live_runs)
+        )
+        # The door, not a company: an analysis starts from the page of the company it
+        # is about, and search is how a reader gets there.
+        url = f"http://127.0.0.1:{port}/index.html"
         if fixtures is not None or runs_dir is not None:
             # Said loudly. A server that cannot make a real forecast, or cannot
             # record one, must not be mistaken for the one that can.
