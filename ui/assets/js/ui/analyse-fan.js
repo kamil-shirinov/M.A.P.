@@ -7,15 +7,24 @@
 
    A BANK OF ENGLAND FAN. The last three months of closes run into the anchor, and
    the forecast opens out from it in nine graded bands — the middle 10% of the
-   distribution darkest, out to the middle 90% — widening session by session. Every
-   band edge is a quantile the server or the exporter took from `simulate_paths`,
-   whose last session is the scorer's own sample; nothing here samples, smooths a
-   distribution or invents a level. The page draws the curve THROUGH those
-   quantiles and nowhere else.
+   distribution strongest, out to the middle 90% — widening session by session.
+   Every band edge is a quantile the server or the exporter took from
+   `simulate_paths`, whose last session is the scorer's own sample; nothing here
+   samples, smooths a distribution or invents a level. The page draws each edge,
+   and the history, as a monotone curve THROUGH those points: every quantile and
+   every close is on its line, and nothing between two of them rises above or
+   dips below both, which a Catmull–Rom curve could.
 
-   The scenarios are thin curves over the fan, each ending on the price it states,
-   with its name and weight at the end. They are the shape of the reasoning; the
-   bands are the claim.
+   The scenarios are thin curves over the fan in their own colours — bullish
+   green, base case white, bearish red — each ending on the price it states, with
+   its name and weight at the end. They are the shape of the reasoning; the bands
+   are the claim. Their curves are their closed form, computed densely, so they
+   are exact rather than drawn.
+
+   ON LOAD, A DOT TRAVELS the closes to the anchor, drawing the history behind it,
+   then splits into three that travel the scenario paths side by side to the
+   horizon while the fan opens with them, and rest on the three endpoints. With
+   reduced motion the chart is simply drawn finished, the three dots at their ends.
 
    Amber keeps the one meaning it was narrowed to: a number that is not a settled
    measurement. An uncorrected fan is one — the raw fan is the version measured too
@@ -38,7 +47,12 @@ const H = 420;
 const PAD = { top: 40, right: 150, bottom: 40, left: 64 };
 // Of the plot's width, the share the history side gets when there is history.
 const HISTORY_SHARE = 0.55;
-const OPEN_MS = 1100;
+// The dot's two legs: along the closes, then out along the three scenarios.
+const HISTORY_MS = 1400;
+const FORECAST_MS = 1400;
+// Curve samples between two points: enough that no corner shows at any width.
+const PER_INTERVAL = 16;
+const DOT_R = 4.5;
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -100,40 +114,98 @@ function fanOf(result) {
   };
 }
 
-/** Each scenario's curve: the one the result carries, or its closed form. The
-    closed form is the same `spot * (1 + r) ** (t / h)` the server computes, so a
-    result without curves draws the same thing rather than a straight line. */
-function curvesOf(result, sessions) {
-  if (Array.isArray(result.scenario_paths) && result.scenario_paths.length) {
-    return result.scenario_paths.map((c) => ({
-      name: c.name, weight: c.weight,
-      points: c.prices.map((p, t) => [t, p]),
-    }));
-  }
+/** Each scenario's curve, densely: its closed form `spot * (end / spot) ** (t / h)`,
+    the same `spot * (1 + r) ** (t / h)` the server computes, so it passes exactly
+    through every session's price the result carries and is exact in between. The
+    end is the result's own last price where it carries curves, else the stated
+    return. */
+function curvesOf(result) {
   const h = result.horizon_days;
-  const steps = sessions.map((s) => s.session);
-  return result.scenarios.map((s) => ({
-    name: s.name, weight: s.weight,
-    points: steps.map((t) => [t, result.spot * (1 + s.price_return) ** (t / h)]),
+  const carried = Array.isArray(result.scenario_paths) && result.scenario_paths.length
+    ? result.scenario_paths.map((c) => ({ name: c.name, weight: c.weight, end: c.prices.at(-1) }))
+    : result.scenarios.map((s) => ({ name: s.name, weight: s.weight, end: result.spot * (1 + s.price_return) }));
+  const steps = h * PER_INTERVAL;
+  return carried.map((c) => ({
+    name: c.name,
+    weight: c.weight,
+    points: Array.from({ length: steps + 1 }, (_, k) => {
+      const t = (k / steps) * h;
+      return [t, result.spot * (c.end / result.spot) ** (t / h)];
+    }),
   }));
 }
 
-/** A smooth path through points, as cubic Béziers (Catmull–Rom, tension ½).
-    It passes THROUGH every point, so every quantile the result holds is on the
-    curve; only the path between two sessions is drawn rather than measured. */
-function through(points) {
-  if (points.length < 3) return points.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`).join(" ");
-  let d = `M${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
-    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
-    d += ` C${c1[0].toFixed(2)} ${c1[1].toFixed(2)} ${c2[0].toFixed(2)} ${c2[1].toFixed(2)} ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
+/** A monotone cubic through points whose x increases (Fritsch–Carlson), sampled
+    `per` times per interval. Every given point is on the curve exactly, and
+    between two points the curve never goes above or below both — so a close is
+    not given a high it did not have, and a band edge does not bulge past its
+    quantiles. Fewer than three points are joined straight. */
+export function smooth(points, per = PER_INTERVAL) {
+  const n = points.length;
+  if (n < 2) return points.slice();
+  const out = [];
+  if (n === 2) {
+    const [[xa, ya], [xb, yb]] = points;
+    for (let j = 0; j < per; j++) out.push([xa + ((xb - xa) * j) / per, ya + ((yb - ya) * j) / per]);
+    out.push(points[1]);
+    return out;
   }
-  return d;
+  const dx = [];
+  const m = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = points[i + 1][0] - points[i][0];
+    m[i] = (points[i + 1][1] - points[i][1]) / dx[i];
+  }
+  const t = new Array(n);
+  t[0] = m[0];
+  t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i];
+    const b = t[i + 1] / m[i];
+    const r = a * a + b * b;
+    if (r > 9) {
+      const k = 3 / Math.sqrt(r);
+      t[i] = k * a * m[i];
+      t[i + 1] = k * b * m[i];
+    }
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const [x0, y0] = points[i];
+    const y1 = points[i + 1][1];
+    for (let j = 0; j < per; j++) {
+      const u = j / per;
+      const u2 = u * u;
+      const u3 = u2 * u;
+      const y = (2 * u3 - 3 * u2 + 1) * y0 + (u3 - 2 * u2 + u) * dx[i] * t[i]
+        + (-2 * u3 + 3 * u2) * y1 + (u3 - u2) * dx[i] * t[i + 1];
+      out.push([x0 + u * dx[i], y]);
+    }
+  }
+  out.push(points[n - 1]);
+  return out;
+}
+
+/** A dense run of points as one path. */
+function trace(points) {
+  return points.map(([x, y], i) => `${i ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`).join(" ");
+}
+
+/** The height of a dense curve at `x`, by interpolation between its samples. */
+export function yAt(points, x) {
+  if (x <= points[0][0]) return points[0][1];
+  let lo = 0;
+  let hi = points.length - 1;
+  if (x >= points[hi][0]) return points[hi][1];
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (points[mid][0] <= x) lo = mid;
+    else hi = mid;
+  }
+  const [xa, ya] = points[lo];
+  const [xb, yb] = points[hi];
+  return ya + ((yb - ya) * (x - xa)) / (xb - xa);
 }
 
 /** A trading date as a reader says it. The ISO string stays the source. */
@@ -176,7 +248,7 @@ export function renderFan(host, result, { opening = true } = {}) {
   const sessions = fan
     ? fan.sessions
     : [{ session: 0, prices: [result.spot] }, { session: h, prices: [result.spot] }];
-  const curves = curvesOf(result, sessions);
+  const curves = curvesOf(result);
   const history = Array.isArray(result.history)
     ? result.history.filter((p) => Array.isArray(p) && p.length === 2)
     : [];
@@ -216,9 +288,14 @@ export function renderFan(host, result, { opening = true } = {}) {
   const defs = svgNode("defs");
   const clipId = `anl-open-${++clipCount}`;
   const clip = svgNode("clipPath", { id: clipId });
-  const reveal = svgNode("rect", { x: today - 1, y: 0, width: W - today + 1, height: H });
+  const reveal = svgNode("rect", { class: "anl-reveal anl-reveal--fan", x: today - 1, y: 0, width: W - today + 1, height: H });
   clip.append(reveal);
-  defs.append(clip);
+  // The history's own reveal, which the dot draws the closes behind.
+  const pastId = `anl-past-${clipCount}`;
+  const past = svgNode("clipPath", { id: pastId });
+  const pastReveal = svgNode("rect", { class: "anl-reveal anl-reveal--history", x: 0, y: 0, width: today + 1, height: H });
+  past.append(pastReveal);
+  defs.append(clip, past);
   svg.append(defs);
 
   // -- axes ------------------------------------------------------------------
@@ -259,11 +336,9 @@ export function renderFan(host, result, { opening = true } = {}) {
   svg.append(axis);
 
   // -- the history, running into the anchor ---------------------------------
-  if (history.length > 1) {
-    svg.append(svgNode("path", {
-      class: "anl-history",
-      d: history.map(([, close], i) => `${i ? "L" : "M"}${xh(i).toFixed(2)} ${y(close).toFixed(2)}`).join(" "),
-    }));
+  const pastLine = history.length > 1 ? smooth(history.map(([, close], i) => [xh(i), y(close)])) : [];
+  if (pastLine.length) {
+    svg.append(svgNode("path", { class: "anl-history", d: trace(pastLine), "clip-path": `url(#${pastId})` }));
   }
 
   // -- the fan: nine bands, outside in, then the scenario curves -------------
@@ -271,18 +346,19 @@ export function renderFan(host, result, { opening = true } = {}) {
   if (fan) {
     const n = fan.levels.length;
     for (let i = 0; i < Math.floor(n / 2); i++) {
-      const upper = sessions.map((s) => [xf(s.session), y(s.prices[n - 1 - i])]);
-      const lower = sessions.map((s) => [xf(s.session), y(s.prices[i])]).reverse();
-      const d = `${through(upper)} L${through(lower).slice(1)} Z`;
+      const upper = smooth(sessions.map((s) => [xf(s.session), y(s.prices[n - 1 - i])]));
+      const lower = smooth(sessions.map((s) => [xf(s.session), y(s.prices[i])])).reverse();
+      const d = `${trace(upper)} L${trace(lower).slice(1)} Z`;
       const band = svgNode("path", { class: "anl-band", d });
       band.dataset.level = String(Math.round((fan.levels[n - 1 - i] - fan.levels[i]) * 100));
       opened.append(band);
     }
   }
-  for (const curve of curves) {
+  const drawn = curves.map((curve) => ({ name: curve.name, points: curve.points.map(([t, p]) => [xf(t), y(p)]) }));
+  for (const [k, curve] of curves.entries()) {
     const line = svgNode("path", {
       class: "anl-path",
-      d: through(curve.points.map(([t, p]) => [xf(t), y(p)])),
+      d: trace(drawn[k].points),
       "data-scenario": curve.name,
     });
     // Weight drives opacity, so the likely path reads as the likely one without
@@ -303,6 +379,17 @@ export function renderFan(host, result, { opening = true } = {}) {
 
   const labels = scenarioLabels(curves, { x: x1 + 10, y, h });
   svg.append(labels);
+
+  // -- the travelling dots: one along the closes, three along the scenarios --
+  const dots = svgNode("g", { class: "anl-dots" });
+  const lead = svgNode("circle", { class: "anl-dot", "data-scenario": "history", r: DOT_R, cx: today, cy: y(result.spot) });
+  lead.setAttribute("visibility", "hidden");
+  const heads = drawn.map((curve) => {
+    const [ex, ey] = curve.points.at(-1);
+    return svgNode("circle", { class: "anl-dot", "data-scenario": curve.name, r: DOT_R, cx: ex, cy: ey });
+  });
+  dots.append(lead, ...heads);
+  svg.append(dots);
 
   // -- the crosshair ---------------------------------------------------------
   const cross = svgNode("g", { class: "anl-cross" });
@@ -328,7 +415,7 @@ export function renderFan(host, result, { opening = true } = {}) {
   host.append(fanKey(result, fan, history, h));
   host.append(readout(result, paths));
 
-  if (opening) open(reveal, labels, { from: today, width: W - today + 1 });
+  if (opening) travel({ reveal, pastReveal, labels, lead, heads, pastLine, drawn, x0, today, x1 });
   return svg;
 }
 
@@ -470,17 +557,45 @@ function line(label, ...parts) {
 /** Open the fan once, from the anchor outward. Decoration: if anything here is
     missing — no animation frame, a reader who asked for less motion — the fan is
     already fully drawn and this simply does nothing. */
-function open(reveal, labels, { from, width }) {
+/** The dot's journey, on load: along the closes to the anchor, drawing them
+    behind it, then three dots out along the scenarios side by side, the fan
+    opening with them, to rest on the three endpoints. Timed from when it began,
+    and a frame stamped before that is clamped rather than run backwards. */
+function travel({ reveal, pastReveal, labels, lead, heads, pastLine, drawn, x0, today, x1 }) {
   if (prefersReducedMotion() || typeof requestAnimationFrame !== "function") return;
+  const ease = (x) => (1 - Math.cos(Math.PI * Math.min(1, Math.max(0, x)))) / 2;
+  const place = (dot, x, yy) => {
+    dot.setAttribute("cx", x.toFixed(2));
+    dot.setAttribute("cy", yy.toFixed(2));
+  };
+  const legOne = pastLine.length ? HISTORY_MS : 0;
   reveal.setAttribute("width", "0");
+  if (legOne) {
+    pastReveal.setAttribute("width", "0");
+    lead.setAttribute("visibility", "visible");
+    place(lead, x0, pastLine[0][1]);
+  }
+  for (const head of heads) head.setAttribute("visibility", "hidden");
   labels.style.opacity = "0";
   const start = performance.now();
   const step = (now) => {
-    // A frame's timestamp is when the frame began, which can be a little before
-    // `start` was read; clamped, or the first frame asks for a negative width.
-    const k = Math.min(1, Math.max(0, (now - start) / OPEN_MS));
-    const eased = 1 - (1 - k) ** 3;
-    reveal.setAttribute("width", String(eased * width));
+    const elapsed = Math.max(0, now - start);
+    if (elapsed < legOne) {
+      const x = x0 + ease(elapsed / legOne) * (today - x0);
+      pastReveal.setAttribute("width", String(x + 1));
+      place(lead, x, yAt(pastLine, x));
+      requestAnimationFrame(step);
+      return;
+    }
+    pastReveal.setAttribute("width", String(today + 1));
+    lead.setAttribute("visibility", "hidden");
+    const k = Math.min(1, (elapsed - legOne) / FORECAST_MS);
+    const x = today + ease(k) * (x1 - today);
+    reveal.setAttribute("width", String(Math.max(0, x - today) + 1));
+    heads.forEach((head, i) => {
+      head.setAttribute("visibility", "visible");
+      place(head, x, yAt(drawn[i].points, x));
+    });
     if (k < 1) {
       requestAnimationFrame(step);
     } else {
@@ -488,7 +603,6 @@ function open(reveal, labels, { from, width }) {
       labels.style.opacity = "1";
     }
   };
-  reveal.setAttribute("x", String(from - 1));
   requestAnimationFrame(step);
 }
 
@@ -503,7 +617,7 @@ function fanKey(result, fan, history, h) {
     const shade = el("p");
     shade.append(chromeText(
       pairs > 2
-        ? `Shaded: the middle ${width(pairs - 1)}% of the forecast, darkest, out to the middle ${width(0)}%, in ${pairs} steps.`
+        ? `Shaded: the middle ${width(pairs - 1)}% of the forecast, strongest, out to the middle ${width(0)}%, in ${pairs} steps.`
         : `Shaded: the middle ${width(0)}% and ${width(pairs - 1)}% of the forecast.`,
       "what the shaded region is",
     ));

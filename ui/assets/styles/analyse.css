@@ -171,13 +171,30 @@ body > .masthead,
 .anl-break-mark { stroke: var(--ink-2); stroke-width: 1.4; stroke-linecap: round; }
 .anl-scale-caption { fill: var(--ink-3); font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; }
 .anl-spot { fill: var(--ink-num); }
-/* The scenarios are the reasoning, drawn thin and neutral over the bands; the
-   bands are the claim, and carry the marking's colour. */
-.anl-path { fill: none; stroke: var(--ink); stroke-width: 1.25; }
+/* The scenarios are the reasoning, drawn thin over the bands in their own
+   colours: bullish green, base case white, bearish red. Never amber for any of
+   them — amber is the marking's, "not a settled number", and an amber line
+   would vanish inside an uncalibrated fan. The bands are the claim, and carry
+   the marking's colour. */
+.anl-path { fill: none; stroke: var(--ink); stroke-width: 1.25; stroke-linejoin: round; }
+.anl-path[data-scenario="bullish"] { stroke: var(--up); }
+.anl-path[data-scenario="base_case"] { stroke: var(--ink-num); }
+.anl-path[data-scenario="bearish"] { stroke: var(--down); }
 .anl-plabel { fill: var(--ink-2); font-family: var(--font-mono); font-size: 12px; }
+.anl-plabel[data-scenario="bullish"] { fill: var(--up); }
+.anl-plabel[data-scenario="base_case"] { fill: var(--ink-num); }
+.anl-plabel[data-scenario="bearish"] { fill: var(--down); }
 .anl-pweight { fill: var(--ink); }
+/* The dots that travel the chart on load and rest on the three endpoints. The
+   lead, on the closes, is the anchor's white; each of the three takes its
+   scenario's colour. A dark ring keeps them apart from the line they sit on. */
+.anl-dot { stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
+.anl-dot[data-scenario="history"] { fill: var(--ink-num); }
+.anl-dot[data-scenario="bullish"] { fill: var(--up); }
+.anl-dot[data-scenario="base_case"] { fill: var(--ink-num); }
+.anl-dot[data-scenario="bearish"] { fill: var(--down); }
 /* The bands. Nine layers of one colour, each faint, so the middle of the
-   distribution is darkest by accumulation and the edges fade out — graded, not
+   distribution is strongest by accumulation and the edges fade out — graded, not
    stepped. Neutral when the correction was applied; amber only when the fan is
    the raw one measured too narrow. */
 .anl-band { fill: var(--ink-2); fill-opacity: .11; stroke: none; }

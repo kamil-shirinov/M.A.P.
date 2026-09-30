@@ -680,7 +680,7 @@ describe("the fan, session by session", () => {
     const host = new Node("div");
     renderFan(host, fanned({ corrected: false, marking: "uncalibrated" }));
     const text = host.textContent;
-    assert.match(text, /the middle 10% of the forecast, darkest, out to the middle 90%, in 9 steps/);
+    assert.match(text, /the middle 10% of the forecast, strongest, out to the middle 90%, in 9 steps/);
     assert.match(text, /This raw width was measured too narrow\./);
     assert.match(text, /Left of the anchor: the last 3 closes\. Right of it: 5 sessions ahead, drawn wider/);
     assert.match(text, /do not know market holidays/);
