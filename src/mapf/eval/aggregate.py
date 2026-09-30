@@ -35,6 +35,23 @@ from mapf.eval.power import block_resamples, moving_block_bootstrap, occupied_bl
 # insisting on one would push a conversion onto every caller.
 Floats = Sequence[float] | NDArray[np.float64]
 Ints = Sequence[int] | NDArray[np.int64]
+# Anything that names an item once and sorts: "AAPL 2026-01-29" for a scored
+# forecast, a position for a synthetic panel.
+Ids = Sequence[object] | NDArray[np.generic]
+
+
+def checked_ids(item_ids: Ids, n: int) -> NDArray[np.generic]:
+    """Item ids for the resampler, refused here rather than inside it.
+
+    The bootstrap orders items that share a day by these ids (Findings #70), so
+    there must be one per item and no two alike.
+    """
+    ids = np.asarray(item_ids)
+    if ids.size != n:
+        raise AggregationError(f"{ids.size} item ids for {n} items")
+    if np.unique(ids).size != ids.size:
+        raise AggregationError("item ids repeat, so they cannot order items that share a day")
+    return ids
 
 
 class AggregationError(MapError):
@@ -79,6 +96,7 @@ def compare(
     baseline_scores: Floats,
     day_index: Ints,
     *,
+    item_ids: Ids,
     name: str,
     baseline: str,
     horizon_days: int = 5,
@@ -105,10 +123,13 @@ def compare(
     if not np.all(np.isfinite(model)) or not np.all(np.isfinite(base)):
         raise AggregationError("scores contain non-finite values")
 
+    ids = checked_ids(item_ids, days.size)
     differences = model - base
     rng = np.random.default_rng(seed)
     # Blocks of twice the horizon, so two windows that overlap can land together.
-    means = moving_block_bootstrap(differences, days, rng, draws=draws, block_days=horizon_days * 2)
+    means = moving_block_bootstrap(
+        differences, days, rng, draws=draws, block_days=horizon_days * 2, ids=ids
+    )
     tail = (1.0 - confidence) / 2.0 * 100.0
     lower, upper = np.percentile(means, [tail, 100.0 - tail])
     return Comparison(
@@ -230,6 +251,7 @@ def calibration_interval(
     realised: Floats,
     day_index: Ints,
     *,
+    item_ids: Ids,
     horizon_days: int = 5,
     draws: int = 2000,
     seed: int = 20260813,
@@ -251,9 +273,10 @@ def calibration_interval(
             f"realised={actual.size}, days={days.size}"
         )
     point = calibration_ratio(stated, actual)
+    ids = checked_ids(item_ids, days.size)
     ratios: list[float] = []
     rng = np.random.default_rng(seed)
-    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2):
+    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2, ids=ids):
         try:
             ratios.append(calibration_ratio(stated[index], actual[index]))
         except AggregationError:
@@ -366,6 +389,7 @@ def tail_ratio_interval(
     z: Floats,
     day_index: Ints,
     *,
+    item_ids: Ids,
     horizon_days: int = 5,
     draws: int = 4000,
     seed: int = 20260813,
@@ -390,9 +414,10 @@ def tail_ratio_interval(
     if method not in {"percentile", "basic"}:
         raise AggregationError(f"unknown interval method {method!r}")
     point = tail_ratio(series)
+    ids = checked_ids(item_ids, days.size)
     ratios: list[float] = []
     rng = np.random.default_rng(seed)
-    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2):
+    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2, ids=ids):
         try:
             ratios.append(tail_ratio(series[index]))
         except AggregationError:
@@ -517,6 +542,7 @@ def pit_uniformity(
     values: Floats,
     day_index: Ints,
     *,
+    item_ids: Ids,
     horizon_days: int = 5,
     draws: int = 2000,
     seed: int = 20260813,
@@ -537,13 +563,14 @@ def pit_uniformity(
     if series.size == 0:
         raise AggregationError("PIT test needs at least one item")
 
+    ids = checked_ids(item_ids, days.size)
     block_days = horizon_days * 2
     rng = np.random.default_rng(seed)
     tail = (1.0 - confidence) / 2.0 * 100.0
     means = np.array(
         [
             float(np.mean(series[i]))
-            for i in block_resamples(days, rng, draws=draws, block_days=block_days)
+            for i in block_resamples(days, rng, draws=draws, block_days=block_days, ids=ids)
         ]
     )
     lower, upper = np.percentile(means, [tail, 100.0 - tail])

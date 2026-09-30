@@ -27,7 +27,7 @@ quarter of it is precisely the failure this exists to prevent.
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 
 import numpy as np
@@ -133,6 +133,7 @@ def moving_block_bootstrap(
     *,
     draws: int,
     block_days: int,
+    ids: Sequence[object] | NDArray[np.generic],
 ) -> NDArray[np.float64]:
     """Resample contiguous calendar blocks, taking every window that starts inside.
 
@@ -150,9 +151,34 @@ def moving_block_bootstrap(
     produced a result that had to be withheld.
     """
     means = np.empty(draws, dtype=np.float64)
-    for draw, index in enumerate(block_resamples(starts, rng, draws=draws, block_days=block_days)):
+    resamples = block_resamples(starts, rng, draws=draws, block_days=block_days, ids=ids)
+    for draw, index in enumerate(resamples):
         means[draw] = float(np.mean(differences[index]))
     return means
+
+
+class ResampleOrderError(ValueError):
+    """The items cannot be put in one fixed order, so no resample is defined."""
+
+
+def pinned_order(
+    starts: NDArray[np.int64], ids: Sequence[object] | NDArray[np.generic]
+) -> NDArray[np.int64]:
+    """The items sorted by day, then by `ids` — one order, whatever produced them.
+
+    Many items share a day, and which of a day's items survive a resample's final
+    truncation depends on the order they were sorted into. numpy's default sort
+    does not fix the order of equal keys: it differs from a stable sort on every
+    day array this project has, and a stable sort would only keep whatever order
+    the rows arrived in. So ties are broken by an item's own id, and the order is
+    a function of the items alone (Findings #70).
+    """
+    keys = np.asarray(ids)
+    if keys.shape != starts.shape:
+        raise ResampleOrderError(f"{keys.size} ids for {starts.size} items")
+    if np.unique(keys).size != keys.size:
+        raise ResampleOrderError("item ids repeat, so they cannot order tied days")
+    return np.asarray(np.lexsort((keys, starts)), dtype=np.int64)
 
 
 def block_resamples(
@@ -161,6 +187,7 @@ def block_resamples(
     *,
     draws: int,
     block_days: int,
+    ids: Sequence[object] | NDArray[np.generic],
 ) -> Iterator[NDArray[np.int64]]:
     """The resampling of `moving_block_bootstrap`, yielding INDICES rather than means.
 
@@ -169,8 +196,10 @@ def block_resamples(
     exactly the same blocks. Re-deriving the clustering beside it would let the two
     drift apart, and an interval computed under a different dependence assumption
     than the one beside it is not comparable to it.
+
+    `ids` fixes the order of items that share a day — see `pinned_order`.
     """
-    order = np.argsort(starts)
+    order = pinned_order(starts, ids)
     sorted_starts = starts[order]
     occupied = np.unique(sorted_starts)
     target = starts.size
@@ -234,6 +263,9 @@ def evaluate_calibration(
             rng,
             draws=bootstrap_draws,
             block_days=design.horizon_days * 2,
+            # A simulated panel has no item names; its own generation order is
+            # fixed by the seed, so position is an id that cannot move.
+            ids=np.arange(window_starts.size),
         )
         lower, upper = np.percentile(means, [2.5, 97.5])
         if lower > 0 or upper < 0:
@@ -335,6 +367,9 @@ def evaluate_skill(
             rng,
             draws=bootstrap_draws,
             block_days=design.horizon_days * 2,
+            # A simulated panel has no item names; its own generation order is
+            # fixed by the seed, so position is an id that cannot move.
+            ids=np.arange(window_starts.size),
         )
         lower, upper = np.percentile(means, [2.5, 97.5])
         if upper < 0:  # M.A.P. beats the baseline, and zero is outside the interval

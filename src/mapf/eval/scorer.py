@@ -182,6 +182,13 @@ class ScoredItem:
     earnings_multiplier: float | None = None
 
     @property
+    def item_id(self) -> str:
+        """The item's name, "AAPL 2026-01-29": what orders it among items that share
+        its day when a bootstrap sorts them. It is the same string the scoring record
+        keys on, so a reproduction from the record orders items identically."""
+        return f"{self.ticker} {self.as_of.isoformat()}"
+
+    @property
     def names(self) -> tuple[str, ...]:
         return tuple(sorted(self.baseline_crps))
 
@@ -393,7 +400,9 @@ class BandScores:
             return [item.map_crps for item in self.items]
         return [item.baseline_crps[name] for item in self.items if name in item.baseline_crps]
 
-    def paired(self, name: str, metric: str = "crps") -> tuple[list[float], list[float], list[int]]:
+    def paired(
+        self, name: str, metric: str = "crps"
+    ) -> tuple[list[float], list[float], list[int], list[str]]:
         """M.A.P. and one baseline on exactly the items both scored.
 
         Pairing requires the same items on both sides; a baseline that failed on
@@ -408,6 +417,7 @@ class BandScores:
             [float(getattr(i, mine)) for i in both],
             [float(getattr(i, theirs)[name]) for i in both],
             [i.day_index for i in both],
+            [i.item_id for i in both],
         )
 
     def scores(self, metric: str = "crps", name: str | None = None) -> list[float]:
@@ -420,6 +430,11 @@ class BandScores:
     @property
     def day_index(self) -> list[int]:
         return [item.day_index for item in self.items]
+
+    @property
+    def item_ids(self) -> list[str]:
+        """What orders items that share a day in every bootstrap (Findings #70)."""
+        return [item.item_id for item in self.items]
 
     @property
     def directional_hits(self) -> float:

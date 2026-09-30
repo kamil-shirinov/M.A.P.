@@ -33,6 +33,12 @@ from mapf.eval.aggregate import (
 from mapf.eval.scoring import pit, pit_deviation
 
 
+def _ids(days: object) -> list[str]:
+    """One fixed id per item, in position order: the bootstrap orders items that
+    share a day by these (Findings #70)."""
+    return [f"item{k:05d}" for k in range(len(days))]  # type: ignore[arg-type]
+
+
 def _days(n: int, per_day: int = 1) -> list[int]:
     return [i // per_day for i in range(n)]
 
@@ -44,7 +50,7 @@ def test_a_uniformly_better_model_is_detected() -> None:
     n = 200
     base = [1.0] * n
     model = [0.8] * n
-    result = compare(model, base, _days(n), name="map", baseline="rw")
+    result = compare(model, base, _days(n), name="map", baseline="rw", item_ids=_ids(_days(n)))
     assert result.mean_difference == pytest.approx(-0.2)
     assert result.verdict == "better"
     assert result.relative_improvement == pytest.approx(0.2)
@@ -52,7 +58,9 @@ def test_a_uniformly_better_model_is_detected() -> None:
 
 def test_a_uniformly_worse_model_is_detected() -> None:
     n = 200
-    result = compare([1.3] * n, [1.0] * n, _days(n), name="map", baseline="rw")
+    result = compare(
+        [1.3] * n, [1.0] * n, _days(n), name="map", baseline="rw", item_ids=_ids(_days(n))
+    )
     assert result.verdict == "worse"
     assert result.significant is True
 
@@ -61,7 +69,7 @@ def test_identical_forecasters_are_indistinguishable() -> None:
     n = 200
     rng = np.random.default_rng(0)
     scores = rng.normal(1.0, 0.3, size=n)
-    result = compare(scores, scores, _days(n), name="a", baseline="b")
+    result = compare(scores, scores, _days(n), name="a", baseline="b", item_ids=_ids(_days(n)))
     assert result.mean_difference == pytest.approx(0.0)
     assert result.significant is False
     assert result.verdict == "indistinguishable"
@@ -75,7 +83,7 @@ def test_pairing_removes_the_common_market_move() -> None:
     common = rng.normal(0.0, 5.0, size=n)  # huge shared component
     model = common + 0.1
     base = common + 0.2
-    result = compare(model, base, _days(n), name="map", baseline="rw")
+    result = compare(model, base, _days(n), name="map", baseline="rw", item_ids=_ids(_days(n)))
     assert result.mean_difference == pytest.approx(-0.1, abs=1e-9)
     assert result.significant is True
     # The shared component dwarfs the effect; only pairing makes it visible.
@@ -96,9 +104,16 @@ def test_clustered_dates_widen_the_interval() -> None:
     scores = group + rng.normal(0.0, 0.1, size=n)
     zeros = np.zeros(n)
 
-    spread = compare(scores, zeros, list(range(n)), name="m", baseline="b")
+    spread = compare(
+        scores, zeros, list(range(n)), name="m", baseline="b", item_ids=_ids(list(range(n)))
+    )
     clustered = compare(
-        scores, zeros, [(i // per_day) * per_day for i in range(n)], name="m", baseline="b"
+        scores,
+        zeros,
+        [(i // per_day) * per_day for i in range(n)],
+        name="m",
+        baseline="b",
+        item_ids=_ids([(i // per_day) * per_day for i in range(n)]),
     )
 
     assert clustered.date_clusters < spread.date_clusters
@@ -106,29 +121,40 @@ def test_clustered_dates_widen_the_interval() -> None:
 
 
 def test_the_date_cluster_count_is_reported() -> None:
-    result = compare([1.0] * 100, [1.1] * 100, _days(100, per_day=25), name="m", baseline="b")
+    result = compare(
+        [1.0] * 100,
+        [1.1] * 100,
+        _days(100, per_day=25),
+        name="m",
+        baseline="b",
+        item_ids=_ids(_days(100, per_day=25)),
+    )
     assert result.date_clusters <= 4
     assert result.n == 100
 
 
 def test_mismatched_lengths_are_refused() -> None:
     with pytest.raises(AggregationError, match="disagree in length"):
-        compare([1.0, 2.0], [1.0], [0, 1], name="m", baseline="b")
+        compare([1.0, 2.0], [1.0], [0, 1], name="m", baseline="b", item_ids=_ids([0, 1]))
 
 
 def test_an_empty_comparison_is_refused() -> None:
     with pytest.raises(AggregationError, match="no scored items"):
-        compare([], [], [], name="m", baseline="b")
+        compare([], [], [], name="m", baseline="b", item_ids=_ids([]))
 
 
 def test_non_finite_scores_are_refused() -> None:
     """A NaN would propagate silently into the reported mean."""
     with pytest.raises(AggregationError, match="non-finite"):
-        compare([1.0, float("nan")], [1.0, 1.0], [0, 1], name="m", baseline="b")
+        compare(
+            [1.0, float("nan")], [1.0, 1.0], [0, 1], name="m", baseline="b", item_ids=_ids([0, 1])
+        )
 
 
 def test_a_zero_baseline_does_not_divide_by_zero() -> None:
-    result = compare([0.0] * 50, [0.0] * 50, _days(50), name="m", baseline="b")
+    result = compare(
+        [0.0] * 50, [0.0] * 50, _days(50), name="m", baseline="b", item_ids=_ids(_days(50))
+    )
     assert result.relative_improvement == 0.0
 
 
@@ -138,14 +164,27 @@ def test_a_zero_baseline_does_not_divide_by_zero() -> None:
 def test_an_indistinguishable_result_is_not_reported_as_no_difference() -> None:
     rng = np.random.default_rng(3)
     scores = rng.normal(1.0, 0.5, size=120)
-    (line,) = summarise([compare(scores, scores, _days(120), name="map", baseline="rw")])
+    (line,) = summarise(
+        [compare(scores, scores, _days(120), name="map", baseline="rw", item_ids=_ids(_days(120)))]
+    )
     assert "indistinguishable" in line
     assert "not evidence of no difference" in line
     assert "n=120" in line
 
 
 def test_a_significant_result_reports_its_direction_and_sample() -> None:
-    (line,) = summarise([compare([0.5] * 150, [1.0] * 150, _days(150), name="map", baseline="rw")])
+    (line,) = summarise(
+        [
+            compare(
+                [0.5] * 150,
+                [1.0] * 150,
+                _days(150),
+                name="map",
+                baseline="rw",
+                item_ids=_ids(_days(150)),
+            )
+        ]
+    )
     assert "better" in line
     assert "n=150" in line
     assert "date clusters" in line
@@ -275,7 +314,9 @@ def test_the_calibration_interval_brackets_a_known_ratio() -> None:
     rng = np.random.default_rng(11)
     realised = rng.normal(0.0, 0.05, 200)
     stated = np.full(200, 0.10)
-    result = calibration_interval(stated, realised, _clustered_days(200))
+    result = calibration_interval(
+        stated, realised, _clustered_days(200), item_ids=_ids(_clustered_days(200))
+    )
     assert 1.7 < result.ratio < 2.3
     assert result.lower > 1.0
     assert result.verdict == "over-dispersed"
@@ -285,7 +326,9 @@ def test_a_calibrated_forecaster_is_not_called_miscalibrated() -> None:
     rng = np.random.default_rng(12)
     realised = rng.normal(0.0, 0.05, 300)
     stated = np.full(300, float(np.sqrt(np.mean(realised**2))))
-    result = calibration_interval(stated, realised, _clustered_days(300))
+    result = calibration_interval(
+        stated, realised, _clustered_days(300), item_ids=_ids(_clustered_days(300))
+    )
     assert result.lower <= 1.0 <= result.upper
     assert result.verdict == "indistinguishable from calibrated"
 
@@ -300,7 +343,7 @@ def test_the_verdict_reads_the_interval_and_not_the_point() -> None:
 
 def test_mismatched_calibration_inputs_refuse() -> None:
     with pytest.raises(AggregationError, match="disagree in length"):
-        calibration_interval([0.1, 0.2], [0.1], [0, 1])
+        calibration_interval([0.1, 0.2], [0.1], [0, 1], item_ids=_ids([0, 1]))
 
 
 def test_a_flat_pit_histogram_is_flat() -> None:
@@ -329,14 +372,16 @@ def test_a_degenerate_resample_is_dropped_and_the_rest_still_report() -> None:
     realised = [0.0] * 40 + [0.03, -0.02] * 20
     stated = [0.04] * 80
     days = [0] * 40 + [i // 2 * 7 + 70 for i in range(40)]
-    result = calibration_interval(stated, realised, days, draws=400)
+    result = calibration_interval(stated, realised, days, draws=400, item_ids=_ids(days))
     assert result.lower < result.upper
     assert result.n == 80
 
 
 def test_an_all_zero_panel_refuses_on_the_point_estimate() -> None:
     with pytest.raises(AggregationError, match="realised outcomes are all zero"):
-        calibration_interval([0.04] * 20, [0.0] * 20, list(range(20)), draws=50)
+        calibration_interval(
+            [0.04] * 20, [0.0] * 20, list(range(20)), draws=50, item_ids=_ids(list(range(20)))
+        )
 
 
 def test_an_interval_with_no_surviving_draw_refuses(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -349,7 +394,9 @@ def test_an_interval_with_no_surviving_draw_refuses(monkeypatch: pytest.MonkeyPa
         lambda *a, **k: iter([np.arange(19)] * 5),
     )
     with pytest.raises(AggregationError, match="no bootstrap resample"):
-        calibration_interval([0.04] * 20, realised, list(range(20)), draws=5)
+        calibration_interval(
+            [0.04] * 20, realised, list(range(20)), draws=5, item_ids=_ids(list(range(20)))
+        )
 
 
 # The PIT tilt and shape tests
@@ -358,7 +405,7 @@ def test_an_interval_with_no_surviving_draw_refuses(monkeypatch: pytest.MonkeyPa
 def test_a_uniform_pit_is_not_called_tilted() -> None:
     rng = np.random.default_rng(3)
     values = rng.uniform(0.0, 1.0, 400)
-    result = pit_uniformity(values, _clustered_days(400))
+    result = pit_uniformity(values, _clustered_days(400), item_ids=_ids(_clustered_days(400)))
     assert result.tilted == "not established"
     assert result.lower <= 0.5 <= result.upper
 
@@ -368,7 +415,7 @@ def test_a_strong_tilt_is_established_on_both_views() -> None:
     interval must exclude it, or the verdict understates what is there."""
     rng = np.random.default_rng(4)
     values = rng.uniform(0.0, 1.0, 400) * 0.5 + 0.5
-    result = pit_uniformity(values, _clustered_days(400))
+    result = pit_uniformity(values, _clustered_days(400), item_ids=_ids(_clustered_days(400)))
     assert result.tilted == "established"
     assert result.lower > 0.5
     assert result.cluster_lower > 0.5
@@ -404,7 +451,7 @@ def test_a_symmetric_u_has_no_tilt_and_the_shape_test_still_sees_it() -> None:
     rng = np.random.default_rng(102)
     low = rng.random(200) < 0.5
     values = np.where(low, rng.uniform(0.0, 0.05, 200), rng.uniform(0.95, 1.0, 200))
-    result = pit_uniformity(values, _clustered_days(200))
+    result = pit_uniformity(values, _clustered_days(200), item_ids=_ids(_clustered_days(200)))
     assert result.tilted == "not established"
     assert min(0.5 - result.lower, result.upper - 0.5) > 0.04
     assert min(0.5 - result.cluster_lower, result.cluster_upper - 0.5) > 0.04
@@ -413,12 +460,12 @@ def test_a_symmetric_u_has_no_tilt_and_the_shape_test_still_sees_it() -> None:
 
 def test_the_pit_test_refuses_mismatched_inputs() -> None:
     with pytest.raises(AggregationError, match="differ in length"):
-        pit_uniformity([0.1, 0.2], [0])
+        pit_uniformity([0.1, 0.2], [0], item_ids=_ids([0]))
 
 
 def test_the_pit_test_refuses_an_empty_panel() -> None:
     with pytest.raises(AggregationError, match="at least one item"):
-        pit_uniformity([], [])
+        pit_uniformity([], [], item_ids=_ids([]))
 
 
 def test_anderson_darling_is_small_for_a_uniform_sample() -> None:
@@ -433,7 +480,7 @@ def test_anderson_darling_catches_the_tails_that_ks_misses() -> None:
     body = rng.uniform(0.25, 0.75, 180)
     tails = np.concatenate([rng.uniform(0.0, 0.02, 10), rng.uniform(0.98, 1.0, 10)])
     values = np.concatenate([body, tails])
-    result = pit_uniformity(values, _clustered_days(200))
+    result = pit_uniformity(values, _clustered_days(200), item_ids=_ids(_clustered_days(200)))
     assert result.anderson_darling > AD_FIVE_PERCENT
     assert result.tails_heavy
     assert result.tilted == "not established"
@@ -539,7 +586,9 @@ def test_z_from_pit_needs_data() -> None:
 
 def test_the_tail_interval_finds_a_known_heavy_tail() -> None:
     rng = np.random.default_rng(105)
-    result = tail_ratio_interval(_heavy(rng, 600), _clustered_days(600), draws=400)
+    result = tail_ratio_interval(
+        _heavy(rng, 600), _clustered_days(600), draws=400, item_ids=_ids(_clustered_days(600))
+    )
     assert result.ratio > 1.3
     assert result.lower > 1.0
     assert result.verdict == "heavier-tailed than normal"
@@ -548,7 +597,12 @@ def test_the_tail_interval_finds_a_known_heavy_tail() -> None:
 
 def test_a_gaussian_panel_is_not_called_heavy_tailed() -> None:
     rng = np.random.default_rng(106)
-    result = tail_ratio_interval(rng.normal(0.0, 1.0, 600), _clustered_days(600), draws=400)
+    result = tail_ratio_interval(
+        rng.normal(0.0, 1.0, 600),
+        _clustered_days(600),
+        draws=400,
+        item_ids=_ids(_clustered_days(600)),
+    )
     assert result.lower <= 1.0 <= result.upper
     assert result.verdict == "indistinguishable from normal-tailed"
 
@@ -571,8 +625,8 @@ def test_the_tail_interval_is_reproducible_from_the_registered_seed() -> None:
     rng = np.random.default_rng(107)
     z = _heavy(rng, 300)
     days = _clustered_days(300)
-    first = tail_ratio_interval(z, days, draws=200)
-    again = tail_ratio_interval(z, days, draws=200)
+    first = tail_ratio_interval(z, days, draws=200, item_ids=_ids(days))
+    again = tail_ratio_interval(z, days, draws=200, item_ids=_ids(days))
     assert (first.lower, first.upper) == (again.lower, again.upper)
 
 
@@ -603,8 +657,8 @@ def test_a_tail_concentrated_in_time_gets_the_wider_interval() -> None:
     spread_out = base.copy()
     spread_out[[i * 20 for i in range(12)]] = extremes
 
-    together = tail_ratio_interval(concentrated, days, draws=800)
-    apart = tail_ratio_interval(spread_out, days, draws=800)
+    together = tail_ratio_interval(concentrated, days, draws=800, item_ids=_ids(days))
+    apart = tail_ratio_interval(spread_out, days, draws=800, item_ids=_ids(days))
 
     assert together.date_clusters == apart.date_clusters == 24
     assert (together.upper - together.lower) > (apart.upper - apart.lower)
@@ -614,7 +668,9 @@ def test_a_tail_concentrated_in_time_gets_the_wider_interval() -> None:
 
 
 def test_the_block_count_is_reported_on_the_same_convention_as_the_rest() -> None:
-    result = tail_ratio_interval([1.0, -2.0, 0.5, 3.0], [0, 3, 11, 12], draws=50)
+    result = tail_ratio_interval(
+        [1.0, -2.0, 0.5, 3.0], [0, 3, 11, 12], draws=50, item_ids=_ids([0, 3, 11, 12])
+    )
     assert result.date_clusters == 2
 
 
@@ -625,8 +681,8 @@ def test_the_basic_interval_is_available_and_reflects_the_draws() -> None:
     rng = np.random.default_rng(109)
     z = _heavy(rng, 400)
     days = _clustered_days(400)
-    pct = tail_ratio_interval(z, days, draws=300)
-    basic = tail_ratio_interval(z, days, draws=300, method="basic")
+    pct = tail_ratio_interval(z, days, draws=300, item_ids=_ids(days))
+    basic = tail_ratio_interval(z, days, draws=300, method="basic", item_ids=_ids(days))
     assert pct.ratio == basic.ratio
     assert basic.lower == pytest.approx(2 * pct.ratio - pct.upper)
     assert basic.upper == pytest.approx(2 * pct.ratio - pct.lower)
@@ -634,12 +690,12 @@ def test_the_basic_interval_is_available_and_reflects_the_draws() -> None:
 
 def test_an_unknown_interval_method_refuses() -> None:
     with pytest.raises(AggregationError, match="unknown interval method"):
-        tail_ratio_interval([1.0, 2.0], [0, 1], method="bca")
+        tail_ratio_interval([1.0, 2.0], [0, 1], method="bca", item_ids=_ids([0, 1]))
 
 
 def test_mismatched_tail_inputs_refuse() -> None:
     with pytest.raises(AggregationError, match="disagree in length"):
-        tail_ratio_interval([1.0, 2.0], [0])
+        tail_ratio_interval([1.0, 2.0], [0], item_ids=_ids([0]))
 
 
 def test_a_tail_interval_with_no_surviving_draw_refuses(
@@ -659,4 +715,12 @@ def test_a_tail_interval_with_no_surviving_draw_refuses(
         lambda *a, **k: iter([np.arange(10)] * 5),
     )
     with pytest.raises(AggregationError, match="no bootstrap resample"):
-        tail_ratio_interval(z, list(range(20)), draws=5)
+        tail_ratio_interval(z, list(range(20)), draws=5, item_ids=_ids(list(range(20))))
+
+
+def test_a_statistic_refuses_ids_that_cannot_order_its_items() -> None:
+    """Refused as an aggregation error, before any resample is drawn."""
+    with pytest.raises(AggregationError, match="2 item ids for 3 items"):
+        tail_ratio_interval([1.0, 2.0, 3.0], [0, 0, 1], item_ids=["a", "b"])
+    with pytest.raises(AggregationError, match="item ids repeat"):
+        compare([1.0, 2.0], [1.0, 1.0], [0, 0], item_ids=["a", "a"], name="m", baseline="b")

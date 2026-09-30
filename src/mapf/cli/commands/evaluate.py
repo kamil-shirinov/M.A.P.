@@ -865,9 +865,9 @@ def _score(
 def _comparisons(scores: BandScores, metric: str = "crps") -> list[Comparison]:
     out: list[Comparison] = []
     for name in sorted({n for item in scores.items for n in item.baseline_crps}):
-        model, base, days = scores.paired(name, metric)
+        model, base, days, ids = scores.paired(name, metric)
         if model:
-            out.append(compare(model, base, days, name="M.A.P.", baseline=name))
+            out.append(compare(model, base, days, item_ids=ids, name="M.A.P.", baseline=name))
     return out
 
 
@@ -969,7 +969,9 @@ def _directional(scores: BandScores) -> None:
     days = scores.day_index
     mine = scores.scores("brier")
     coin = [0.25] * len(mine)
-    comparison = compare(mine, coin, days, name="M.A.P.", baseline="a coin flip")
+    comparison = compare(
+        mine, coin, days, item_ids=scores.item_ids, name="M.A.P.", baseline="a coin flip"
+    )
     for line in summarise([comparison]):
         typer.echo(f"    {line}")
     typer.echo(
@@ -1001,7 +1003,7 @@ def _dispersion(scores: BandScores) -> None:
     stated = [item.map_sigma for item in scores.items]
     typer.echo("")
     try:
-        k = calibration_interval(stated, realised, scores.day_index)
+        k = calibration_interval(stated, realised, scores.day_index, item_ids=scores.item_ids)
     except AggregationError as error:
         typer.secho(f"  calibration: not computed — {error}", fg=typer.colors.YELLOW)
         return
@@ -1020,7 +1022,7 @@ def _dispersion(scores: BandScores) -> None:
     # The bars are a picture, not evidence. Ten bins give ten chances to look
     # extreme, and the eye is drawn to whichever one did — so the claim is made by
     # the two pre-stated statistics below and never by reading the histogram.
-    test = pit_uniformity(scores.pit_values, scores.day_index)
+    test = pit_uniformity(scores.pit_values, scores.day_index, item_ids=scores.item_ids)
     typer.echo(
         f"    tilt: mean PIT {test.mean:.4f} vs 0.5 — "
         f"[{test.lower:.4f}, {test.upper:.4f}] over {test.n} items, "

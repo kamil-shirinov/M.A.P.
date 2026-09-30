@@ -27,6 +27,12 @@ from mapf.eval.power import (
 )
 
 
+def _ids(days: object) -> list[str]:
+    """One fixed id per item, in position order: the bootstrap orders items that
+    share a day by these (Findings #70)."""
+    return [f"item{k:05d}" for k in range(len(days))]  # type: ignore[arg-type]
+
+
 def test_the_reportable_sample_is_a_quarter_of_the_corpus() -> None:
     """The number that matters is not the corpus size. Halving by ticker for the
     holdout and again by cutoff side leaves a quarter, and sizing on the whole is
@@ -173,7 +179,7 @@ def test_the_resample_is_the_size_of_the_sample_even_when_the_calendar_is_empty(
     starts = _clustered_starts()
     differences = np.ones(starts.size, dtype=np.float64)
     means = _moving_block_bootstrap(
-        differences, starts, np.random.default_rng(0), draws=50, block_days=10
+        differences, starts, np.random.default_rng(0), draws=50, block_days=10, ids=_ids(starts)
     )
     # Constant differences: any correctly sized resample averages to exactly 1.0.
     assert np.allclose(means, 1.0)
@@ -184,7 +190,9 @@ def test_every_drawn_block_carries_observations() -> None:
     starts = _clustered_starts()
     rng = np.random.default_rng(1)
     differences = rng.normal(size=starts.size)
-    means = _moving_block_bootstrap(differences, starts, rng, draws=200, block_days=10)
+    means = _moving_block_bootstrap(
+        differences, starts, rng, draws=200, block_days=10, ids=_ids(starts)
+    )
     # A bootstrap that kept only a handful of blocks per draw would scatter far
     # more widely than the sample's own standard error.
     assert means.std(ddof=1) < 3.0 * differences.std(ddof=1) / math.sqrt(starts.size)
@@ -194,7 +202,9 @@ def test_the_bootstrap_still_recovers_the_sample_mean() -> None:
     starts = _clustered_starts()
     rng = np.random.default_rng(2)
     differences = rng.normal(loc=0.5, size=starts.size)
-    means = _moving_block_bootstrap(differences, starts, rng, draws=400, block_days=10)
+    means = _moving_block_bootstrap(
+        differences, starts, rng, draws=400, block_days=10, ids=_ids(starts)
+    )
     assert means.mean() == pytest.approx(differences.mean(), abs=0.05)
 
 
@@ -208,3 +218,51 @@ def test_occupied_blocks_counts_clusters_not_forecasts() -> None:
 def test_occupied_blocks_is_the_full_count_when_dates_are_spread() -> None:
     spread = np.arange(0, 200, 21, dtype=np.int64)
     assert occupied_blocks(spread, 21) == spread.size
+
+
+# --- the order of items that share a day (Findings #70) --------------------------
+
+
+def _tied_panel(seed: int) -> tuple[np.ndarray, np.ndarray]:
+    rng = np.random.default_rng(seed)
+    days = np.repeat(np.arange(0, 200, 7), 6).astype(np.int64)  # six items a day
+    ids = np.array([f"T{rng.integers(0, 10**6):06d} {d}" for d in days])
+    return days, ids
+
+
+def test_the_resamples_do_not_depend_on_the_order_items_arrive_in() -> None:
+    """The property that makes a reproduction portable. Read as item ids, every
+    resample is the same whether the rows come sorted, shuffled or reversed."""
+    from mapf.eval.power import block_resamples
+
+    days, ids = _tied_panel(3)
+    target = days.size - 5  # so the last block drawn is always cut part-way
+
+    def as_ids(order: np.ndarray) -> list[list[str]]:
+        d, i = days[order][:target], ids[order][:target]
+        rng = np.random.default_rng(20260813)
+        return [list(i[idx]) for idx in block_resamples(d, rng, draws=40, block_days=10, ids=i)]
+
+    items = np.arange(target)
+    first = as_ids(items)
+    # The same items in another order: the same set, permuted.
+    assert as_ids(items[np.random.default_rng(9).permutation(target)]) == first
+    assert as_ids(items[::-1]) == first
+
+
+def test_the_order_is_by_day_then_by_id() -> None:
+    from mapf.eval.power import pinned_order
+
+    days = np.array([5, 1, 5, 1, 3], dtype=np.int64)
+    ids = np.array(["b", "z", "a", "c", "m"])
+    assert list(pinned_order(days, ids)) == [3, 1, 4, 2, 0]
+
+
+def test_ids_that_cannot_order_the_items_are_refused() -> None:
+    from mapf.eval.power import ResampleOrderError, pinned_order
+
+    days = np.array([1, 1, 2], dtype=np.int64)
+    with pytest.raises(ResampleOrderError, match="repeat"):
+        pinned_order(days, np.array(["a", "a", "b"]))
+    with pytest.raises(ResampleOrderError, match="2 ids for 3 items"):
+        pinned_order(days, np.array(["a", "b"]))

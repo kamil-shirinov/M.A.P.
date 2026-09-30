@@ -294,7 +294,7 @@ def test_pairing_uses_only_items_both_forecasters_scored() -> None:
         paths=500,
     )
     assert scores.n == 2
-    model, base, days = scores.paired("garch")
+    model, base, days, _ids = scores.paired("garch")
     assert len(model) == len(base) == len(days) == 1
     assert len(scores.crps()) == 2
 

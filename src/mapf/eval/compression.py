@@ -31,7 +31,7 @@ from dataclasses import dataclass
 import numpy as np
 from numpy.typing import NDArray
 
-from mapf.eval.aggregate import AggregationError, Floats, Ints
+from mapf.eval.aggregate import AggregationError, Floats, Ids, Ints, checked_ids
 from mapf.eval.power import block_resamples, occupied_blocks
 
 
@@ -122,6 +122,7 @@ def compression_interval(
     day_index: Ints,
     *,
     reference_sigma: Floats,
+    item_ids: Ids,
     horizon_days: int = 5,
     draws: int = 4000,
     seed: int = 20260813,
@@ -152,9 +153,10 @@ def compression_interval(
             f"baseline={log_base.size}, reference={log_reference.size}, days={days.size}"
         )
     forward, inverse_reverse, reliability, corrected = _statistics(log_map, log_base, log_reference)
+    ids = checked_ids(item_ids, days.size)
     drawn: list[tuple[float, float, float, float]] = []
     rng = np.random.default_rng(seed)
-    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2):
+    for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2, ids=ids):
         try:
             drawn.append(_statistics(log_map[index], log_base[index], log_reference[index]))
         except AggregationError:
@@ -221,6 +223,7 @@ def largest_move_cuts(
     realised_return: Floats,
     day_index: Ints,
     *,
+    item_ids: Ids,
     fractions: tuple[float, ...] = CUT_FRACTIONS,
     horizon_days: int = 5,
     draws: int = 4000,
@@ -251,7 +254,10 @@ def largest_move_cuts(
         )
     if not np.all(np.isfinite(moves)):
         raise AggregationError("every realised return must be finite")
-    order = np.argsort(-moves, kind="stable")
+    ids = checked_ids(item_ids, days.size)
+    # Largest move first, and equal moves in item-id order: the membership of the
+    # cut is then a function of the items alone, not of the order they arrived in.
+    order = np.lexsort((ids, -moves))
     tail = (1.0 - confidence) / 2.0 * 100.0
     cuts: list[MoveCut] = []
     for fraction in fractions:
@@ -264,7 +270,7 @@ def largest_move_cuts(
         top[order[:k]] = True
         differences: list[float] = []
         rng = np.random.default_rng(seed)
-        for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2):
+        for index in block_resamples(days, rng, draws=draws, block_days=horizon_days * 2, ids=ids):
             drawn_top, drawn_rest = ratio[index][top[index]], ratio[index][~top[index]]
             if drawn_top.size and drawn_rest.size:
                 differences.append(float(np.median(drawn_top) - np.median(drawn_rest)))
