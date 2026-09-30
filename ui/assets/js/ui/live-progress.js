@@ -1,26 +1,25 @@
-/* A run in progress: a rosette that engraves itself, one ring per stage.
+/* A run in progress: one ring per agent, calibrating while it works.
 
-   EVERY RING IS AN EVENT THE RUN RECORDED. The server reads each stage off the
-   run's own `trace.jsonl` as the agent finishes and streams it here; a ring is
-   engraved when that event arrives and at no other time. Nothing is timed,
-   estimated or interpolated. There is no percentage, because the run does not
-   know one — the analyst stage alone is most of the wait and says nothing until
-   it is done.
+   EVERY CHANGE TO A RING IS AN EVENT THE RUN RECORDED. The server reads each
+   stage off the run's own `trace.jsonl` as the agent finishes and streams it
+   here; a ring settles into its glowing circle when that event arrives and at no
+   other time. Nothing is timed, estimated or interpolated. There is no
+   percentage, because the run does not know one — the analyst stage alone is
+   most of the wait and says nothing until it is done.
 
-   THE RING IN PROGRESS IS ALIVE, NOT MEASURED. A short bright trace runs slowly
-   round it, forever, at one speed. It says "this is the stage being worked on",
-   which is true, and nothing about how far through it the run is, which nobody
-   knows. With reduced motion it stands still as a dashed ring.
+   THE RING AT WORK TURNS, AND THE TURNING MEASURES NOTHING. Its circles swing
+   against each other on a fixed twelve-second cycle (calibration-rings.js) that
+   never speeds up or fills. It says "this agent is working", which is true, and
+   nothing about how far through it is, which nobody knows. With reduced motion
+   it stands still.
 
    The clock is elapsed time, beside the usual range the server measured from
    recorded runs. It counts up from when Analyse was pressed; it never counts
    down, because a countdown would be a promise. */
 
 import { chromeText } from "../lib/figure.js";
-import { prefersReducedMotion } from "../lib/motion.js";
-import { ringPath } from "./rosette.js";
+import { createRings } from "./calibration-rings.js";
 
-const SVG = "http://www.w3.org/2000/svg";
 const STAGES = ["intake", "analyst", "structuralist"];
 const WORDS = { intake: "Intake", analyst: "Analyst", structuralist: "Structuralist" };
 const DOING = { intake: "reading the filing", analyst: "reasoning through three scenarios", structuralist: "writing them as numbers" };
@@ -29,12 +28,6 @@ const el = (tag, className, text) => {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined) node.textContent = text;
-  return node;
-};
-
-const svgNode = (tag, attrs) => {
-  const node = document.createElementNS(SVG, tag);
-  for (const [k, v] of Object.entries(attrs ?? {})) node.setAttribute(k, String(v));
   return node;
 };
 
@@ -54,45 +47,6 @@ export function expected(event) {
 export function clock(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-}
-
-/** One ring per stage, inner first, each drawn as three close guilloche lines so
-    it reads as engraved rather than as a circle. */
-function rosette(stages) {
-  const svg = svgNode("svg", { viewBox: "0 0 1000 1000", class: "anl-rosette", "aria-hidden": "true", focusable: "false" });
-  const rings = new Map();
-  stages.forEach((stage, i) => {
-    const R = 170 + i * (260 / Math.max(stages.length - 1, 1));
-    const group = svgNode("g", { class: "anl-ring" });
-    group.dataset.stage = stage;
-    group.dataset.state = "waiting";
-    const lines = [-16, 0, 16].map((offset, k) =>
-      svgNode("path", {
-        d: ringPath(R + offset, (i * 0.9 + k * 0.35) * Math.PI, { lobes: 7 + i * 2, harmonic: 11 + i * 2, amplitude: 0.05 }),
-        class: "anl-ring-line",
-      }),
-    );
-    // The trace rides the middle line. It exists from the start and is shown
-    // only while its ring is the one in progress.
-    const trace = svgNode("path", { d: lines[1].getAttribute?.("d") ?? "", class: "anl-ring-trace" });
-    group.append(...lines, trace);
-    svg.append(group);
-    rings.set(stage, { group, lines, trace });
-  });
-  return { svg, rings };
-}
-
-/** Give a path its own length as a custom property, so the engraving and the
-    trace are sized to it. Decoration: a path that cannot measure itself — not
-    yet rendered, or no layout at all — simply keeps its plain stroke. */
-function measure(path) {
-  try {
-    const length = typeof path.getTotalLength === "function" ? path.getTotalLength() : 0;
-    if (length) path.style.setProperty("--len", String(length));
-    return length;
-  } catch {
-    return 0;
-  }
 }
 
 export function createProgress(host, { ticker }) {
@@ -146,18 +100,7 @@ export function createProgress(host, { ticker }) {
     }
   };
 
-  const setRing = (stage, state) => {
-    const ring = figure?.rings.get(stage);
-    if (!ring) return;
-    ring.group.dataset.state = state;
-    if (state === "running") measure(ring.trace);
-    if (state === "done") {
-      // Engraved once, when the run says so; with reduced motion, simply drawn.
-      for (const line of ring.lines) {
-        if (!prefersReducedMotion() && measure(line)) line.classList?.add("engrave");
-      }
-    }
-  };
+  const setRing = (stage, state) => figure?.set(stage, state);
 
   const advance = () => {
     current = stages.find((s) => !done.has(s)) ?? null;
@@ -178,7 +121,7 @@ export function createProgress(host, { ticker }) {
     update(event) {
       if (event.event === "started") {
         stages = Array.isArray(event.stages) && event.stages.length ? event.stages : STAGES;
-        figure = rosette(stages);
+        figure = createRings(stages);
         art.append(figure.svg);
         range = expected(event);
         head.textContent = "";

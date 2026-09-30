@@ -82,11 +82,11 @@ body > .masthead,
 .anl-cost { margin-top: var(--sp-4); max-width: 62ch; color: var(--ink-3); font-family: var(--font-sans); font-size: var(--step-0); }
 .anl-absence-foot { color: var(--ink-3); font-family: var(--font-sans); font-size: var(--step-0); }
 
-/* ---- progress: the rosette that engraves itself ----
-   One ring per stage, inner first. A ring waits faint, runs with a slow bright
-   trace going round it, and is engraved — drawn along its own length, once —
-   when the run's trace says the stage finished. Neutral throughout: nothing here
-   is a number, settled or otherwise. */
+/* ---- progress: one ring per agent, calibrating ----
+   Inner first: intake, analyst, structuralist. A ring waits faint, turns while
+   its agent works, and settles into one glowing circle when the run's trace says
+   the agent finished. Neutral throughout: nothing here is a number, settled or
+   otherwise. */
 .anl-progress {
   display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--sp-6); align-items: center;
   padding: var(--sp-4) 0;
@@ -94,25 +94,18 @@ body > .masthead,
 }
 .anl-progress-art { width: 200px; height: 200px; }
 .anl-rosette { width: 100%; height: 100%; overflow: visible; }
+/* The rings (calibration-rings.js). Waiting: faint. At work: brighter while
+   its circles turn. Finished: one flat circle in `--ring-glow`, with the glow
+   filter the module sets, for good. The stroke eases over the same 1.2s the
+   circles take to settle, so the glow comes up as the waves go down. */
 .anl-ring-line {
   fill: none; stroke: var(--ink-2); stroke-width: 1; vector-effect: non-scaling-stroke;
-  stroke-opacity: .14; transition: stroke-opacity 600ms var(--ease);
+  stroke-opacity: .16;
+  transition: stroke 1.2s var(--ease), stroke-opacity 1.2s var(--ease), stroke-width 1.2s var(--ease);
 }
-.anl-ring-trace { fill: none; stroke: none; vector-effect: non-scaling-stroke; }
-.anl-ring[data-state="running"] .anl-ring-line { stroke-opacity: .3; }
-.anl-ring[data-state="running"] .anl-ring-trace {
-  stroke: var(--ink-num); stroke-width: 1.8; stroke-linecap: round;
-  stroke-dasharray: calc(var(--len, 1000) * .08) calc(var(--len, 1000) * .92);
-  animation: anl-trace 28s linear infinite;
-}
-.anl-ring[data-state="done"] .anl-ring-line { stroke: var(--ink); stroke-opacity: .85; }
+.anl-ring[data-state="running"] .anl-ring-line { stroke: var(--ink); stroke-opacity: .55; }
+.anl-ring[data-state="done"] .anl-ring-line { stroke: var(--ring-glow); stroke-opacity: 1; stroke-width: 1.4; }
 .anl-ring[data-state="stopped"] .anl-ring-line { stroke-opacity: .3; stroke-dasharray: 2 6; }
-.anl-ring-line.engrave {
-  stroke-dasharray: var(--len, 0);
-  animation: anl-engrave 1.6s var(--ease) both;
-}
-@keyframes anl-trace { to { stroke-dashoffset: calc(-1 * var(--len, 1000)); } }
-@keyframes anl-engrave { from { stroke-dashoffset: var(--len, 0); } to { stroke-dashoffset: 0; } }
 
 .anl-progress-side { display: grid; gap: var(--sp-3); }
 .anl-progress-head { margin: 0; color: var(--ink); }
@@ -126,9 +119,8 @@ body > .masthead,
 .anl-note { margin: 0; color: var(--ink-3); font-family: var(--font-sans); max-width: 70ch; }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Still alive in the words and the clock; the ring in progress stands still. */
-  .anl-ring[data-state="running"] .anl-ring-trace { animation: none; stroke-dasharray: 3 7; stroke-width: 1.2; }
-  .anl-ring-line.engrave { animation: none; stroke-dasharray: none; }
+  /* Still alive in the words and the clock; nothing turns, and a finished ring
+     is its glowing circle at once. */
   .anl-ring-line { transition: none; }
 }
 @media (max-width: 640px) {

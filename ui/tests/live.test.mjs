@@ -245,7 +245,7 @@ describe("the door names the recorded run", () => {
   });
 });
 
-describe("a run in progress engraves a ring per stage, from the run's own events", () => {
+describe("a run in progress has a ring per agent, changed only by the run's own events", () => {
   const STARTED = {
     event: "started", ticker: "KO", horizon_days: 5, typical_seconds: 457,
     usual_range_seconds: [331, 692], stages: ["intake", "analyst", "structuralist"],
@@ -272,7 +272,7 @@ describe("a run in progress engraves a ring per stage, from the run's own events
     display.finish();
   });
 
-  it("engraves a ring only when the trace says its stage finished", async () => {
+  it("finishes a ring only when the trace says its agent finished", async () => {
     installDom();
     const { createProgress } = await load("ui/live-progress.js");
     const host = new Node("div");
@@ -326,14 +326,6 @@ describe("a run in progress engraves a ring per stage, from the run's own events
     const printed = strings.map((t) => t.replace(/\$\{[^}]*\}/g, ""));
     assert.ok(!printed.some((t) => t.includes("%")), "no percentage in anything it prints");
     assert.doesNotMatch(code, /\bremaining\b|left to go|\bETA\b/, "no countdown");
-  });
-
-  it("keeps the trace slow and continuous, and still under reduced motion", () => {
-    const sheet = read("assets/styles/analyse.css");
-    assert.match(sheet, /\.anl-ring\[data-state="running"\] \.anl-ring-trace \{[^}]*animation: anl-trace 28s linear infinite/);
-    const reduced = sheet.slice(sheet.indexOf("@media (prefers-reduced-motion: reduce) {\n  /* Still alive"));
-    assert.match(reduced, /\.anl-ring-trace \{ animation: none/);
-    assert.match(reduced, /\.anl-ring-line\.engrave \{ animation: none/);
   });
 
   it("opens the fan only when the result arrives", () => {
