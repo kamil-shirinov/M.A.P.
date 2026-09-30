@@ -77,7 +77,10 @@ Against a random walk widened for earnings days, CRPS is −0.00100 [−0.00222,
 better as a point estimate, not established.
 
 Four more things were measured. Every figure below has its interval and its sample in
-**[docs/results.md](docs/results.md)**.
+**[docs/results.md](docs/results.md)**. Intervals here are the recorded ones. The bootstrap
+has since pinned the order it sorts tied days in. Under that order one verdict changes, in
+item 4, and every other interval moves by at most 0.006.
+[docs/results.md](docs/results.md#which-order-an-interval-was-computed-in) has both.
 
 **1. The stated uncertainty was too narrow. A correction fixed that on unseen data —
 after failing its own test.** The forecasts claimed intervals about 27% tighter than the
@@ -135,7 +138,8 @@ were never recorded ([Findings #66](notebook/Findings%20&%20Incidents.md)). The 
 test used a wider interval that also allows for error in M.A.P.'s σ. On the second band it
 stays below 1.0 against both baselines, [0.33, 0.76] and [0.25, 0.80]. On development its
 upper end was 1.23 against GARCH, and against the random walk 0.9993 — a figure that turns on
-the order numpy happens to sort tied days in, and lands above 1.0 under most other orders
+the order numpy happens to sort tied days in, and lands above 1.0 under most other orders,
+including the one the bootstrap now pins, where it is 1.0060
 ([Findings #70](notebook/Findings%20&%20Incidents.md)). So the second band is where
 compression was established. It is the candidate explanation for both the heavy tails and
 the narrow intervals.

@@ -3289,3 +3289,89 @@ bootstrap bound within about 0.01 of its bar should be read as undecided.
 
 Same family as [[#67]]: a result that held on the machine that produced it and was never
 checked anywhere else.
+
+### Addendum, 2026-09-30 — the order is pinned, and what moves under it
+
+Decided: pin the order, not only the algorithm. A stable sort keeps whatever order the
+rows arrive in, which is its own accident. Since `b993512` the resampler sorts by day and
+then by a fixed item id, `TICKER YYYY-MM-DD`, with `np.lexsort`. Every estimator that
+resamples now requires the ids and refuses them missing, of the wrong length or repeated
+(`ResampleOrderError`, `AggregationError`). S3's cut breaks ties in |return| by the same
+id. Neither band has such a tie, so that changes no membership today. A test shuffles the
+input and gets the same resamples, so the result depends on neither numpy's build nor the
+file order.
+
+**The recorded figures stay as recorded.** Every one was computed in what is called here
+the **original order**: numpy's default `argsort` on the rows in the order the scoring
+record, or #61's rebuild, holds them. That ran under numpy 2.5.1, locked in `uv.lock` since
+`c28a6cc` (2026-08-13) and the version at `ad71b13`, `852b1cb` and `5ada5aa`, on CPython
+3.12 on this machine, an Apple M1 (arm64). Re-run today in that order, they reproduce. The
+**pinned order** is what the code computes from now on. Both below, with the same seeds and
+draws as the records. The holdout's figures have no pinned version, because its per-item
+scores were never persisted.
+
+| statistic | bar | recorded | original order | pinned order | verdict |
+| --- | --- | --- | --- | --- | --- |
+| **compression, dev 178, RW widest** | 1.0 | [0.2609, 0.9993] | [0.2609, 0.9993] | **[0.2611, 1.0060]** | **excludes → covers** |
+| compression, dev 175, RW widest | 1.0 | upper 1.0038 | [0.2614, 1.0038] | [0.2613, 1.0063] | covers |
+| compression, dev 178, RW corrected | 1.0 | [0.3144, 0.4659] | [0.3144, 0.4659] | [0.3148, 0.4660] | excludes |
+| compression, dev 178, GARCH corrected | 1.0 | [0.1656, 0.3423] | [0.1656, 0.3423] | [0.1655, 0.3414] | excludes |
+| compression, dev 178, GARCH widest | 1.0 | [0.1375, 1.2348] | [0.1375, 1.2348] | [0.1370, 1.2366] | covers |
+| compression, amb 177, RW corrected | 1.0 | [0.3532, 0.4747] | [0.3532, 0.4747] | [0.3541, 0.4749] | excludes |
+| compression, amb 177, GARCH corrected | 1.0 | [0.2869, 0.4281] | [0.2869, 0.4281] | [0.2871, 0.4281] | excludes |
+| compression, amb 177, RW widest | 1.0 | [0.3279, 0.7616] | [0.3279, 0.7616] | [0.3279, 0.7611] | excludes |
+| compression, amb 177, GARCH widest | 1.0 | [0.2531, 0.8032] | [0.2531, 0.8032] | [0.2540, 0.8015] | excludes |
+| compression, amb 174, RW widest | 1.0 | upper 0.7577 | [0.3307, 0.7577] | [0.3307, 0.7570] | excludes |
+| S3, dev 178, RW, 2,000 draws, three cuts | 0 | record 5 | reproduces | lower bounds up to 0.0042 higher | all exclude |
+| S3, amb 177, six cuts, 4,000 draws | 0 | #66 table | reproduces | every bound within 0.0026 | all exclude |
+| tail ratio, amb 177 | 1.0 | [0.9945, 1.5365] | [0.9933, 1.5378] | [0.9934, 1.5354] | covers: PARTIAL |
+| tail ratio, amb 174 | 1.0 | lower 0.9947 | [0.9947, 1.6078] | [0.9940, 1.6097] | covers: PARTIAL |
+| tail ratio, dev 175 | 1.0 | [1.0169, 1.4368] | [1.0169, 1.4368] | [1.0172, 1.4381] | excludes |
+| tail ratio, dev 178 | 1.0 | record 4, [1.0135, 1.4372] | [1.0131, 1.4372] | [1.0100, 1.4403] | excludes |
+| CRPS vs random walk | 0 | [+0.00071, +0.00278] | [+0.00071, +0.00278] | [+0.00071, +0.00278] | excludes |
+| CRPS vs GARCH | 0 | indistinguishable | [−0.00035, +0.00220] | [−0.00034, +0.00220] | covers |
+| CRPS vs earnings-scaled RW | 0 | [−0.00222, +0.00111] | [−0.00222, +0.00111] | [−0.00221, +0.00112] | covers |
+| log score vs random walk | 0 | [+0.08004, +0.36396] | [+0.08004, +0.36396] | [+0.08037, +0.36949] | excludes |
+| log score vs GARCH | 0 | worse by 12.0% | [+0.06284, +0.36219] | [+0.06347, +0.36286] | excludes |
+| log score vs earnings-scaled RW | 0 | indistinguishable | [−0.22488, +0.20743] | [−0.22379, +0.20898] | covers |
+| calibration ratio, dev 175 | 1.0 | [0.637, 0.801] | [0.6372, 0.8008] | [0.6354, 0.7992] | excludes |
+| calibration ratio, dev 178 (Timeline §15) | 1.0 | [0.637, 0.798] | [0.6370, 0.7977] | [0.6367, 0.7962] | excludes |
+| mean PIT, dev 178, items (ADR 0032) | 0.5 | [0.4098, 0.5423] | [0.4098, 0.5418] | [0.4098, 0.5424] | covers |
+| **corrected MAD-scale, refitted** | 1.0 | [0.6997, 0.9931] | [0.6997, 0.9931] | **[0.6985, 0.9938]** | excludes: FAIL |
+| corrected MAD-scale, held, 4,000 | 1.0 | [0.7088, 1.0653] | [0.7088, 1.0653] | [0.7086, 1.0593] | covers |
+| `a`, refitted | 0 | [−0.4426, +0.1880] | [−0.4426, +0.1880] | [−0.4431, +0.1888] | covers |
+| `b`, refitted | 1.0 | [1.2405, 1.4941] | [1.2405, 1.4941] | [1.2435, 1.4949] | excludes |
+| uncorrected MAD-scale, dev, 2,000 | 1.0 | [0.9406, 1.4173] | [0.9406, 1.4173] | [0.9428, 1.4173] | covers |
+| corrected MAD-scale, held, dev, 2,000 | 1.0 | [0.7069, 1.0653] | [0.7070, 1.0653] | [0.7086, 1.0653] | covers |
+| band gap to RW, ambiguous − clean | 0 | [−6.98%, +2.96%] | [−6.98%, +2.96%] | [−7.08%, +2.95%] | covers |
+
+Where "recorded" and "original order" differ, one gap is already on record: #61's tails
+reproduction on 177 is 0.0012 from what `24fbedc` recorded. Three are new. Two are
+178-item development figures from the 2026-09-02 vintage, which is not persisted; the
+rebuild takes 175 items from today's record and three from #61. The tail ratio's lower
+bound comes out 1.0131 against record 4's 1.0135, and ADR 0032's PIT upper bound 0.5418
+against 0.5423. The third is on the 175: the Timeline's held interval comes out 0.7070
+against 0.7069. I did not chase them. The PIT's cluster interval, [0.3964, 0.5371],
+resamples whole blocks and does not sort, so it is the same under both orders.
+
+**No verdict moves except development compression against the random walk.** Its widest
+upper bound goes from 0.9993 to 1.0060. That is the same figure a stable sort gave in the
+entry above. The records and the rebuild already list tied items in id order, so a stable
+sort and the pinned order are the same order on all four arrays. Three stated
+margins move with it, none across its bar:
+
+- **Phase 3's development condition** still fails, by 0.0062 instead of 0.0069 (0.9938).
+- **The tails replication's lower bound** on the 177 is 0.9934, 0.0066 short where the
+  reproduction was 0.0067 short. On the 174 it is 0.9940, not 0.9947.
+- **"Development reproduces record 5 (and 8) to four decimals"** is true of the original
+  order only. Under the pinned order the dev S3 bounds move by up to 0.0042, and the
+  corrected slopes by up to 0.0009.
+
+Every other interval moves by at most 0.006 and keeps its side.
+
+**Not pinned: the leakage bootstrap.** `leakage()` draws items independently with
+`rng.choice`. It never sorts, so this change does not touch it, and its recorded
+[−0.00934, +0.00603] reproduces. But it resamples by position, so it too depends on the
+order the rows arrive in. Sorted by day and then id, it gives [−0.00999, +0.00593]. The
+verdict is the same. Whether to pin it is a decision about a registered statistic, and it
+is left open.

@@ -22,6 +22,10 @@ budget and emitting no answer. All are named in `notebook/`.
 
 Development half, **175 items in 18 date clusters**, cluster-robust intervals throughout.
 
+Every interval in this document is in the **original order**, the one the records were
+computed in, unless it says otherwise. The bootstrap now pins a different order, and the
+figures under it are in [Which order an interval was computed in](#which-order-an-interval-was-computed-in).
+
 | | vs random walk | vs GARCH | vs earnings-scaled RW |
 | --- | --- | --- | --- |
 | CRPS | worse by 5.4% | indistinguishable | indistinguishable |
@@ -174,7 +178,8 @@ It gives no bounds.
 
 **Recomputed from the registration on 2026-09-29, on the original samples**
 ([Findings #66](../notebook/Findings%20&%20Incidents.md)). The estimator is now
-`mapf.eval.compression`. Same estimator on both bands, intervals computed on 2026-09-29:
+`mapf.eval.compression`. Same estimator on both bands, intervals computed on 2026-09-29 in
+the original order:
 
 | corrected slope | development, 178 | ambiguous, 177 |
 | --- | --- | --- |
@@ -191,8 +196,8 @@ excludes 1.0 against both baselines. On development against the random walk its 
 is 0.9993 on the original 178 items and 1.0038 on the 175 the scoring record now holds —
 but which side of 1.0 it lands on is decided by the order numpy sorts tied days in, not by
 the sample: across fifty other orders the 178-item bound runs from 0.9975 to 1.0071, above
-1.0 in forty-two (Findings #70). The development result cannot carry the claim; the
-replication carries it, and does not move.
+1.0 in forty-two (Findings #70). Under the order the bootstrap now pins it is 1.0060. The
+development result cannot carry the claim; the replication carries it, and does not move.
 
 S3, where the narrowness sits: the median σ(M.A.P.)/σ(baseline) on the largest moves by
 |realised return| against the rest, recomputed the same day. Development reproduces record
@@ -245,6 +250,65 @@ M.A.P. from the baselines (the paired differences cover zero); what does is the 
 past three sigma, six items where M.A.P. passes three sigma and a baseline does not, none
 the other way, over four distinct blocks. The export stores M.A.P.'s σ but not the
 baselines', so none of this can be recomputed from it.
+
+### Which order an interval was computed in
+
+The moving-block bootstrap sorts items by day and truncates each resample to the sample
+size. So when several items share a day, the order they are sorted into decides which of
+them make it into a resample (Findings #70). Two orders appear in this document.
+
+- **Original order**: numpy's default `argsort`, which does not keep ties in any
+  guaranteed order, applied to the rows in the order the scoring record, or the rebuild in
+  Findings #61, holds them. That ran under **numpy 2.5.1**, CPython 3.12, on the Apple M1
+  (arm64) that produced the records. It is the version locked in `uv.lock` since 2026-08-13
+  and the one in use at every recording commit. Every recorded figure was computed this
+  way, and re-run this way today, each reproduction above matches. **These are the figures
+  stated everywhere else in this document, and they stay as recorded.**
+- **Pinned order**: by day, then by a fixed item id, `TICKER YYYY-MM-DD`. The code
+  computes this from `b993512` (2026-09-30) on. It does not depend on numpy's build or on
+  the order of the rows in a file.
+
+Same seeds, draws and blocks for both.
+
+| stated result | bar | original order | pinned order |
+| --- | --- | --- | --- |
+| CRPS vs random walk | 0 | [+0.00071, +0.00278] | [+0.00071, +0.00278] |
+| CRPS vs GARCH | 0 | [−0.00035, +0.00220] | [−0.00034, +0.00220] |
+| CRPS vs earnings-scaled RW | 0 | [−0.00222, +0.00111] | [−0.00221, +0.00112] |
+| log score vs random walk | 0 | [+0.08004, +0.36396] | [+0.08037, +0.36949] |
+| log score vs GARCH | 0 | [+0.06284, +0.36219] | [+0.06347, +0.36286] |
+| log score vs earnings-scaled RW | 0 | [−0.22488, +0.20743] | [−0.22379, +0.20898] |
+| calibration ratio | 1.0 | [0.637, 0.801] | [0.635, 0.799] |
+| band gap to the random walk, ambiguous − clean | 0 | [−6.98%, +2.96%] | [−7.08%, +2.95%] |
+| corrected MAD-scale, refitted per resample | 1.0 | [0.6997, **0.9931**] | [0.6985, **0.9938**] |
+| compression vs RW, development 178 | 1.0 | [0.3144, 0.4659] | [0.3148, 0.4660] |
+| compression vs GARCH, development 178 | 1.0 | [0.1656, 0.3423] | [0.1655, 0.3414] |
+| compression vs RW, second band 177 | 1.0 | [0.3532, 0.4747] | [0.3541, 0.4749] |
+| compression vs GARCH, second band 177 | 1.0 | [0.2869, 0.4281] | [0.2871, 0.4281] |
+| **widest, RW, development 178** | 1.0 | [0.2609, **0.9993**] | [0.2611, **1.0060**] |
+| widest, RW, development 175 | 1.0 | [0.2614, 1.0038] | [0.2613, 1.0063] |
+| widest, GARCH, development 178 | 1.0 | [0.1375, 1.2348] | [0.1370, 1.2366] |
+| widest, RW, second band 177 | 1.0 | [0.3279, 0.7616] | [0.3279, 0.7611] |
+| widest, GARCH, second band 177 | 1.0 | [0.2531, 0.8032] | [0.2540, 0.8015] |
+| S3, second band, six differences | 0 | the table above | every bound within 0.0026 |
+| S3, development vs RW at 2,000 draws | 0 | record 5, exactly | lower bounds up to 0.0042 higher |
+| tail ratio, second band 177 | 1.0 | [0.9933, 1.5378] | [0.9934, 1.5354] |
+| tail ratio, second band 174 | 1.0 | [0.9947, 1.6078] | [0.9940, 1.6097] |
+| tail ratio, development 175 | 1.0 | [1.0169, 1.4368] | [1.0172, 1.4381] |
+
+**One verdict moves: development compression against the random walk**, whose widest upper
+bound crosses 1.0. Nothing else changes side. Two stated margins shift: Phase 3's
+development condition still fails, by 0.0062 instead of 0.0069, and the tail ratio on the
+177 misses 1.0 by 0.0066 instead of 0.0067. The sentences that development "reproduces
+record 5" and "record 8" to four decimals hold for the original order only. The
+development intervals the notebook states outside this document were checked the same way,
+with the same result. They are in Findings #70.
+
+**Two kinds of figure have no pinned version.** The holdout's intervals need per-item
+scores that were never persisted. The leakage interval, −0.00169 [−0.0093, +0.0060], does
+not use this bootstrap: it draws items independently and never sorts, so pinning does not
+change it. It does resample by position, so it depends on the order of the rows. Sorted
+by day and id it would be [−0.0100, +0.0059]. Whether to pin it is an open decision.
 
 ### Phase 4 — what a reader can verify without re-running anything
 
