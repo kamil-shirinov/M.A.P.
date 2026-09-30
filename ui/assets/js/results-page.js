@@ -27,7 +27,7 @@
 import * as source from "./data/source.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { fmt } from "./lib/format.js";
-import { mountPageRosette } from "./ui/rosette.js";
+import { mountGround } from "./ui/ground.js";
 import { mountMastheadNav } from "./ui/front-door.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { renderIdentity } from "./ui/results-identity.js";
@@ -190,7 +190,7 @@ async function take(band, meta) {
 }
 
 async function boot() {
-  mountPageRosette($("ground"));
+  mountGround($("ground"));
   mountMastheadNav($("masthead-nav"), { current: "results" });
 
   const params = new URLSearchParams(location.search);

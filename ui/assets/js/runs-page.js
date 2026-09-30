@@ -23,7 +23,7 @@
 import * as source from "./data/source.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
 import { prefersReducedMotion } from "./lib/motion.js";
-import { mountPageRosette } from "./ui/rosette.js";
+import { mountGround } from "./ui/ground.js";
 import { renderPageWhy } from "./ui/page-why.js";
 import { mountMastheadNav } from "./ui/front-door.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
@@ -320,7 +320,7 @@ function set(patch) {
 }
 
 async function boot() {
-  mountPageRosette($("ground"));
+  mountGround($("ground"));
   mountMastheadNav($("masthead-nav"), { current: "runs" });
 
   // -- stage 1: the manifest

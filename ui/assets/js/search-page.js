@@ -24,7 +24,7 @@ import { renderFunnel, whyGroups } from "./ui/search-funnel.js";
 import { renderPageWhy } from "./ui/page-why.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
 import { applyPageProvenance, enforce } from "./lib/provenance-audit.js";
-import { mountPageRosette } from "./ui/rosette.js";
+import { mountGround } from "./ui/ground.js";
 import { createModeController, mountDoor, mountMastheadNav } from "./ui/front-door.js";
 import { renderNoExport } from "./ui/no-export.js";
 
@@ -228,7 +228,7 @@ function paint() {
 
 async function boot() {
   // The ground carries no data, so it does not wait for any.
-  mountPageRosette($("ground"));
+  mountGround($("ground"));
 
   const [exportState, companies] = await Promise.all([
     source.getExportState(),

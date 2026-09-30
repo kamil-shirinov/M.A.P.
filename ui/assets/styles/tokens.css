@@ -79,6 +79,9 @@
   --uncal:      #d9a14a;
   --uncal-soft: #2a2011;
 
+  /* The ground's engraving: a line barely above the paper. */
+  --rosette-ink: #2a313d;
+
   --shadow: 0 0 0 1px rgba(0, 0, 0, .35);
 }
 
@@ -105,6 +108,8 @@
     --uncal:      #8a5a10;
     --uncal-soft: #faf0da;
 
+    --rosette-ink: #c9ced8;
+
     --shadow: 0 1px 2px rgba(16, 20, 28, .07);
   }
 }
@@ -113,7 +118,7 @@
 :root[data-theme="light"] {
   --paper: #eceef2;  --surface: #ffffff; --sunken: #f4f6f9;
   --ink: #12151a;    --ink-num: #04070c; --ink-2: #4d5561; --ink-3: #737b87;
-  --rule: #dde1e8;   --rule-2: #c3c9d4;
+  --rule: #dde1e8;   --rule-2: #c3c9d4; --rosette-ink: #c9ced8;
   --accent: #1f5fc4; --accent-soft: #e3ecfb; --up: #1f7a4d; --down: #b03a34;
   --fab: #6b46b0;    --fab-soft: #efe9fa;
   --uncal: #8a5a10;  --uncal-soft: #faf0da;

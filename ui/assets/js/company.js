@@ -22,7 +22,7 @@ import { renderFilings } from "./ui/company-filings.js";
 import { renderRuns } from "./ui/company-runs.js";
 import { renderScoring } from "./ui/company-scoring.js";
 import { renderFooter, renderMastheadVintage } from "./ui/company-footer.js";
-import { mountPageRosette } from "./ui/rosette.js";
+import { mountGround } from "./ui/ground.js";
 import { liveRows, renderLive } from "./ui/company-live.js";
 import { noServerNotes } from "./ui/analyse-offer.js";
 import { fetchPrices, serverPresent } from "./data/server.js";
@@ -307,6 +307,6 @@ function renderTitle(company) {
 
 // A company page is a detail page: neither section is "here".
 mountMastheadNav($("masthead-nav"), { current: null });
-mountPageRosette($("ground"));
+mountGround($("ground"));
 paint();
 

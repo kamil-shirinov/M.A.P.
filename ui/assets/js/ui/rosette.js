@@ -1,4 +1,9 @@
-/* Engine-turned rosette — the ground the front door sits on.
+/* Engine-turned rosette — its geometry, and the SVG figure.
+
+   Since 2026-09-30 the ground behind every page is drawn by `ground.js` on a
+   canvas, so it can morph as well as turn; that module and the loading rosette
+   both take their rings from `ringPath` here. The SVG figure below is what a
+   browser without a canvas gets instead.
 
    Layered rose-modulated circles whose phase drifts ring to ring, so the
    interference between rings does the drawing rather than any single line.

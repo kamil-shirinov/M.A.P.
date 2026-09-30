@@ -156,19 +156,32 @@ body[data-mode="open"] .ground,
 .ground[data-scope="page"] {
   position: absolute;
   left: 50%;
-  top: var(--rosette-top, 12rem);
+  /* Centred on the page title's line, so the figure is at its strongest behind
+     the title — the radial fade peaks at the centre — and fades out below it. */
+  top: var(--rosette-top, 6.5rem);
   width: min(1120px, 100vw);
   aspect-ratio: 1 / 1;
   transform: translate(-50%, -50%);
-  /* The weight is carried by the SVG's own group opacity, set where the figure
-     is built, so there is ONE number rather than two multiplied together. The
-     door's ground also dims itself here, so this has to undo that. */
+  /* The weight is carried by the figure itself, set where it is drawn, so there
+     is ONE number rather than two multiplied together. The door's ground also
+     dims itself here, so this has to undo that. */
   opacity: 1;
   z-index: 0;
   pointer-events: none;
   transition: none;
-  -webkit-mask-image: linear-gradient(to bottom, #000 0 30%, transparent 70%);
-  mask-image: linear-gradient(to bottom, #000 0 30%, transparent 70%);
+  /* Full weight down to the title's line, gone a third of the figure below it. */
+  -webkit-mask-image: linear-gradient(to bottom, #000 0 50%, rgba(0, 0, 0, .35) 64%, transparent 80%);
+  mask-image: linear-gradient(to bottom, #000 0 50%, rgba(0, 0, 0, .35) 64%, transparent 80%);
+}
+/* The canvas fills the ground's box, which is already out of flow, so drawing
+   into it can never move anything on the page. */
+.ground-canvas {
+  display: block; width: 100%; height: 100%;
+  /* Dissolve at the rim, so no disc edge shows against the page: the stops the
+     SVG figure's own mask used, so the drawing method changed and the look did
+     not. As a mask it costs the compositor, not a repaint every frame. */
+  -webkit-mask-image: radial-gradient(closest-side, #000 0, rgba(0, 0, 0, .82) 52%, rgba(0, 0, 0, .22) 86%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 0, rgba(0, 0, 0, .82) 52%, rgba(0, 0, 0, .22) 86%, transparent 100%);
 }
 /* Content scrolls OVER it, so every page region needs to be above 0. */
 body[data-mode="open"] .ground ~ *,
