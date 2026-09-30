@@ -135,8 +135,10 @@ def serve(
     fixtures: Path | None = typer.Option(
         None,
         help=(
-            "Replay recorded LLM fixtures instead of calling a model server. "
-            "With --runs-dir, makes this server incapable of touching the real journal."
+            "Replay recorded LLM fixtures instead of calling a model server. A fixture "
+            "matches only the exact request it was recorded from, so a new live run finds "
+            "none (Findings #69); to watch the page work, use --replay. With --runs-dir, "
+            "makes this server incapable of touching the real journal."
         ),
     ),
     runs_dir: Path | None = typer.Option(

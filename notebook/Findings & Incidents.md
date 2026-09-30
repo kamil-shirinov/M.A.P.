@@ -2782,6 +2782,9 @@ The screenshot server runs against `FakeProvider` and a temporary runs directory
 missed intercept produces a fixture-backed answer written somewhere that is deleted
 afterwards, and the worst outcome is a wrong picture rather than a permanent record.
 
+*(2026-09-30: half of this is wrong — there are no fixtures, so a missed intercept gets a
+refusal, not an answer. See #69.)*
+
 The principle: **when a double exists to prevent a side effect, remove the side effect from
 the environment as well as intercepting the call.** An intercept is a claim about what a
 request will do; an environment with nothing to damage is a fact about what it can do. The
@@ -3157,3 +3160,66 @@ run on GitHub still failed eight tests. None of them fails on this machine.
 
 Each of the eight passed every hand-run gate on this machine. That is the whole case: the
 hand-run gate and CI are two different checks, not one check run twice.
+
+---
+
+## 68 · Thirty-five style declarations that never applied
+
+Rewriting the fan's styles turned up five custom properties that `analyse.css` reads and
+nothing defines: `--mono-sm`, `--mono-md`, `--sans-sm`, `--ink-1` and `--rule-1`, plus
+`--mono-lg` and `--serif-lg` once each. Thirty-three declarations in all, every one of them
+in the sheet since the live-analysis screen was added (`021d0ed`, 2026-09-28). A
+`var()` with no definition and no fallback makes its declaration invalid when the value is
+computed, and the property falls back to inheriting — silently. So the absence box, the
+horizon control, the marking and the old fan never had the fonts, sizes or rules written
+for them. The fan's axis labels, sized by `font: var(--mono-sm)` in a 760-unit viewBox,
+came out at the page's body size, scaled up, which is why they looked enormous in every
+screenshot of it.
+
+A check across all ten stylesheets found two more: `system.css` reads `--sp-8`, the step
+after `--sp-7`, for the padding above results and runs cards and the margin above every
+page's disclosure. It has read it since `5129f71` (2026-09-26) and nothing has ever defined
+it, so those two rules applied nothing either.
+
+The fixes: the seven analysis tokens map to the real ones (`--font-mono` with `--step--1`
+or `--step-0`, `--font-sans`, `--ink`, `--rule`), and `--sp-8` is defined as `3rem`, so the
+two `system.css` rules now apply as written. That second change moves the results, runs and
+disclosure spacing on every screen; it is what was intended, not a redesign.
+
+**A test now fails on any `var()` that has no fallback and no definition** in any
+stylesheet. It is the check that would have caught all thirty-five, and it could not have
+been a unit test of any one component: each declaration was valid CSS, and the browser
+reported nothing.
+
+Same family as [[#65]] and [[#67]]: nothing was wrong that any existing check could see. The
+node suite builds the DOM against a stub that never loads a stylesheet, and the styles probe
+reads computed values for a fixed list of properties, none of which these were.
+
+---
+
+## 69 · The screenshot server could not have answered
+
+#63's repair says the screenshot server runs on `FakeProvider` with a temporary runs
+directory, "then a missed intercept produces a fixture-backed answer written somewhere that
+is deleted afterwards." The second half is true and the first is not. `tests/fixtures/llm`
+holds a `.gitkeep` and nothing else — no `models.json` and no recorded exchange — so a
+`map serve --fixtures tests/fixtures/llm` server refuses every analysis at model resolution:
+*"model alias … is not loaded; server reports: (none)"*. A missed intercept would have got
+that refusal, which is safer than a fixture answer, not less safe. The repair held; its
+description was wrong about why.
+
+It could not have been otherwise, and not only because the directory is empty. `FakeProvider`
+finds a fixture by the same `request_key` the cache uses — model, rendered prompt, sampling —
+and a live prompt carries the day's filing, date and spot price. A fixture matches only the
+exact request it was recorded from, so no fixture set can stand in for a new live run.
+
+It surfaced building the loading state, which exists for the minutes a real run takes and
+could not be watched without making one. Instead of a fixture, `map serve --replay RUN_ID`
+answers Analyse with a recorded run: its own trace, each stage at the gap it recorded
+(faster with `--replay-speed`), then the result the export gives that run. It runs nothing,
+writes nothing, and says so in the terminal, in the stream and on the page. That is a
+different claim from a fixture — the events are real ones from a real run, replayed — and
+it is labelled as that claim.
+
+The `--fixtures` help text and `docs/cli.md` now say a fixture matches only the request it
+was recorded from.
