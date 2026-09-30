@@ -453,6 +453,15 @@ Every identity stamp above is **carried from its own source**. The counts —
 wrote. The export mints only `exported_at`, because one export-wide vintage would flatten several different moments
 into one date and assert a uniformity that does not exist.
 
+**Commit IDs are carried as recorded, including those written before the history cleanup
+of 2026-09-30.** The cleanup gave every commit a new ID, and the export does not translate:
+`code.commit`, a scoring record's `commit` and the holdout spend's `commit` are what their
+sources wrote. An ID from before the cleanup resolves through
+[`commit-map.tsv`](commit-map.tsv), and the app shows the published ID with the recorded
+one beside it ([ADR 0038](../decisions/0038-commit-ids-after-the-history-cleanup.md)).
+`--check` compares `code.commit` as written, so an export made before the cleanup reports
+it as moved, which it has: the checkout now names a different commit.
+
 **`--check` re-derives seven identities from a live checkout and names what moved:**
 `freeze.version`, `freeze.digest`, `code.commit`, `code.forecast_digest`,
 `ledger.items_settled`, `symbols.synced_on`, `prices.snapshot`. It reports and refuses

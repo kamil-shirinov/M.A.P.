@@ -16,6 +16,7 @@
    Splitting them that way is what lets the header be correct while reading,
    rather than skeleton-grey and then correct. */
 
+import { resolveCommit } from "../lib/commits.js";
 import { DERIVED, MEASURED, chromeText, derive, figure, renderFigure } from "../lib/figure.js";
 
 const el = (tag, className, text) => {
@@ -24,6 +25,21 @@ const el = (tag, className, text) => {
   if (text !== undefined) node.textContent = text;
   return node;
 };
+
+/* The commit that scored a record, as the published history names it, with the
+   record's own ID beside it when the two differ (lib/commits.js). */
+function commitStamp(commit) {
+  const { shown, recorded } = resolveCommit(commit);
+  const wrap = el("span");
+  wrap.append(chromeText(shown, "the commit that scored this record, in published history"));
+  if (recorded) {
+    wrap.append(
+      el("span", "res-terms-aside", " recorded as "),
+      chromeText(recorded, "the commit the scoring record stores"),
+    );
+  }
+  return wrap;
+}
 
 const dot = () => chromeText(" · ", "a separator");
 
@@ -145,7 +161,7 @@ function switcher(meta, record, records, band, onBand) {
     chromeText(meta.forecast_digest.slice(0, 8), "an abbreviated forecast digest"),
     dot(),
     el("span", "res-k", "commit "),
-    record ? chromeText(record.commit.slice(0, 7), "the commit that scored this record") : pending(),
+    record ? commitStamp(record.commit) : pending(),
     dot(),
     el("span", "res-k", "scored "),
     record ? chromeText(record.scored_on, "the day the pass ran") : pending(),

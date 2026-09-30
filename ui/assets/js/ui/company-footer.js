@@ -4,6 +4,7 @@
    itself: the symbol index is a month older than the prices, and flattening them
    into one date would assert a uniformity the data does not have. */
 
+import { resolveCommit } from "../lib/commits.js";
 import { chromeText } from "../lib/figure.js";
 
 /** A vintage that does not exist is "not exported", never the word `null`.
@@ -36,12 +37,18 @@ export function renderFooter(root, manifest) {
     ["symbols", manifest.symbols?.synced_on],
     ["freeze", manifest.freeze?.version],
     // Which code wrote the export. Abbreviated to seven, like every other commit
-    // reference in this project.
-    ["code", manifest.code?.commit ? manifest.code.commit.slice(0, 7) : null],
+    // reference in this project, and named as the published history names it,
+    // with the export's own ID beside it when that is an older one.
+    ["code", manifest.code?.commit ? codeStamp(manifest.code.commit) : null],
   ]) {
     stamps.append(stamp(label, vintage(value), `the ${label} vintage stamp`));
   }
   root.append(stamps);
+}
+
+function codeStamp(commit) {
+  const { shown, recorded } = resolveCommit(commit);
+  return recorded ? `${shown} (recorded as ${recorded})` : shown;
 }
 
 /** Label quiet, value bright, both inside one chrome wrapper so the audit sees

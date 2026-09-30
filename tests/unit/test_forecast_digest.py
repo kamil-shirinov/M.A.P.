@@ -21,6 +21,8 @@ from mapf.core.provenance import (
 )
 
 REPO = Path(__file__).resolve().parents[2]
+# Commit IDs as the published history names them. The records cite the IDs these
+# had before the history cleanup of 2026-09-30; docs/commit-map.tsv pairs the two.
 
 
 def _head() -> str:
@@ -100,19 +102,19 @@ def test_an_unknown_commit_yields_no_digest_rather_than_a_guess() -> None:
 
 
 def test_a_scoring_only_commit_does_not_move_the_digest() -> None:
-    """`ee492d7` added `map evaluate --check`, touching only `eval/`, the evaluate
+    """`f591d30` added `map evaluate --check`, touching only `eval/`, the evaluate
     command and tests. Its parent produced the same forecasts."""
-    a = forecast_digest("6ef0174", REPO)
-    b = forecast_digest("ee492d7", REPO)
+    a = forecast_digest("dc323d2", REPO)
+    b = forecast_digest("f591d30", REPO)
     assert a is not None
     assert a == b
 
 
 def test_a_commit_touching_the_pipeline_does_move_the_digest() -> None:
-    """`0d78326` changed `pipeline/run.py`, `pipeline/manifest.py` and
+    """`aca6cd6` changed `pipeline/run.py`, `pipeline/manifest.py` and
     `core/quality.py`. Whether it altered any forecast is undecidable from here —
     which is why the digest reports a difference rather than adjudicating it."""
-    assert forecast_digest("0d78326", REPO) != forecast_digest("318250f", REPO)
+    assert forecast_digest("aca6cd6", REPO) != forecast_digest("9bd1884", REPO)
 
 
 def test_a_dirty_tree_records_no_digest() -> None:

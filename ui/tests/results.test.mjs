@@ -419,7 +419,8 @@ describe("the holdout panel", () => {
     assert.match(text, /−0\.0757/, "a, with a real minus");
     assert.match(text, /1\.3305/);
     assert.match(text, /ADR 0032, amended by note record 3, amended by note record 7/);
-    assert.match(text, /git note record 14 on ad71b13/);
+    // The record's own words, its commit resolved through docs/commit-map.tsv.
+    assert.match(text, /git note record 14 on 171a4d6 \(recorded as ad71b13\)/);
   });
 
   itNeedsExport("states that no holdout score exists, and prints none", () => {
@@ -430,7 +431,7 @@ describe("the holdout panel", () => {
     const spend = read("scores/holdout_spend.json").at(-1);
     const allowed = new Set([
       ...JSON.stringify(spend).match(/\d+(\.\d+)?/g),
-      "710879a", "8", "2026",
+      "5d928ea", "8", "2026",
     ]);
     for (const n of text.match(/\d+\.\d+/g) ?? []) {
       assert.ok(allowed.has(n) || allowed.has(n.replace(/^0/, "")), `${n} is not in the spend record`);
@@ -445,14 +446,15 @@ describe("the holdout panel", () => {
   });
 
   itNeedsExport("shows the rewritten commit as two rows, the record's and the published one", async () => {
-    const { REWRITTEN } = await load("ui/results-holdout.js");
+    const { resolveCommit } = await load("lib/commits.js");
     const spend = read("scores/holdout_spend.json").at(-1);
-    const recorded = spend.commit.slice(0, 7);
+    const { shown, recorded } = resolveCommit(spend.commit);
     assert.equal(recorded, "9cb1b84");
-    assert.equal(REWRITTEN[recorded], "710879a");
+    // 710879a after the rebase, and 5d928ea after the cleanup (docs/commit-map.tsv).
+    assert.equal(shown, "5d928ea");
     const text = ctx.roots.holdout.textContent;
-    assert.match(text, /710879a in published history/);
-    assert.match(text, /9cb1b84, replaced by the 8 September rebase/);
+    assert.match(text, /5d928ea in published history/);
+    assert.match(text, /9cb1b84, replaced by the 8 September rebase and the 2026-09-30 history cleanup/);
     // The record is not edited: the original is still shown as what was stored.
     assert.equal(spend.commit, "9cb1b84f21726a82d211b9c7b62b2ada2abd1e41");
   });

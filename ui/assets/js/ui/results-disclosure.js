@@ -10,6 +10,7 @@
    citations, sample sizes and thresholds, not measurements this page computed;
    marking them as figures would claim a provenance they do not have. */
 
+import { resolveCommitsIn } from "../lib/commits.js";
 import { fmt } from "../lib/format.js";
 
 
@@ -70,7 +71,8 @@ function live(title, { stats, band }) {
   }
   return (
     "z is Φ⁻¹(PIT) — the standardised distance from the forecast's own centre, which is the " +
-    "definition the pre-registration on ad71b13 names and the one the published counts were made " +
+    "definition the pre-registration on " + resolveCommitsIn("ad71b13") + " names and the one the " +
+    "published counts were made " +
     "under. On the " + band + " band it gives " + stats.tails[2.5] + " over 2.5 and " + stats.tails[3] +
     " over 3. realised_return ÷ sigma ignores the centre and gives " +
     stats.tailsIgnoringCentre[2.5] + " and " + stats.tailsIgnoringCentre[3] + " on the same items. " +

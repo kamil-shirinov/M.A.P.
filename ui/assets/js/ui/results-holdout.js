@@ -12,24 +12,17 @@
    true and is not a holdout measurement, so it lives in the disclosure as prose
    and never as a figure on this card.
 
-   THE COMMIT IS A REWRITTEN ONE. The spend was recorded at 9cb1b84, and a rebase
-   on 8 September 2026 replayed that commit as 710879a; the original is now
-   reachable only from refs/archive/pre-rebase-2026-09-08. The export carries
-   what was recorded, which is right — the record is not edited after the fact —
-   so the successor is looked up here, quoted, and shown as a second row rather
-   than substituted for the first. */
+   THE COMMIT WAS REWRITTEN TWICE. The spend was recorded at 9cb1b84; the rebase
+   of 8 September 2026 replayed that commit as 710879a, and the history cleanup of
+   2026-09-30 gave it a new ID again. Neither earlier ID is in the published
+   history. The export carries what was recorded, which is right — the record is
+   not edited after the fact — so the published ID is looked up through the
+   commit map (lib/commits.js) and shown as a second row rather than substituted
+   for the first. */
 
 import { CANNOT_BE_COMPUTED, isAbsent } from "../data/source.js";
+import { resolveCommit, resolveCommitsIn } from "../lib/commits.js";
 import { DERIVED, MEASURED, chromeText, figure, renderFigure } from "../lib/figure.js";
-
-/* QUOTED, AND NOT FROM THE EXPORT. Verified against the repository on
-   2026-09-24: both commits carry the subject "Repoint the scoring vintage to the
-   complete 2026-09-05 snapshot" and the same author date and patch-id; 9cb1b84
-   is not an ancestor of main and is held only by refs/archive/pre-rebase-2026-09-08,
-   and 710879a is. Abbreviations are the 7 characters this project uses
-   everywhere; the record stores the full hash and is sliced before lookup. */
-export const REWRITTEN = { "9cb1b84": "710879a" };
-const REWRITE_EVENT = "the 8 September rebase";
 
 const el = (tag, className, text) => {
   const n = document.createElement(tag);
@@ -128,25 +121,24 @@ function terms(spend) {
   row("freeze", chromeText(spend.freeze_version ?? "—", "the frozen corpus version"));
 
   /* Two rows, not one substitution. The record says 9cb1b84 and the record is
-     right; the published history says 710879a. Showing only the successor would
-     silently edit the ledger, and showing only the original would name a commit
-     nobody can `git show`. */
-  const recorded = (spend.commit ?? "").slice(0, 7);
-  const successor = REWRITTEN[recorded];
-  if (successor) {
+     right; the published history names that commit differently. Showing only the
+     successor would silently edit the ledger, and showing only the original
+     would name a commit nobody can `git show`. */
+  const { shown, recorded, event } = resolveCommit(spend.commit);
+  if (recorded) {
     const now = el("span");
     now.append(
-      chromeText(successor, "the commit in published history"),
+      chromeText(shown, "the commit in published history"),
       el("span", "res-terms-aside", " in published history"),
     );
     row("commit", now);
     const was = el("span", "res-terms-quoted");
-    const aside = chromeText(`, replaced by ${REWRITE_EVENT}`, "when the rewrite happened");
+    const aside = chromeText(`, replaced by ${event}`, "when the rewrite happened");
     aside.className = "res-terms-aside";
     was.append(chromeText(recorded, "the commit the spend record stores"), aside);
     row("recorded as", was);
-  } else if (recorded) {
-    row("commit", chromeText(recorded, "the commit the spend record stores"));
+  } else if (shown) {
+    row("commit", chromeText(shown, "the commit the spend record stores"));
   }
 
   const c = spend.calibration ?? {};
@@ -156,7 +148,8 @@ function terms(spend) {
     "the decisions that fixed these terms",
   ));
   row("decided in", decided);
-  if (spend.prereg) row("pre-registered", chromeText(spend.prereg, "where the test was written down before the spend"));
+  // The record's own words, with any commit in them resolved in place.
+  if (spend.prereg) row("pre-registered", chromeText(resolveCommitsIn(spend.prereg), "where the test was written down before the spend"));
   return list;
 }
 

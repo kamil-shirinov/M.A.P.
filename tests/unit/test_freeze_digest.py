@@ -23,6 +23,8 @@ from mapf.core.provenance import (
 )
 
 REPO = Path(__file__).resolve().parents[2]
+# Commit IDs as the published history names them. The records cite the IDs these
+# had before the history cleanup of 2026-09-30; docs/commit-map.tsv pairs the two.
 
 
 def _frozen_at(ref: str) -> dict[str, object] | None:
@@ -91,7 +93,7 @@ def test_the_real_record_has_no_unclassified_field() -> None:
 def test_the_execution_order_amendment_did_not_change_the_question() -> None:
     """The case this exists for. 2.3.0 -> 2.4.0 recorded the attempt order and
     nothing else; comparing versions would have refused the band on a restart."""
-    before, after = _frozen_at("d79f84d~1"), _frozen_at("d79f84d")
+    before, after = _frozen_at("3a4a8bd~1"), _frozen_at("3a4a8bd")
     assert before is not None and after is not None
     assert before["freeze_version"] != after["freeze_version"]
     assert freeze_digest(before) == freeze_digest(after)
@@ -101,7 +103,7 @@ def test_the_execution_order_amendment_did_not_change_the_question() -> None:
 def test_the_degeneration_retry_amendment_did_change_it() -> None:
     """The control. Without it the assertion above would pass under a digest that
     never fires, which is the failure it is meant to avoid."""
-    before, after = _frozen_at("5a139c0~1"), _frozen_at("5a139c0")
+    before, after = _frozen_at("8f91dcc~1"), _frozen_at("8f91dcc")
     assert before is not None and after is not None
     assert freeze_digest(before) != freeze_digest(after)
     assert set(freeze_differences(before, after)) == {"models", "degeneration_retry"}
@@ -130,7 +132,7 @@ def test_a_past_frozen_record_is_recoverable_from_its_commit() -> None:
     is the one committed alongside the code it recorded."""
     from mapf.cli.commands.evaluate import _frozen_at
 
-    record = _frozen_at("d79f84d")
+    record = _frozen_at("3a4a8bd")
     assert record is not None
     assert record["freeze_version"] == "2.4.0"
 
@@ -227,7 +229,7 @@ def test_every_other_governing_field_still_moves_both_scopes() -> None:
 def test_the_real_amendment_keeps_untruncated_items_together() -> None:
     """Freeze 2.4.0 -> 2.5.0 changed only truncation. The 133 untruncated completed
     items must stay in one group; the 2 truncated ones must not."""
-    before, after = _frozen_at("a42b13f~1"), _frozen_at("a42b13f")
+    before, after = _frozen_at("0b4edb3~1"), _frozen_at("0b4edb3")
     assert before is not None and after is not None
     assert freeze_digest(before, truncated=False) == freeze_digest(after, truncated=False)
     assert freeze_digest(before, truncated=True) != freeze_digest(after, truncated=True)
