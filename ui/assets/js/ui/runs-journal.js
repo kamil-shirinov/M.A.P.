@@ -25,6 +25,7 @@ import {
   isAbsent,
 } from "../data/source.js";
 import { fmt } from "../lib/format.js";
+import { madeText, runWhen } from "../lib/run-when.js";
 import { OUTCOMES, RELATIONS } from "./runs-filters.js";
 import { stagger } from "../lib/motion.js";
 
@@ -61,6 +62,9 @@ const COLUMNS = [
   // and the header cell is deliberately blank: a label over a caret is noise.
   ["", null],
   ["Anchored", "the trading session each run opened from"],
+  // Beside the anchor, because the two are not the same day: a run made before
+  // the close opens from the previous one.
+  ["Made", "when each run was made, in your time zone"],
   ["Company", null],
   ["Run", "the first eight characters of each run's id"],
   ["Relation", null],
@@ -314,6 +318,14 @@ function rowLine(run, ctx, ditto) {
   date.dataset.ditto = String(ditto);
   row.append(date);
 
+  const madeAt = madeText(run.made_at);
+  const made = chromeText(
+    madeAt ?? "—",
+    madeAt ? "when the run was made, in your time zone" : "no trace to read when this run was made",
+  );
+  made.className = "runs-c-made";
+  row.append(made);
+
   const co = el("span", "runs-c-co");
   co.append(el("span", "t", run.ticker));
   /* universe.json holds the frozen 120, so a run outside the corpus had no name
@@ -431,6 +443,9 @@ function detail(run, ctx) {
   foot.append(chromeText(run.run_id, "this run's full id"),
     document.createTextNode(run.document_is_frozen_exhibit ? " · read a frozen exhibit" : " · did not read a frozen exhibit"));
   left.append(foot);
+  const when = el("div", "runs-tile-foot");
+  when.append(chromeText(runWhen(run), "when the run was made, in your time zone, and the price it opened from"));
+  left.append(when);
 
   const says = el("div", "runs-says");
   const say = (label, tone) => {

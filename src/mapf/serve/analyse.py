@@ -210,6 +210,10 @@ class Wiring:
     correction: Any
     freeze: Any = None
     simulate: Any = None
+    # When a run was made, by run id: the first event in its trace, the same
+    # reading the journal makes, so the result and the journal row cannot name two
+    # different minutes for one run.
+    started: Any = None
 
 
 # The band the chart draws. Two levels, not five: the point is that the forecast
@@ -325,6 +329,7 @@ def result_line(
     price_date: date | None = None,
     fan: dict[str, Any] | None = None,
     closes: Sequence[Sequence[object]] = (),
+    made_at: datetime | None = None,
 ) -> dict[str, object]:
     """The final line of the stream.
 
@@ -337,6 +342,8 @@ def result_line(
         "run_id": run_id,
         "ticker": ticker,
         "anchor": forecast.as_of.date().isoformat(),
+        # When the run was made, in UTC; the page puts it in the viewer's zone.
+        "made_at": made_at.isoformat() if made_at is not None else None,
         "spot": forecast.spot_price,
         # WHICH CLOSE THE SPOT IS. A run made before a session closes anchors on
         # the previous one — `last_close`, never an intraday quote — so the run's
@@ -461,4 +468,5 @@ def run_analysis(
         price_date=price_date,
         fan=fan,
         closes=history(window.bars),
+        made_at=wiring.started(run_id) if wiring.started else None,
     )

@@ -8,7 +8,7 @@ uv run map export --out ./export          # write it
 uv run map export --out ./export --check  # has anything moved since?
 ```
 
-`export_version` is **1.4.0**. It is the shape of these files, not the age of the data
+`export_version` is **1.5.0**. It is the shape of these files, not the age of the data
 — read it first and refuse a version you do not know. Every size below is at the
 current corpus (120 companies, 709 filings, 779 runs, three scoring passes) and will
 grow with it.
@@ -87,7 +87,8 @@ runs shows 701 and misstates the corpus.
 
 ```json
 { "run_id": "46cf0ac0-…", "ticker": "AAPL",
-  "anchor_date": "2026-08-13", "anchor_spot": 302.9849853515625, "horizon_days": 5,
+  "anchor_date": "2026-08-13", "made_at": "2026-08-30T22:07:59.198329+00:00",
+  "anchor_spot": 302.9849853515625, "horizon_days": 5,
   "scenarios": [{ "name": "bullish", "probability_weight": 0.25,
                   "price_return": 0.012, "annualised_vol": 0.20 }, …],
   "document_source": "unknown", "freeze_version": null, "arm": null,
@@ -103,6 +104,7 @@ runs shows 701 and misstates the corpus.
 |---|---|---|
 | `run_id` | uuid | Directory name under `runs/`. |
 | `anchor_date` | date | The **trading session the forecast opened from** — the bar `anchor_spot` was read at. Not the run's wall clock, and not the filing date. |
+| `made_at` | datetime (UTC) \| null | **When the run was made**: the first event in its own trace, stamped by the run's clock as it happened. Not `anchor_date` — a run made before a session settles opens from the previous close, so the two are different days — and not the forecast's `as_of`, which for a corpus run is a point-in-time instant months before the run happened. `null` when the run left no trace to read it from (63 run directories hold none and 23 an empty one); never filled from another field. A page shows it in the viewer's time zone. Added in 1.5.0. |
 | `anchor_spot` | float | The close the forecast was produced against. Float32 from the provider, so display to 2dp; the stored value is exact. |
 | `horizon_days` | int | Horizon in **trading** sessions, not calendar days. |
 | `scenarios` | array of 3 | Always `bullish`, `base_case`, `bearish`, in that order. `probability_weight` sums to 1.0 (±1e-6). `price_return` and `annualised_vol` are **decimal fractions** — `0.012` is 1.2%, not 1.2. |
@@ -421,7 +423,7 @@ would inflate the log by 355. Label them and exclude them from any count of fore
 ## 7. The manifest, and what `--check` compares
 
 ```json
-{ "export_version": "1.4.0", "exported_at": "2026-09-30",
+{ "export_version": "1.5.0", "exported_at": "2026-09-30",
   "freeze":  { "version": "2.6.0", "digest": "7cf4ae3d…" },
   "code":    { "commit": "e5a38f2…", "forecast_digest": "fb673274…" },
   "ledger":  { "items_settled": 709 },

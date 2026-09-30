@@ -186,6 +186,9 @@ def test_an_entry_offers_no_way_to_turn_a_forecast_and_an_outcome_into_a_score()
         # the frozen 120, so a run outside the corpus had none anywhere.
         "company_name",
         "anchor_date",
+        # Read off the run's own trace: when it was made. A time, not a result, so
+        # it combines nothing across the two sides either.
+        "made_at",
         "anchor_spot",
         # From what the run recorded about WHEN it read its price. Not derived from
         # the outcome, so it combines nothing across the two sides.
@@ -260,6 +263,39 @@ def test_each_entry_carries_the_anchor_and_the_three_scenarios(tmp_path: Path) -
     assert [line.name for line in entry.scenarios] == ["bullish", "base_case", "bearish"]
     assert [line.price_return for line in entry.scenarios] == [0.045, 0.008, -0.082]
     assert [line.probability_weight for line in entry.scenarios] == [0.25, 0.60, 0.15]
+
+
+def test_an_entry_says_when_its_run_was_made_from_its_trace(tmp_path: Path) -> None:
+    """Made on the 30th before the close, anchored on the 29th's close: the two are
+    different days, and the entry carries both. The time is the trace's first
+    event, which the run stamped as it happened."""
+    from mapf.cli.commands.runs import as_dict
+    from mapf.pipeline.trace import JsonlTrace
+
+    runs = tmp_path / "runs"
+    run_id = _write_run(runs)
+    made = datetime(2026, 9, 30, 12, 21, 11, tzinfo=UTC)
+    trace = JsonlTrace(runs / run_id / "trace.jsonl", now=lambda: made)
+    trace.record(stage="intake")
+    trace.close()
+
+    entry = read_journal(runs, today=date(2026, 9, 8)).corpus[0]
+
+    assert entry.made_at == made
+    assert entry.anchor_date == ANCHOR, "the anchor is untouched"
+    assert as_dict(entry)["made_at"] == "2026-09-30T12:21:11+00:00"
+
+
+def test_a_run_with_no_trace_has_no_made_time(tmp_path: Path) -> None:
+    """63 run directories hold no trace and 23 an empty one. None, not a guess
+    from `as_of` — which for a corpus run is months before the run was made."""
+    from mapf.cli.commands.runs import as_dict
+
+    runs = tmp_path / "runs"
+    _write_run(runs)
+    entry = read_journal(runs, today=date(2026, 9, 8)).corpus[0]
+    assert entry.made_at is None
+    assert as_dict(entry)["made_at"] is None
 
 
 def test_the_anchor_is_the_session_the_spot_was_read_from_not_as_of(tmp_path: Path) -> None:

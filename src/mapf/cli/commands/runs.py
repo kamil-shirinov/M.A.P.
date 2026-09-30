@@ -112,6 +112,7 @@ def as_dict(entry: JournalEntry) -> dict[str, object]:
     claim is that it says nothing the library does not already say."""
     body = asdict(entry)
     body["anchor_date"] = entry.anchor_date.isoformat()
+    body["made_at"] = entry.made_at.isoformat() if entry.made_at is not None else None
     if entry.ledger_item is not None:
         body["ledger_item"] = {
             **asdict(entry.ledger_item),

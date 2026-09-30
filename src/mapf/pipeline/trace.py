@@ -10,6 +10,7 @@ through is exactly the run whose trace you want.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,6 +34,34 @@ def _now() -> datetime:
 # healthy runs, and still an order of magnitude below a trace holding a whole band.
 MIN_TRACE_EVENTS = 3
 MAX_TRACE_EVENTS = 24
+
+# Where a trace's first line keeps its timestamp. `TraceEvent` puts `at` first, and
+# a first record can run to hundreds of kilobytes — it carries the intake prompt,
+# filing and all — so the time is read from the head of the file and nothing more.
+_HEAD_BYTES = 96
+_FIRST_AT = re.compile(rb'^\{"at":"([^"]+)"')
+
+
+def started_at(path: Path) -> datetime | None:
+    """When the run behind this trace did its first piece of work, or `None`.
+
+    The first event's `at`, stamped by the run's own clock as it happened, so it is
+    when the run was made — which the anchor is not: a run made before a session
+    settles opens from the previous close. `None` when the file is missing, empty,
+    or does not open with a timestamp: an unknown time, never a guessed one.
+    """
+    try:
+        with path.open("rb") as handle:
+            head = handle.read(_HEAD_BYTES)
+    except OSError:
+        return None
+    match = _FIRST_AT.match(head)
+    if match is None:
+        return None
+    try:
+        return datetime.fromisoformat(match.group(1).decode("ascii"))
+    except ValueError:
+        return None
 
 
 def audit_trace(path: Path) -> str | None:

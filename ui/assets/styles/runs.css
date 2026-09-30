@@ -165,7 +165,7 @@ body > .masthead,
 .runs-row, .runs-colhead {
   display: grid;
   grid-template-columns:
-    1.5ch 10.5ch minmax(14ch, 1.5fr) 9ch minmax(20ch, 1.9fr) 7.5ch 9ch 3.5ch 10ch 13ch 9.5ch;
+    1.5ch 10.5ch 13.5ch minmax(14ch, 1.5fr) 9ch minmax(20ch, 1.9fr) 7.5ch 9ch 3.5ch 10ch 13ch 9.5ch;
   gap: var(--sp-3);
   align-items: baseline;
   padding: var(--sp-2) var(--sp-3);
@@ -183,6 +183,7 @@ body > .masthead,
 .runs-row[data-drift="true"][data-open="true"] { background: rgba(207, 106, 99, .07); }
 .runs-c-date { font-family: var(--font-mono); color: var(--ink-3); }
 .runs-c-date[data-ditto="true"] { color: var(--rule-2); }
+.runs-c-made { font-family: var(--font-mono); color: var(--ink-3); white-space: nowrap; }
 .runs-c-co { display: flex; gap: var(--sp-2); min-width: 0; }
 .runs-c-co .t { font-family: var(--font-mono); font-weight: 600; color: var(--ink-num); min-width: 6ch; }
 .runs-c-co .n { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

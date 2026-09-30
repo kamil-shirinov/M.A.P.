@@ -216,6 +216,8 @@ def test_a_run_record_is_the_same_object_map_runs_emits(
     assert isinstance(exported, list)
     assert set(exported[0]) == {
         "anchor_date",
+        # When the run was made, off its trace; the anchor is not that (1.5.0).
+        "made_at",
         "anchor_spot",
         # Whether that spot was a settled close or a live quote (Findings #64).
         "price_kind",
@@ -444,7 +446,7 @@ def test_the_manifest_carries_each_sources_own_stamp_not_one_invented_date(
     assert manifest["freeze"]["digest"]
     assert manifest["prices"]["snapshot"] == VINTAGE.isoformat()
     assert manifest["ledger"]["items_settled"] == 1
-    assert manifest["export_version"] == "1.4.0"
+    assert manifest["export_version"] == "1.5.0"
     # The pre-screen's own stamps, as the set they are: every row carries its
     # `fetched_on` and a resumed walk spans days.
     assert manifest["filers"] == {"rows": 2, "distinct": 2, "vintages": ["2026-09-09"]}

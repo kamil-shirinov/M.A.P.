@@ -585,7 +585,7 @@ describe("the hosted copy replays one recorded run", () => {
     const row = JSON.parse(readFileSync(new URL("../assets/export/live/replay.json", import.meta.url), "utf8"));
     assert.equal(row.price_kind, "intraday");
     assert.match(row.price_taken_at, /^2026-09-28T19:52/);
-    assert.match(read("assets/js/ui/live-result.js"), /price taken during that session/);
+    assert.match(read("assets/js/lib/run-when.js"), /price taken during that session, not a close/);
   });
 });
 

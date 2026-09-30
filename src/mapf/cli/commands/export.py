@@ -62,8 +62,9 @@ from mapf.settings import load
 # to refuse a shape it does not know, and a version it can compare is the only way
 # it can. Distinct from every vintage in the manifest, which describe the DATA.
 # 1.2.0 added `runs.rows` to the manifest; 1.4.0 added the replay's fan, scenario
-# paths and history. Nothing was removed or renamed.
-EXPORT_VERSION = "1.4.0"
+# paths and history; 1.5.0 added `made_at` to every run row. Nothing was removed or
+# renamed.
+EXPORT_VERSION = "1.5.0"
 
 # The one recorded live run the hosted copy replays. PINNED by id, in source,
 # where changing it is a visible edit — "the newest one" would republish whatever

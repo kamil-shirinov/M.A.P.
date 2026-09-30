@@ -439,6 +439,13 @@ function adaptRun(run) {
     run_id: run.run_id,
     ticker: run.ticker,
     anchor_date: run.anchor_date,
+    // When the run was made: its trace's first event, in UTC (export 1.5.0). The
+    // anchor is the session it opened from, which for a run made before the close
+    // is the day before. Absent on an older export, and on a run with no trace.
+    made_at: run.made_at ?? absent(
+      CANNOT_BE_COMPUTED,
+      run.made_at === null ? "the run left no trace to read it from" : "this export predates the field",
+    ),
     anchor_spot: figure(spot, MEASURED, "price"),
     horizon_days: run.horizon_days,
 

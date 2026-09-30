@@ -256,13 +256,13 @@
 .runs-table--company .runs-row,
 .runs-table--company .runs-colhead {
   grid-template-columns:
-    1.5ch 10.5ch 9ch minmax(20ch, 1.9fr) 9ch 3.5ch 10ch 13ch 9.5ch;
+    1.5ch 10.5ch 13.5ch 9ch minmax(20ch, 1.9fr) 9ch 3.5ch 10ch 13ch 9.5ch;
 }
-/* Company (cell 3) and split (cell 6), counting the caret as the first. */
+/* Company (cell 4) and split (cell 7), counting the caret as the first. */
 .runs-table--company .runs-c-co,
 .runs-table--company .runs-c-split,
-.runs-table--company .runs-colhead > :nth-child(3),
-.runs-table--company .runs-colhead > :nth-child(6) { display: none; }
+.runs-table--company .runs-colhead > :nth-child(4),
+.runs-table--company .runs-colhead > :nth-child(7) { display: none; }
 
 .cmp-runs-legend {
   margin-top: var(--sp-3);

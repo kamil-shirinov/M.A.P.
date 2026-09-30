@@ -952,6 +952,23 @@ def test_the_result_says_which_close_the_spot_is() -> None:
     assert result["anchor"] == ANCHOR.isoformat()
 
 
+def test_the_result_says_when_the_run_was_made_from_the_same_trace_the_journal_reads() -> None:
+    """One reading of one file, so the result and the journal row cannot name two
+    different minutes for one run. Without a reader the time is unknown, and the
+    result says so rather than falling back to a clock."""
+    made = datetime(2026, 9, 30, 12, 21, 11, tzinfo=UTC)
+    asked: list[object] = []
+
+    def started(run_id: object) -> datetime:
+        asked.append(run_id)
+        return made
+
+    result = _stream(started=started)[-1]
+    assert result["made_at"] == "2026-09-30T12:21:11+00:00"
+    assert asked == [result["run_id"]]
+    assert _stream()[-1]["made_at"] is None
+
+
 def test_the_price_date_is_the_last_session_not_the_run_date() -> None:
     from mapf.serve.analyse import result_line
 

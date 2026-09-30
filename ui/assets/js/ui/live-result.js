@@ -8,6 +8,7 @@
 import { renderFan, renderMarking } from "./analyse-fan.js";
 import { RELATIONS } from "./runs-filters.js";
 import { chrome, chromeText } from "../lib/figure.js";
+import { runWhen } from "../lib/run-when.js";
 
 const el = (tag, className, text) => {
   const node = document.createElement(tag);
@@ -41,28 +42,19 @@ export function renderResult(host, event, { opening = true } = {}) {
   return host;
 }
 
-/** Both dates, because they are not always the same one, in ONE element.
+/** When the run was made and the price it opened from, in ONE element.
 
-    A run made before a session settles anchors on the previous close, so the
-    run's own date and its price's date differ; a run made mid-session anchors
-    on a quote that is not a close at all, and says so (Findings #64). */
+    Two dates that are not always the same day: a run made before a session
+    settles anchors on the previous close, and a run made mid-session anchors on
+    a quote that is not a close at all (Findings #64). The time is the viewer's
+    own, off the run's trace; the anchor is the session as recorded. */
 function whenClause(event) {
   const when = el("span", "anl-when");
-  when.append(chromeText(`anchored ${event.anchor}`, "the date the run was made"));
-  if (event.price_date && event.price_date !== event.anchor) {
-    when.append(chromeText(
-      ` · price is the ${event.price_date} close`,
-      "the session the anchor price is the close of",
-    ));
-  } else if (event.price_kind === "intraday") {
-    const at = (event.price_taken_at ?? "").slice(11, 16);
-    when.append(chromeText(
-      ` · price taken during that session${at ? `, ${at} UTC` : ""} — not a close`,
-      "the anchor price was an intraday quote, not a settled close",
-    ));
-  } else if (event.price_date) {
-    when.append(chromeText(" · at that day's close", "the session the anchor price is the close of"));
-  }
+  const kind = event.price_kind ?? (event.price_date ? "close" : "unknown");
+  when.append(chromeText(
+    runWhen({ made_at: event.made_at, anchor_date: event.price_date ?? event.anchor, price_kind: kind }),
+    "when the run was made, in your time zone, and the price it opened from",
+  ));
   return when;
 }
 
@@ -77,6 +69,7 @@ export function replayAsResult(row) {
     run_id: row.run_id,
     ticker: row.ticker,
     anchor: row.anchor_date,
+    made_at: row.made_at,
     price_date: row.anchor_date,
     price_kind: row.price_kind,
     price_taken_at: row.price_taken_at,

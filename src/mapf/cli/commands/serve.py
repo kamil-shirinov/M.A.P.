@@ -45,7 +45,8 @@ from mapf.data.liquidity import MarketLiquidity
 from mapf.eval.calibration import CalibrationError, load_correction
 from mapf.eval.journal import SOURCES, read_journal
 from mapf.eval.montecarlo import simulate_paths
-from mapf.pipeline.run import RunRequest, execute
+from mapf.pipeline.run import TRACE_FILE, RunRequest, execute
+from mapf.pipeline.trace import started_at
 from mapf.serve.analyse import (
     AnalysisError,
     Exhibit,
@@ -363,6 +364,9 @@ def serve(
             # screen is the distribution that would be scored.
             simulate=lambda forecast, horizon: simulate_paths(
                 forecast.scenarios, horizon_days=horizon
+            ),
+            started=lambda run_id: started_at(
+                (runs_dir or settings.paths.runs_dir) / str(run_id) / TRACE_FILE
             ),
         )
 

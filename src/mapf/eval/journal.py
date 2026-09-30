@@ -51,6 +51,8 @@ from mapf.eval.window import (
     WindowNotClosedError,
     realised_bar,
 )
+from mapf.pipeline.run import TRACE_FILE
+from mapf.pipeline.trace import started_at
 
 _logger = structlog.get_logger(__name__)
 
@@ -261,6 +263,12 @@ class JournalEntry:
     # a real state and not a blank.
     company_name: str | None
     anchor_date: date
+    # When the run was made: the first event in its own trace, in UTC. Not
+    # `as_of`, which for a corpus run is the evening before the bar it read and
+    # months before the run happened, and not the anchor, which for a run made
+    # before a session settles is the previous day. None when the run left no
+    # trace to read it from.
+    made_at: datetime | None
     anchor_spot: float
     # Recorded by the reader from what the run itself wrote down, not derived from
     # its outcome: whether `anchor_spot` was a settled close or a live quote.
@@ -510,11 +518,11 @@ def _entries(
     ledger_items: Mapping[str, LedgerItem] | None,
 ) -> Iterator[JournalEntry]:
     directories = sorted((c for c in runs_dir.iterdir() if c.is_dir()), key=lambda c: c.name)
-    read = [pair for d in directories if (pair := _read_run(d, skipped)) is not None]
+    read = [(d, *pair) for d in directories if (pair := _read_run(d, skipped)) is not None]
     # Newest anchor first, so a `limit` keeps the recent end rather than whichever
     # UUIDs happened to sort low.
-    read.sort(key=lambda pair: pair[1].prices.last_trading_date, reverse=True)
-    for forecast, manifest in read[:limit] if limit is not None else read:
+    read.sort(key=lambda found: found[2].prices.last_trading_date, reverse=True)
+    for directory, forecast, manifest in read[:limit] if limit is not None else read:
         anchor = manifest.prices.last_trading_date
         run_id = str(forecast.run_id)
         is_exhibit = (
@@ -540,6 +548,7 @@ def _entries(
             # clock (and for corpus items, the day after the filing), while the
             # anchor is the bar the forecast actually opened from.
             anchor_date=anchor,
+            made_at=started_at(directory / TRACE_FILE),
             anchor_spot=forecast.spot_price,
             price_kind=kind,
             horizon_days=forecast.horizon_days,
