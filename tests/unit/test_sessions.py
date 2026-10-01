@@ -13,7 +13,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from mapf.core.sessions import EXCHANGE_TZ, session_has_settled, settled
+from mapf.core.sessions import EXCHANGE_TZ, session_has_settled, settled, settled_since
 
 SESSION = date(2026, 9, 28)
 
@@ -125,3 +125,50 @@ def test_an_empty_series_stays_empty() -> None:
 def test_a_single_unfinished_bar_leaves_nothing() -> None:
     """Which the run path turns into a refusal rather than anchoring on nothing."""
     assert settled([_Bar(SESSION)], now=_et(10, 0)) == ()
+
+
+# --- a settle between a fetch and a read (ADR 0040) -----------------------------
+
+
+def _utc(hour: int, minute: int = 0, day: date = SESSION) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=UTC)
+
+
+def test_a_fetch_before_the_settle_and_a_read_after_it_names_that_day() -> None:
+    # 28 Sep 2026 is in daylight time: 16:30 in New York is 20:30 UTC.
+    assert settled_since(_et(8), now=_et(17)) == SESSION
+    assert settled_since(_utc(14), now=_utc(20, 31)) == SESSION
+
+
+def test_the_settle_instant_itself_counts_as_passed() -> None:
+    assert settled_since(_et(16, 29), now=_et(16, 30)) == SESSION
+
+
+def test_a_read_before_the_settle_has_nothing_to_refresh() -> None:
+    assert settled_since(_et(8), now=_et(16, 29)) is None
+
+
+def test_a_fetch_at_or_after_the_settle_is_already_settled() -> None:
+    """The refetch happens once: after it the file's own instant is past the settle."""
+    assert settled_since(_et(16, 30), now=_et(17)) is None
+    assert settled_since(_et(16, 45), now=_et(23, 59)) is None
+
+
+def test_the_settle_follows_new_yorks_clock_through_the_winter_change() -> None:
+    """Standard time: 16:30 is 21:30 UTC, an hour later than in September. A fixed
+    20:30 UTC would call a 21:00 UTC read settled and refetch a window still open."""
+    winter = date(2026, 12, 2)
+    assert settled_since(_utc(15, day=winter), now=_utc(21, 0, day=winter)) is None
+    assert settled_since(_utc(15, day=winter), now=_utc(21, 30, day=winter)) == winter
+
+
+def test_only_the_reads_own_new_york_day_is_asked_about() -> None:
+    """00:30 UTC on the 29th is still 20:30 on the 28th in New York."""
+    assert settled_since(_utc(14), now=_utc(0, 30, day=date(2026, 9, 29))) == SESSION
+
+
+def test_a_naive_instant_is_refused() -> None:
+    with pytest.raises(ValueError, match="aware"):
+        settled_since(datetime(2026, 9, 28, 8, 0), now=_et(17))
+    with pytest.raises(ValueError, match="aware"):
+        settled_since(_et(8), now=datetime(2026, 9, 28, 17, 0))
