@@ -27,7 +27,7 @@ from mapf.agents.analyst import AnalystAgent, AnalystRequest
 from mapf.agents.base import LLMAgent
 from mapf.agents.intake import IntakeAgent, IntakeRequest
 from mapf.agents.structuralist import StructuralistAgent, StructuralistRequest
-from mapf.core.errors import MarketDataError, OutputTruncatedError
+from mapf.core.errors import AnalystInputError, MarketDataError, OutputTruncatedError
 from mapf.core.fidelity import measure as measure_fidelity
 from mapf.core.hashing import new_run_id
 from mapf.core.models import (
@@ -42,6 +42,7 @@ from mapf.core.ports import DividendSource, MarketDataProvider
 from mapf.core.provenance import code_version
 from mapf.core.quality import check as check_quality
 from mapf.core.sessions import settled
+from mapf.core.volatility import trailing_annualised_vol
 from mapf.pipeline.manifest import AgentRecord, PriceProvenance, RunManifest
 from mapf.pipeline.trace import CountingTrace
 from mapf.render.chart import write_chart
@@ -183,12 +184,30 @@ def execute(
     as_of = request.as_of or datetime.now(UTC)
     fetched_on = today or as_of.date()
 
+    # An experimental input is a different system, and a different system without a
+    # label is a run that looks like the frozen one. Every corpus and live path
+    # arrives here, so this is the one place that cannot be walked around (ADR 0042).
+    if agents.analyst.takes_realised_vol and not arm:
+        raise AnalystInputError(
+            "this analyst is shown a realised volatility, which the frozen system is not; "
+            "an experiment's run must carry an arm label so it cannot be taken for one"
+        )
+
     # 1. Prices. `last_trading_date` — never a wall clock — is what reaches prompts.
     end = as_of.date()
     window = market.get_ohlcv(request.ticker, end - timedelta(days=request.history_days), end)
     window = settled_window(window, as_of=as_of)
     as_of_date = window.last_trading_date
     spot = window.last_close
+    # A2. From the closes STRICTLY BEFORE the anchor session, which is the random-walk
+    # baseline's own information set, so the figure shown is that baseline's volatility
+    # and not a neighbour of it. Computed before any model runs: a window too short
+    # for one fails here, not three agents later, and never goes on without it.
+    realised_vol = (
+        trailing_annualised_vol([bar.close for bar in window.bars[:-1]], ticker=request.ticker)
+        if agents.analyst.takes_realised_vol
+        else None
+    )
 
     # 2. Agents, strictly in sequence: one model resident at a time.
     facts = agents.intake.run(
@@ -201,6 +220,7 @@ def execute(
             as_of_date=as_of_date,
             horizon_days=request.horizon_days,
             facts=facts,
+            realised_vol=realised_vol,
         )
     )
     _refuse_if_truncated(agents, trace)

@@ -19,7 +19,7 @@ from uuid import UUID
 
 import httpx
 
-from mapf.agents.analyst import AnalystAgent
+from mapf.agents.analyst import REALISED_VOL_TEMPLATE, AnalystAgent
 from mapf.agents.intake import IntakeAgent
 from mapf.agents.structuralist import StructuralistAgent
 from mapf.core.ports import DividendSource, LLMProvider, MarketDataProvider, ModelInfo, QuoteSource
@@ -214,9 +214,18 @@ def build_run(
             "degeneration_penalty": registry.spec(stage).degeneration_penalty,  # type: ignore[arg-type]
         }
 
+    analyst = common("analyst")
+    if settings.experiments.analyst_realised_vol:
+        # A2 (ADR 0042). Both change together or not at all, which is why this is one
+        # branch and not two settings the user could set inconsistently.
+        analyst = {
+            **analyst,
+            "template": REALISED_VOL_TEMPLATE,
+            "version": settings.prompts.analyst_realised_vol,
+        }
     agents = Agents(
         intake=IntakeAgent(**common("intake")),  # type: ignore[arg-type]
-        analyst=AnalystAgent(**common("analyst")),  # type: ignore[arg-type]
+        analyst=AnalystAgent(**analyst),  # type: ignore[arg-type]
         structuralist=StructuralistAgent(
             **common("structuralist"),  # type: ignore[arg-type]
             max_attempts=settings.inference.max_repair_attempts,

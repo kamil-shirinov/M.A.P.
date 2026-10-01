@@ -164,6 +164,16 @@ intake = "v2"
 analyst = "v3"
 structuralist = "v2"
 
+# Phase 5 experiments. Every switch here is OFF in the frozen system, and off is
+# byte-identical to it: same prompts, same cache keys, same forecasts (ADR 0042).
+# Turning one on makes a different system; its runs belong in an experiment's own
+# output directory, never the corpus.
+[experiments]
+# A2: give the analyst the stock's trailing realised volatility as a fact, in
+# `scenario_analyst_vol` (the version below) instead of `scenario_analyst`. Meant to
+# be switched on by an experiment's own invocation, not by editing this file.
+analyst_realised_vol = false
+
 # ---------------------------------------------------------------------------
 # Caches — load-bearing infrastructure, not optimisation (CLAUDE.md §6)
 # ---------------------------------------------------------------------------
