@@ -1,6 +1,6 @@
 # 0012 — The price cache and retroactive adjustment
 
-Status: Accepted · Date: 2026-08-11 · Amended 2026-08-12 (twice) · Phase 1
+Status: Accepted · Date: 2026-08-11 · Amended 2026-08-12 (twice) · Phase 1 · Refined by [0040](0040-price-window-refreshes-once-after-the-close.md): one file is refetched once, after the close
 
 ## Context
 
