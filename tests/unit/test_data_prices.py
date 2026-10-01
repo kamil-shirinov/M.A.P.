@@ -7,7 +7,7 @@ lives in `tests/contract/` and is deselected by default.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import httpx
@@ -24,7 +24,7 @@ from mapf.core.errors import (
     PriceSnapshotIncompleteError,
 )
 from mapf.core.models import ADJUSTMENT_BASIS, Bar, PriceWindow
-from mapf.data.cache import ParquetPriceCache, PriceSnapshot
+from mapf.data.cache import ParquetPriceCache, PriceSnapshot, read_fetched_at
 from mapf.data.providers.chain import ProviderChain
 from mapf.data.providers.stooq import StooqProvider, to_stooq_symbol
 from mapf.data.providers.yfinance_provider import YFinanceProvider
@@ -437,6 +437,237 @@ def test_an_unpinned_cache_still_fetches_and_writes(tmp_path: Path) -> None:
     cache.get_ohlcv("AAPL", START, END)
     cache.get_ohlcv("AAPL", START, END)
     assert inner.calls == 1  # second call served from disk
+
+
+# ---------------------------------------------------------------------------
+# A window fetched before the close is refetched once after it (ADR 0040)
+# ---------------------------------------------------------------------------
+DAY = date(2026, 9, 30)  # a Wednesday, in daylight time: 16:30 in New York is 20:30 UTC
+FROM = DAY - timedelta(days=30)
+
+
+def _at(hour: int, minute: int = 0, *, day: date = DAY) -> datetime:
+    return datetime(day.year, day.month, day.day, hour, minute, tzinfo=UTC)
+
+
+class _Clock:
+    def __init__(self, start: datetime) -> None:
+        self.now = start
+
+    def __call__(self) -> datetime:
+        return self.now
+
+
+class _Sequenced:
+    """Serves one window per call, in order, like a provider whose last bar moves."""
+
+    name = "yfinance"
+
+    def __init__(self, *windows: PriceWindow | Exception) -> None:
+        self._windows = list(windows)
+        self.calls = 0
+
+    def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
+        served = self._windows[min(self.calls, len(self._windows) - 1)]
+        self.calls += 1
+        if isinstance(served, Exception):
+            raise served
+        return served
+
+
+def _bars(*closes: float) -> PriceWindow:
+    """One bar a day, the last on DAY, so the final close is the one in question."""
+    first = DAY - timedelta(days=len(closes) - 1)
+    return PriceWindow(
+        ticker="AAPL",
+        provider="yfinance",
+        adjustment="split_adjusted",
+        bars=tuple(
+            Bar(
+                date=first + timedelta(days=i),
+                open=close,
+                high=close + 1,
+                low=close - 1,
+                close=close,
+                volume=10,
+            )
+            for i, close in enumerate(closes)
+        ),
+    )
+
+
+def _cache(inner: object, root: Path, clock: _Clock, *, frozen: bool = False) -> ParquetPriceCache:
+    return ParquetPriceCache(
+        inner,  # type: ignore[arg-type]
+        root,
+        today=lambda: clock.now.date(),
+        now=clock,
+        frozen=frozen,
+    )
+
+
+def test_a_window_fetched_before_the_close_is_refetched_once_after_it(tmp_path: Path) -> None:
+    """The defect. A file fetched in the morning holds no bar for today, and was
+    served all evening: the close appeared the next day."""
+    clock = _Clock(_at(12))  # 08:00 in New York
+    inner = _Sequenced(_bars(10.0), _bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 10.0
+    clock.now = _at(20, 29)  # 16:29: not yet
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 10.0
+    assert inner.calls == 1
+
+    clock.now = _at(20, 31)
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 11.0
+    assert inner.calls == 2
+
+
+def test_the_refresh_happens_once_not_on_every_read_after_the_close(tmp_path: Path) -> None:
+    clock = _Clock(_at(12))
+    inner = _Sequenced(_bars(10.0), _bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+
+    clock.now = _at(20, 31)
+    for minute in (31, 45, 59):
+        clock.now = _at(20, minute)
+        cache.get_ohlcv("AAPL", FROM, DAY)
+    clock.now = _at(23, 0)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+    assert inner.calls == 2
+
+
+def test_an_unfinished_bar_is_not_served_as_the_close_after_the_bell(tmp_path: Path) -> None:
+    """The other face of it, and the worse one: a file fetched at 11:00 holds
+    today's bar at its 11:00 price. At 17:00 `settled` accepts that bar as final."""
+    clock = _Clock(_at(15))  # 11:00 in New York
+    inner = _Sequenced(_bars(10.0, 10.4), _bars(10.0, 10.9))
+    cache = _cache(inner, tmp_path, clock)
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 10.4
+
+    clock.now = _at(21, 0)
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 10.9
+
+
+def test_a_window_fetched_after_the_close_is_never_refetched(tmp_path: Path) -> None:
+    clock = _Clock(_at(20, 45))
+    inner = _Sequenced(_bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+    clock.now = _at(23, 30)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+    assert inner.calls == 1
+
+
+def test_a_window_that_stops_before_today_is_not_waiting_for_anything(tmp_path: Path) -> None:
+    """Every session in it had finished when it was fetched; the day's close is not
+    in its range, so refetching would change nothing but the request count."""
+    clock = _Clock(_at(12))
+    inner = _Sequenced(_bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+    cache.get_ohlcv("AAPL", FROM, DAY - timedelta(days=1))
+    clock.now = _at(21, 0)
+    cache.get_ohlcv("AAPL", FROM, DAY - timedelta(days=1))
+    assert inner.calls == 1
+
+
+def test_the_superseded_file_is_kept_but_never_offered_as_a_window(tmp_path: Path) -> None:
+    """ADR 0012: an overwritten vintage is an unreproducible run. The morning's file
+    is moved aside, and `PriceSnapshot` globs `*.parquet` so it cannot surface."""
+    clock = _Clock(_at(12))
+    inner = _Sequenced(_bars(10.0), _bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+    clock.now = _at(21, 0)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+
+    directory = tmp_path / "AAPL" / ADJUSTMENT_BASIS / DAY.isoformat()
+    kept = list(directory.glob("*.superseded"))
+    assert len(kept) == 1
+    assert len(list(directory.glob("*.parquet"))) == 1
+    assert PriceSnapshot(tmp_path, DAY).covering("AAPL", FROM, DAY) is not None
+    assert list(tmp_path.rglob("*.tmp")) == []
+
+
+def test_a_failed_refetch_leaves_the_stale_file_and_raises(tmp_path: Path) -> None:
+    """Serving the morning's file would put an unfinished or missing bar back in
+    front of `settled`. The run fails instead, and the next call tries again."""
+    clock = _Clock(_at(12))
+    outage = MarketDataUnavailableError("yfinance", "down")
+    inner = _Sequenced(_bars(10.0), outage, _bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+
+    clock.now = _at(21, 0)
+    with pytest.raises(MarketDataUnavailableError):
+        cache.get_ohlcv("AAPL", FROM, DAY)
+    directory = tmp_path / "AAPL" / ADJUSTMENT_BASIS / DAY.isoformat()
+    assert list(directory.glob("*.superseded")) == []
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 11.0
+
+
+def test_a_pinned_vintage_is_never_refreshed(tmp_path: Path) -> None:
+    """A snapshot that changed when read would be a different snapshot."""
+    clock = _Clock(_at(12))
+    inner = _Sequenced(_bars(10.0), _bars(10.0, 11.0))
+    _cache(inner, tmp_path, clock).get_ohlcv("AAPL", FROM, DAY)
+
+    clock.now = _at(21, 0)
+    frozen = _cache(inner, tmp_path, clock, frozen=True)
+    assert frozen.get_ohlcv("AAPL", FROM, DAY).last_close == 10.0
+    assert inner.calls == 1
+
+
+def test_a_file_that_does_not_record_when_it_was_fetched_is_served_as_it_is(
+    tmp_path: Path,
+) -> None:
+    """Every vintage already on disk is one. Guessing from the modification time, which
+    a copy resets, would rewrite them all on first read."""
+    import pyarrow.parquet as pq
+
+    clock = _Clock(_at(12))
+    inner = _Sequenced(_bars(10.0), _bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+    entry = next(tmp_path.rglob("*.parquet"))
+    table = pq.read_table(entry)
+    legacy = {k: v for k, v in table.schema.metadata.items() if k != b"mapf_fetched_at"}
+    pq.write_table(table.replace_schema_metadata(legacy), entry)
+
+    clock.now = _at(21, 0)
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 10.0
+    assert inner.calls == 1
+
+
+@pytest.mark.parametrize("stamp", [b"not a time", b"2026-09-30T12:00:00"])
+def test_an_unreadable_or_zoneless_fetch_instant_counts_as_unknown(
+    tmp_path: Path, stamp: bytes
+) -> None:
+    import pyarrow.parquet as pq
+
+    clock = _Clock(_at(12))
+    inner = _Sequenced(_bars(10.0), _bars(10.0, 11.0))
+    cache = _cache(inner, tmp_path, clock)
+    cache.get_ohlcv("AAPL", FROM, DAY)
+    entry = next(tmp_path.rglob("*.parquet"))
+    table = pq.read_table(entry)
+    pq.write_table(
+        table.replace_schema_metadata({**table.schema.metadata, b"mapf_fetched_at": stamp}), entry
+    )
+
+    clock.now = _at(21, 0)
+    assert cache.get_ohlcv("AAPL", FROM, DAY).last_close == 10.0
+
+
+def test_a_file_that_cannot_be_opened_has_no_fetch_instant(tmp_path: Path) -> None:
+    assert read_fetched_at(tmp_path / "missing.parquet") is None
+
+
+def test_the_fetch_instant_is_recorded_with_its_zone(tmp_path: Path) -> None:
+    clock = _Clock(_at(12))
+    _cache(_Sequenced(_bars(10.0)), tmp_path, clock).get_ohlcv("AAPL", FROM, DAY)
+    assert read_fetched_at(next(tmp_path.rglob("*.parquet"))) == _at(12)
 
 
 # ---------------------------------------------------------------------------

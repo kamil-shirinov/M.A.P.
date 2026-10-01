@@ -7,7 +7,9 @@ reviewer who clones sees the No-export panel and nothing else. `map export
 no scores and no prices.
 
 `scripts/build_site.sh` assembles a directory that can be served anywhere. **It does not
-deploy.** Publishing is a separate, deliberate act.
+deploy.** Publishing is a separate, deliberate act, and has its own script
+(`scripts/publish_site.sh`, below) that has never been run against the real remote:
+the plan is written here, the first deploy happens on the laptop.
 
 ```bash
 scripts/build_site.sh                 # -> site/, 3.7 MB, without the price series
@@ -50,15 +52,80 @@ What it buys is the removal of a redistributable *dataset* — a 120-file daily 
 somebody could take and use — while keeping the individual figures that are evidence for
 particular claims.
 
-## When you deploy
+## Hosting: GitHub Pages, from an orphan `gh-pages` branch
 
-The build prints the three commands and runs none of them:
+**Planned, not deployed.** [ADR 0041](../decisions/0041-github-pages-from-an-orphan-branch.md)
+has the reasoning and the alternatives.
 
+The shape: `main` holds the code and never the export. A second branch, `gh-pages`,
+shares no history with it and holds **only the built site, as one parentless commit that
+is replaced on every deploy.** Pages serves that branch's root. The site is built on the
+laptop, because only the laptop has `var/`; a CI runner has no export to publish.
+
+### Once, before the first deploy
+
+1. **Merge this work to `main`.** The script refuses a commit that is not on `origin/main`,
+   so the published copy always names a commit anyone can read.
+2. **Decide whether a public page is what you want.** This is the decision the script cannot
+   make for you, and two facts bear on it:
+   - **A Pages site is public, whatever the repository's visibility.** (Pages from a private
+     repository also needs a paid plan, and a private-Pages option exists only on Enterprise
+     Cloud: check what your account has.) The repository being private protects the
+     source, not the site.
+   - **`gh-pages` is a branch of this repository.** "Main never carries the export" is
+     true; the repository does. Anyone who can read it can read the branch, and if the
+     repository is ever made public the branch goes with it.
+   - Leaving prices out removes the bulk series, not the third-party content: the table
+     above still applies in full.
+3. **Settings → Pages → Build and deployment → Deploy from a branch → `gh-pages` / `/ (root)`.**
+   The branch does not exist until the first deploy, so this is done after it. The script
+   prints the URL it should serve at: `https://<owner>.github.io/<repo>/`.
+
+### Each deploy, on the laptop
+
+```bash
+scripts/publish_site.sh --dry-run   # build, verify, assemble, show; push nothing
+scripts/publish_site.sh             # the same, then asks for the word "publish"
 ```
-# netlify deploy --dir=site --prod
-# vercel deploy site --prod
-# rsync -av --delete site/ user@host:/var/www/map/
-```
+
+`--yes` skips the question, for a deploy you have already looked at. There is no flag to
+name another branch, and none to include prices.
+
+What it does, and refuses:
+
+| Step | Refuses when |
+|---|---|
+| Commit | `HEAD` is not an ancestor of `origin/main` |
+| Build (`build_site.sh`) | `config/` or `src/mapf/` is dirty; either suite or the style probe fails |
+| Verify | `assets/export/prices/` exists; the manifest says any company was priced; the manifest is missing; any top-level entry is not a page, `assets/` or `robots.txt`; any `.parquet`, `.jsonl` or `.env` file is anywhere in it |
+| Verify (warning only) | a `/Users/…` or `/home/…` path appears in a published file |
+| Assemble | git `user.name` / `user.email` are not set |
+| Confirm | the reply is not exactly `publish` |
+| Push | the branch moved since the script looked (`--force-with-lease` against the commit it saw) |
+
+The check on the build is separate from the build's own reason to leave prices out: the
+exporter writes the manifest's absence in its own words, and the publish script reads the
+result rather than trusting that the builder did what it was asked.
+
+Only `refs/heads/gh-pages` is ever pushed. The temporary repository holding the site is
+removed on exit; your clone is never switched to `gh-pages`.
+
+### What cannot be taken back
+
+A force-push replaces the branch; it does not recall what was there. GitHub keeps
+unreachable commits retrievable by their hash, and publishing again does not change that.
+That is the reason the price check refuses rather than warns, and why the script asks. To
+take the *page* down: Settings → Pages → Unpublish, and delete the `gh-pages` branch.
+Anything already fetched, cached or archived stays that way, as `robots.txt` says for
+indexing and for nothing else.
+
+### Not chosen
+
+- **A `docs/` folder on `main`.** Puts the export on `main`, which is what this is arranged to avoid.
+- **A GitHub Actions deploy.** The runner would need the export, which is not committed.
+- **Another host** (`netlify deploy --dir=site --prod`, `vercel deploy site --prod`,
+  `rsync -av --delete site/ user@host:/var/www/map/`). All still work on `site/`, and
+  none of them has the "replace, with no history" property for free. `build_site.sh` still prints them.
 
 `site/robots.txt` disallows indexing. That is a request, not a control: anything served
 is public and may be cached or archived whether or not it is indexed. Decide on that

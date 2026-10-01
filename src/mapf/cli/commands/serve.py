@@ -322,11 +322,10 @@ def serve(
             now = datetime.now(UTC)
             today = now.astimezone(EXCHANGE_TZ).date()
             start = years_before(today, PAGE_YEARS)
-            # Asked up to the last session that could have closed. The cache keeps
-            # a window for the whole UTC day, so one fetched before the bell would
-            # otherwise be served all evening without the day's close; asking for
-            # yesterday before 16:30 and today after it makes those two windows,
-            # and the second is fetched once the close exists.
+            # Asked up to the last session that could have closed, so no request is
+            # made for a window ending on a session still trading. The cache would
+            # also refetch a file fetched before 16:30 once it is past (ADR 0040);
+            # this keeps the two windows apart so that refetch is not needed here.
             closed = today if session_has_settled(now, session=today) else today - timedelta(days=1)
             try:
                 window = market.get_ohlcv(ticker, start, closed)

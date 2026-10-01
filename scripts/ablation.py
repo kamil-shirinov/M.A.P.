@@ -83,6 +83,9 @@ class Arm:
     analyst: str  # "full" | "capped" | "none"
     structuralist: str  # "intake" | "analyst"  -- which model alias to use
     max_tokens: int | None = None
+    # Phase 5 A2 (ADR 0042): show the analyst the stock's trailing realised volatility.
+    # The only arm that changes what a model is shown rather than which agents run.
+    realised_vol: bool = False
 
 
 ARMS = {
@@ -94,6 +97,11 @@ ARMS = {
     # 16,384 window allows. It does not become arm D and enters no comparison.
     "probe": Arm("probe", analyst="none", structuralist="analyst", max_tokens=15000),
     "control": Arm("control", analyst="full", structuralist="structuralist"),
+    # EXPERIMENT A2, built and NOT RUN (docs/preregistration-a2-draft.md). The frozen
+    # system with one change: its analyst is given the trailing realised volatility.
+    # Unlike A it cannot replay the cache -- the prompt differs, so every analyst
+    # call is a fresh 12B generation, minutes per item.
+    "A2": Arm("A2", analyst="full", structuralist="structuralist", realised_vol=True),
 }
 
 
@@ -124,6 +132,16 @@ def main(arm: str = typer.Argument(...), limit: int = typer.Option(0)) -> None:
         items = items[:limit]
 
     settings = load()
+    if spec.realised_vol:
+        # Through the config switch, so the run is wired exactly as a configured one
+        # would be. `execute` refuses it without the arm label this script passes.
+        settings = settings.model_copy(
+            update={
+                "experiments": settings.experiments.model_copy(
+                    update={"analyst_realised_vol": True}
+                )
+            }
+        )
     out_dir = OUT / arm
     settings = settings.model_copy(
         update={"paths": settings.paths.model_copy(update={"runs_dir": out_dir})}

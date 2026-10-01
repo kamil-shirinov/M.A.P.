@@ -60,6 +60,29 @@ def session_has_settled(when: datetime, *, session: date) -> bool:
     return local.time() >= SETTLED_AFTER
 
 
+def settled_since(fetched_at: datetime, *, now: datetime) -> date | None:
+    """The New York day whose 16:30 fell after `fetched_at` and has now passed.
+
+    `None` when no settle lies in between. Only `now`'s own New York day is asked
+    about: a file is read within the UTC day it was written under, so the only
+    settle that can separate the fetch from the read is today's.
+
+    Exists for the price cache, which keeps a window for the whole UTC day. A file
+    fetched at 08:00 has no bar for today and one fetched at 11:00 holds an
+    unfinished one; both are served unchanged at 17:00, when `settled` will accept
+    that bar as a close. The answer says WHICH session settled so the caller can
+    ask whether its window reaches it.
+
+    Like the rest of this module it does not know holidays: on a day the market
+    never opened it answers yes once, and the refetch it causes finds nothing new.
+    """
+    if fetched_at.tzinfo is None or now.tzinfo is None:
+        raise ValueError("settled_since needs aware datetimes, not local ones")
+    day = now.astimezone(EXCHANGE_TZ).date()
+    settle = datetime.combine(day, SETTLED_AFTER, tzinfo=EXCHANGE_TZ)
+    return day if fetched_at < settle <= now else None
+
+
 def settled[Bar: _Dated](bars: Sequence[Bar], *, now: datetime) -> tuple[Bar, ...]:
     """The bars whose sessions have finished, newest last.
 

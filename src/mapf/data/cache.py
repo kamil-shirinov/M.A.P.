@@ -15,6 +15,11 @@ no corporate action occurred, which is nearly always. The precise alternative
 needs a corporate-actions table, which Phase 1 defers. Old vintages accumulate
 rather than being overwritten, deliberately: an overwritten vintage is an
 unreproducible run.
+
+One file is replaced within its day, and only once: a window fetched before 16:30
+in New York and read after it (ADR 0040). It is neither the close's day nor its
+vintage that changed but the bar the file was waiting for, so the file is refetched
+and the superseded one is kept beside it rather than lost.
 """
 
 from __future__ import annotations
@@ -29,16 +34,44 @@ import structlog
 from mapf.core.errors import PriceSnapshotIncompleteError
 from mapf.core.models import ADJUSTMENT_BASIS, Bar, PriceWindow
 from mapf.core.ports import MarketDataProvider
+from mapf.core.sessions import settled_since
 
 _logger = structlog.get_logger(__name__)
 
 _PROVIDER_KEY = b"mapf_provider"
 _BASIS_KEY = b"mapf_adjustment"
 _FETCHED_ON_KEY = b"mapf_fetched_on"
+# The instant, not the day: whether a file predates the close is a question about
+# the time of day, and `fetched_on` cannot answer it.
+_FETCHED_AT_KEY = b"mapf_fetched_at"
+# Not `*.parquet`, so `PriceSnapshot`'s glob never offers a superseded file as a window.
+_SUPERSEDED_SUFFIX = ".superseded"
 
 
 def _today() -> date:
     return datetime.now(UTC).date()
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def read_fetched_at(path: Path) -> datetime | None:
+    """When a stored window was fetched, or `None` if the file does not say.
+
+    A file written before the instant was recorded says nothing, and is reported as
+    unknown rather than guessed from its modification time, which a copy or a restore
+    resets. Unknown is treated as current by the cache: refetching what cannot be
+    shown stale would rewrite every old vintage on first read.
+    """
+    try:
+        import pyarrow.parquet as pq
+
+        raw = (pq.read_schema(path).metadata or {}).get(_FETCHED_AT_KEY)
+        stamp = None if raw is None else datetime.fromisoformat(raw.decode("utf-8"))
+    except (OSError, ValueError):
+        return None
+    return stamp if stamp is not None and stamp.tzinfo is not None else None
 
 
 def read_window(path: Path) -> PriceWindow | None:
@@ -137,11 +170,13 @@ class ParquetPriceCache:
         cache_dir: Path,
         *,
         today: Callable[[], date] = _today,
+        now: Callable[[], datetime] = _now,
         frozen: bool = False,
     ) -> None:
         self._inner = inner
         self._cache_dir = cache_dir
         self._today = today
+        self._now = now
         # A frozen vintage READS ONLY. Without this the pin is cosmetic: a miss
         # would fetch today's series and store it under the pinned name, which is
         # the calendar-keyed cache wearing a fixed label.
@@ -154,16 +189,37 @@ class ParquetPriceCache:
     def get_ohlcv(self, ticker: str, start: date, end: date) -> PriceWindow:
         path = self._path(ticker, start, end)
         cached = self._read(path)
-        if cached is not None:
+        if cached is not None and not self._settled_since_fetch(path, end):
             return cached
 
         if self._frozen:
             raise PriceSnapshotIncompleteError(
                 ticker, self._today().isoformat(), f"{start.isoformat()}__{end.isoformat()}"
             )
+        # A failed fetch raises here, with the stale file still in place: serving it
+        # would put an unfinished bar back in front of `settled`, which passes it as
+        # a close once 16:30 has gone by. The next call retries.
         window = self._inner.get_ohlcv(ticker, start, end)
+        if cached is not None:
+            _logger.info("price_cache_refreshed_after_settle", ticker=ticker, path=str(path))
+            path.replace(path.with_name(path.name + _SUPERSEDED_SUFFIX))
         self._write(path, window)
         return window
+
+    def _settled_since_fetch(self, path: Path, end: date) -> bool:
+        """Has a session this window reaches settled since the file was fetched?
+
+        Never for a frozen vintage: it is read, not refreshed, and a snapshot that
+        changed when read would be a different snapshot. Never for a window that
+        stops before today, which holds only sessions that had already finished.
+        """
+        if self._frozen:
+            return False
+        fetched_at = read_fetched_at(path)
+        if fetched_at is None:
+            return False
+        session = settled_since(fetched_at, now=self._now())
+        return session is not None and end >= session
 
     # -- paths -------------------------------------------------------------
     def _path(self, ticker: str, start: date, end: date) -> Path:
@@ -203,6 +259,7 @@ class ParquetPriceCache:
                 _PROVIDER_KEY: window.provider.encode("utf-8"),
                 _BASIS_KEY: window.adjustment.encode("utf-8"),
                 _FETCHED_ON_KEY: self._today().isoformat().encode("utf-8"),
+                _FETCHED_AT_KEY: self._now().isoformat().encode("utf-8"),
             }
         )
         temporary = path.with_suffix(".parquet.tmp")

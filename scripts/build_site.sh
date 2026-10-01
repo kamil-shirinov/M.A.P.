@@ -15,8 +15,8 @@
 # carry their own closes. See `docs/publishing.md` for what does remain.
 #
 # IT DOES NOT DEPLOY. It writes `site/` and stops. Publishing is a separate,
-# deliberate act — see the bottom of this file for the one command that does it,
-# commented out on purpose.
+# deliberate act: `scripts/publish_site.sh` runs this, checks the result, and asks
+# before pushing it to the gh-pages branch (docs/publishing.md).
 #
 #   scripts/build_site.sh              # -> site/
 #   scripts/build_site.sh --with-prices   # the full 5.5 MB export
@@ -110,7 +110,11 @@ echo "Serve it locally to check:"
 echo "    python3 -m http.server -d $OUT 8000"
 echo
 echo "DEPLOYING IS A SEPARATE DECISION and this script does not make it."
-echo "The repository is private; a hosted page is public. When you decide:"
+echo "The repository is private; a hosted page is public. To publish to GitHub Pages:"
+echo
+echo "    scripts/publish_site.sh --dry-run"
+echo
+echo "Or another host, by hand:"
 echo
 echo "    # netlify deploy --dir=site --prod"
 echo "    # vercel deploy site --prod"

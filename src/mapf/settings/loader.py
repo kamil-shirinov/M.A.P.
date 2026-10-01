@@ -162,6 +162,23 @@ class PromptsSettings(_Section):
     intake: str = "v1"
     analyst: str = "v1"
     structuralist: str = "v1"
+    # Read only when `experiments.analyst_realised_vol` is on. A separate template
+    # NAME, not a version of the analyst's, so the frozen template keeps its hash
+    # and the two knobs cannot disagree about which prompt is in use (ADR 0042).
+    analyst_realised_vol: str = "v1"
+
+
+class ExperimentsSettings(_Section):
+    """Switches for experiments that change what a model is shown.
+
+    Every one defaults to OFF, and off means byte-identical to the frozen system:
+    the same prompts, the same cache keys, the same forecasts. An experiment that
+    could only be undone by editing code is not one the frozen record can vouch for.
+    """
+
+    # Phase 5, experiment A2: the stock's trailing realised volatility, given to
+    # the analyst as a fact (ADR 0042).
+    analyst_realised_vol: bool = False
 
 
 class CacheSettings(_Section):
@@ -212,6 +229,7 @@ class Settings(BaseSettings):
     inference: InferenceSettings
     models: ModelsSettings
     prompts: PromptsSettings = PromptsSettings()
+    experiments: ExperimentsSettings = ExperimentsSettings()
     cache: CacheSettings
     data: DataSettings
     news: NewsSettings

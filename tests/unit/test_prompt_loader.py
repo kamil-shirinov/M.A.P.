@@ -246,6 +246,8 @@ def test_every_shipped_template_loads() -> None:
         # assertion is what stops a template being added to the package silently,
         # which is precisely what adding it did until this line was written.
         "structuralist_noanalyst.v1.md",
+        # Experiment A2 (ADR 0042): the analyst's v3 plus one trusted figure.
+        "scenario_analyst_vol.v1.md",
     }
 
 
