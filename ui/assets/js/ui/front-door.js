@@ -164,7 +164,7 @@ export function mountDoor(host, { onQuery, companies, runsBySource, finding, rep
      and without the development record it is not stated at all. */
   if (finding) {
     fact(chromeText(
-      "does not beat a plain random walk or GARCH on the development companies",
+      "does not beat a plain random walk or GARCH on the companies it was developed on",
       "stated from the exported development scoring record, where neither baseline is beaten on CRPS or log score",
     )).className = "door-fact door-fact--sentence";
   }

@@ -410,3 +410,206 @@ The document describes intentions; this paragraph exists so a reader does not mi
 for a record of work done.
 
 ---
+
+---
+
+## Detail the README leaves out
+
+The README is a front page. What it used to carry in full is here, unchanged in substance,
+so that cutting it from the front page did not cut it from the record.
+
+### The development scores in full
+
+| On 175 clean-band development items | M.A.P. | random walk | GARCH |
+|---|---|---|---|
+| CRPS *(lower is better)* | 0.03179 | 0.03016 | 0.03105 |
+| Log score *(lower is better)* | −1.3786 | −1.5826 | −1.5659 |
+| Direction | 87 of 175 — **49.7%** | a coin | a coin |
+
+Against the random walk the CRPS gap is **+0.00163 [+0.00071, +0.00278]** and the log
+score gap **+0.2040 [+0.08004, +0.36396]** — both intervals exclude zero, both in the
+wrong direction. Against GARCH, CRPS is indistinguishable and the log score is worse.
+Against a random walk widened for earnings days, CRPS is −0.00100 [−0.00222, +0.00111]:
+better as a point estimate, not established.
+
+Intervals in this section are the recorded ones. The bootstrap has since pinned the order it
+sorts tied days in. Under that order one verdict changes, in the compression finding below, and
+every other interval moves by at most 0.006.
+[Which order an interval was computed in](#which-order-an-interval-was-computed-in) has both.
+
+### The correction and the holdout, as the README stated it
+
+**1. The stated uncertainty was too narrow. A correction fixed that on unseen data —
+after failing its own test.** The forecasts claimed intervals about 27% tighter than the
+outcomes justified (calibration ratio 0.733, where 1.0 is calibrated). A two-parameter
+correction, shift and widen, was fitted on the 175-item development half of the clean
+band. **Its pre-registered success condition failed on development.** Nothing in the
+record said whether a failed condition still spends the holdout, so Kamil decided, having
+seen the failure, and that judgement is recorded in git note record 12. The holdout was
+spent once, on the other 173 items:
+
+| On the 173 holdout items | corrected | uncorrected | difference |
+|---|---|---|---|
+| Log score | **−1.23725** | −0.94947 | **−0.28778 [−0.45255, −0.11117]** |
+| CRPS | **0.03782** | 0.03873 | **−0.00090 [−0.00178, −0.00012]** |
+
+Both intervals exclude zero: the correction generalises to data it was not fitted on.
+Differences are taken before rounding, so a row need not subtract exactly — 0.03782 −
+0.03873 reads as −0.00091. **The correction does not make the forecasting better.** Its
+comparison with the baselines on the holdout, pre-registered as S5, survives only as a
+sentence — corrected, it beats the earnings-scaled random walk on CRPS and still loses to
+GARCH and the random walk on both rules — with no figure or interval in any artifact, so it is
+what that sentence claims and nothing can verify it
+([Findings #57](../notebook/Findings%20&%20Incidents.md)).
+
+### The compression finding as the README stated it
+
+**One finding did replicate, out of sample: volatility compression.** M.A.P. states too
+narrow a range of volatilities across companies. On most companies its σ is close to the
+baselines' (a median 0.91 of the random walk's on the second band); on the largest 6% of
+moves it is about half (0.51). The main measure is the slope of log σ(M.A.P.) on a
+baseline's log σ, corrected for the error in the baseline's own σ; 1.0 would be right. Same
+estimator on both bands, intervals computed on 2026-09-29 from the pre-registration:
+
+| corrected slope | development (178) | second band (177) |
+| --- | --- | --- |
+| against the random walk | 0.3765 [0.3144, 0.4659] | 0.4092 [0.3532, 0.4747] |
+| against GARCH | 0.2520 [0.1656, 0.3423] | 0.3268 [0.2869, 0.4281] |
+
+The second band's point estimates reproduce the recorded **0.409 and 0.327**; its intervals
+were never recorded ([Findings #66](../notebook/Findings%20&%20Incidents.md)). The registered
+test used a wider interval that also allows for error in M.A.P.'s σ. On the second band it
+stays below 1.0 against both baselines, [0.33, 0.76] and [0.25, 0.80]. On development its
+upper end was 1.23 against GARCH, and against the random walk 0.9993 — a figure that turns on
+the order numpy happens to sort tied days in, and lands above 1.0 under most other orders,
+including the one the bootstrap now pins, where it is 1.0060
+([Findings #70](../notebook/Findings%20&%20Incidents.md)). So the second band is where
+compression was established. It is the candidate explanation for both the heavy tails and
+the narrow intervals.
+
+### How the record was kept
+
+The README names each of these in one line. This is the long form.
+
+- **The corpus was frozen before any forecast on it was made** — 120 tickers and 727
+  forecasts at commit `36e08a3`, 2026-08-14 12:41 (+0100), *"FREEZE THE CORPUS --
+  pre-registration artifact"*. *Not* before any inference: the pipeline was built and
+  exercised on sample documents from 2026-08-11. One of those runs, `266aa3ba`, predates
+  the manifest format and cannot be read; four others — AAPL, made on 2026-08-12 and
+  2026-08-13 — are in the run journal, marked outside the corpus, and in no scored
+  population.
+- **Membership was amended once, the same day, before any forecast on the corpus** —
+  commit `96ad926`, 2026-08-14 17:46 (+0100), five hours after the freeze. A pre-flight fetch found **30
+  of 727 items had no usable Exhibit 99.1**, over the 2% failure allowance. `BRK-A` was
+  dropped as a duplicate CIK with `BRK-B`, and `GEN` for carrying no EX-99.1 on any filing;
+  `CG` and `WULF` replaced them from the seeded ordering. **727 forecasts → 709.** This
+  applied the pre-registered replacement rule rather than a new one: how a company attaches
+  its release is a fixed property of how it files. [ADR 0018](../decisions/0018-corpus-band-and-panel-shape.md)
+  records the amendment as preceding "all inference", which here means all inference on
+  the corpus; a dated erratum at its end corrects the section's heading, which says
+  2026-08-15. `36e08a3` was kept rather than rewritten, so the pair shows what was known
+  when.
+- **Later amendments changed how items were run, not which items.** The 779 runs made
+  before live analysis span **four freeze versions**, and 68 predate the field that
+  records one. Each item carries a `freeze_digest` over only the fields governing *what a
+  model was asked*, so an amendment that could have changed a forecast is distinguishable
+  from one that could not.
+- **22 pre-registration records** are stored as git notes, each written *before* the
+  result it constrains — the statistic, the predicted direction, and how to read every
+  outcome including the disconfirming ones.
+- **The holdout was spent once.** `map evaluate --split holdout` is refused before anything
+  is computed once the spend is recorded. The per-item scores were printed once and never
+  persisted; they cannot be recovered, and the app says so rather than showing a gap.
+- **Every number on screen carries its provenance** — measured, derived or quoted — and an
+  unmarked number fails a test.
+
+### Reading the pre-registrations, and why the dates can be trusted
+
+**Read the pre-registrations.** GitHub does not show git notes and `git clone` does not
+fetch them. Ask for the ref:
+
+```bash
+git fetch origin 'refs/notes/*:refs/notes/*'
+git log --format='%h %ad %s' --date=iso refs/notes/commits   # 22 appends, in order
+git notes show 171a4d6                                        # the records (ad71b13 before the cleanup)
+```
+
+The second command carries the evidence for the ordering: it is the history of the notes
+ref itself, one commit per append, each timestamped. `git log --show-notes=commits`
+displays a note beside its commit but says nothing about **when the note was written**,
+which is the whole claim.
+
+`%ad` is the **author** date, and that is deliberate. A rebase on 2026-09-08 rewrote part
+of this history and moved several *commit* dates to that day — `9cb1b84` was replayed as
+`710879a` with its author date intact — so any ordering read off commit dates would put
+work in September that happened earlier. The notes ref was not rebased, and its two dates
+agree. Evidence rather than proof, since author dates can be set by hand: what the ref
+establishes is that 22 appends exist in a sequence, each recorded before the result it
+constrains.
+
+### The history cleanup
+
+**The history was cleaned once, for privacy, on 2026-09-30.** Personal details came out of
+old file versions, three commit messages and the commit identities, and an old tool cache
+came out of every commit; dates, order and all other content were kept. Every commit has a
+new ID, the records still cite the old ones, and [commit-map.tsv](commit-map.tsv)
+pairs them ([Findings #71](../notebook/Findings%20&%20Incidents.md)).
+
+### Live analysis, in full
+
+`uv run map serve` adds the one thing that is not a read of the record. Every company that
+files earnings has a page, and at its foot, under **Live runs, outside the record**, Analyse
+fetches that company's latest earnings 8-K, runs the three agents over it, and draws the
+forecast fanning out from the latest settled close, on the same page. A run usually takes
+six to twelve minutes and is a permanent entry in the run journal. Live runs stay in that
+section: never in the record's table, its counts or its chart. **It only runs on a machine
+with the models on it**; the published site is static files, says so, and shows one
+recorded run instead.
+
+Most live fans are drawn **raw and marked uncalibrated**. The correction (see *The correction and the holdout*, above) was tested
+on a panel — five sessions, anchored within one trading day of a filing, companies the
+corpus filters accept — so it is applied only where all three hold, and the screen names
+whichever does not. Even then the run is not one of the frozen corpus's forecasts:
+applying the correction is defensible, not verified. [ADR 0036](../decisions/0036-live-analysis.md).
+
+### Running the checks, and what a clone cannot do
+
+**Run the checks.** All three pass with no inference server and no network.
+
+```bash
+uv sync --extra dev
+uv run pytest                     # 100% coverage of `mapf`
+uv run lint-imports               # the architecture contracts (ADR 0004)
+node --test ui/tests/*.test.mjs   # the front end; no build step, no dependencies
+```
+
+On a fresh clone most front-end tests **skip**, with the reason — they need an export this
+repository does not carry. The summary says so rather than reporting green. CI runs these
+on every push on exactly that fresh clone, with ruff and mypy
+([ADR 0037](../decisions/0037-continuous-integration.md)).
+
+**Check the arithmetic.** [export-contract.md](export-contract.md) states every
+file the app reads, field by field. The leakage figure is re-derivable from two files in
+the export: `0.03179 − 0.03348 = −0.00169`, and the app shows that subtraction rather than
+asserting the result.
+
+**A clone cannot regenerate the data.** `var/` holds the ledger, the run artifacts and the
+scoring passes, and none of it is committed — so a clone sees a stated "No export" panel,
+not a broken app. `uv run map export --allow-partial` builds what a clone *can*: the frozen
+corpus, and five named absences. See [publishing.md](publishing.md).
+
+**Make one yourself.** With the three models loaded on your own machine:
+
+```bash
+uv run map serve            # the app and its endpoints, on 127.0.0.1:8765
+```
+
+It opens search. Find a company, press Analyse at the foot of its page, and watch the run
+happen there — the stages come off the run's own trace, not a timer. This is the one
+command here that writes to the run journal rather than reading it.
+
+### What this is not
+
+**What this is not.** Not trading advice, not a signal, not a product. No order execution,
+no position sizing, no broker integration. It is an engineering and methodology exercise
+whose result happens to be negative.
