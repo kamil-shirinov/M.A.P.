@@ -30,6 +30,36 @@ Each agent is a contract rather than a model, so swapping the model behind one i
 
 ---
 
+## A quick tour
+
+Real stills from the app running on the real export, shot on 29 and 30 September 2026. The app has changed since, so some details differ from today's screens.
+
+![The front door: the M.A.P. title above a single search box, a link to a recorded run, and a strip of counts along the foot of the page](notebook/design/screens/screen-12-door-ground-recorded-run.png)
+
+*The door: one search box, a link to one recorded run, and a footer strip of counts that ends with the headline (its wording has since changed to match this page).*
+
+![Search results for "coca": two companies that file earnings and have not been read, three with no earnings 8-K in the recent block, and a funnel from 10,398 listed symbols to the 120 in the frozen corpus](notebook/design/screens/screen-13-search-readable-filers-link.png)
+
+*Search: typing "coca" groups the matches by whether the company is in the corpus, files earnings, or has nothing to read, above a funnel from 10,398 listed symbols down to the 120 in the frozen corpus.*
+
+![A company page for Apple: its price series with each run's anchor and outcome marked, then its filings, its runs, and a block for live runs outside the record](notebook/design/screens/screen-16-company-record-then-live-runs.png)
+
+*A company page (AAPL, which is in the frozen corpus): the price series with each run marked, its filings and runs, and a separate block for live runs, which stay outside the record.*
+
+![An analysis in progress for KO: concentric rings beside a list of the three agents, with the analyst still working](notebook/design/screens/screen-19-loading-rosette.png)
+
+*An analysis running for KO. This is the replayed KO run, not a live computation, and the page says so: "Nothing is being computed."*
+
+![The forecast fan for KO with a hover readout at three sessions ahead, showing the median and the 50%, 80% and 90% ranges](notebook/design/screens/screen-18-fan-crosshair.png)
+
+*The fan from the same replayed KO run, with the hover readout three sessions out. The bands run from the middle 10% to the middle 90%, and amber marks the raw, uncorrected width.*
+
+![The results page: M.A.P. against three baselines on CRPS and log score with intervals, the calibration figures, the leakage comparison and the holdout record](notebook/design/screens/screen-5-results.png)
+
+*Results: M.A.P. against the three baselines on CRPS and log score for the 175 clean-band development items, with the calibration figures, the leakage comparison and the one-shot holdout record.*
+
+---
+
 ## How it compares
 
 Each baseline forecasts the same five-day return as a distribution and is scored on the same outcomes. All three were committed on 2026-08-15, before anything was scored, and last changed on 2026-08-30, before the first result on 2026-09-02. Each cell gives M.A.P.'s score minus the baseline's, in the score's own units, then the percentage where one was recorded, then the 95% cluster-robust interval, which is in the same units as the difference and not in percent. They are on 175 clean-band development items in 18 date clusters. Lower scores are better, so a positive difference means M.A.P. is worse.
