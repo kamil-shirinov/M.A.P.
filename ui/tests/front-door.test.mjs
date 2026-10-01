@@ -153,7 +153,7 @@ describe("the door's strip", () => {
       // The run count is a link to the screen it names.
       `${rowsInFiles.toLocaleString("en-US")} runs recorded·`,
       ...(outside ? [`${outside.toLocaleString("en-US")}${outside === 1 ? " live run" : " live runs"}·`] : []),
-      "does not beat a plain random walk or GARCH on the development companies",
+      "does not beat a plain random walk or GARCH on the companies it was developed on",
     ]);
     const [companyFact, runFact] = node.children;
     const companyFig = companyFact.children[0];
