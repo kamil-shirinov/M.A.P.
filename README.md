@@ -4,7 +4,7 @@ M.A.P. runs three open-weight models on a local machine to read a company's earn
 
 ![A five-session forecast fan for KO: the last 63 closes, then a shaded band widening from the anchor with three labelled scenario lines](notebook/design/screens/screen-17-fan.png)
 
-*KO, five sessions out, replayed from a recorded run: the raw fan, which was measured too narrow, anchored on a price taken during the session rather than a close.*
+*A recorded five-session forecast for KO. The shading is its range; amber marks it as uncorrected, a width measured too narrow. This run's starting price was taken during the session ([Findings #64](notebook/Findings%20&%20Incidents.md)).*
 
 **[→ Open the app](PLACEHOLDER_URL)** — the run journal and the scored results, every figure marked with where it came from. *A research and engineering exercise, not financial advice. Published for review; no licence is granted for reuse — see [Licence](#licence).*
 
@@ -32,13 +32,13 @@ Each agent is a contract rather than a model, so swapping the model behind one i
 
 ## How it compares
 
-Each baseline forecasts the same five-day return as a distribution and is scored on the same outcomes. All three were committed on 2026-08-15, before anything was scored, and last changed on 2026-08-30, before the first result on 2026-09-02. The figures below are M.A.P. against the baseline on 175 clean-band development items in 18 date clusters, with 95% cluster-robust intervals; lower scores are better, so a positive difference means M.A.P. is worse.
+Each baseline forecasts the same five-day return as a distribution and is scored on the same outcomes. All three were committed on 2026-08-15, before anything was scored, and last changed on 2026-08-30, before the first result on 2026-09-02. Each cell gives M.A.P.'s score minus the baseline's, in the score's own units, then the percentage where one was recorded, then the 95% cluster-robust interval, which is in the same units as the difference and not in percent. They are on 175 clean-band development items in 18 date clusters. Lower scores are better, so a positive difference means M.A.P. is worse.
 
 | Baseline | What it assumes | CRPS | Log score |
 |---|---|---|---|
-| **Random walk** | No drift, and the stock's volatility is what its own history says. | M.A.P. **worse by 5.4%** [+0.00071, +0.00278]; excludes zero | **worse by 12.9%** [+0.080, +0.364]; excludes zero |
-| **GARCH(1,1)** | No drift, but volatility clusters: recent turbulence predicts the next few days'. | indistinguishable [−0.00035, +0.00220] | **worse by 12.0%** [+0.063, +0.362]; excludes zero |
-| **Earnings-scaled random walk** | A random walk whose volatility is widened for earnings windows, by a factor fitted on that company's own past earnings. | indistinguishable [−0.00222, +0.00111] | indistinguishable [−0.225, +0.207] |
+| **Random walk** | No drift, and the stock's volatility is what its own history says. | **worse by 0.00163 (5.4%)** [+0.00071, +0.00278]; excludes zero | **worse by 0.2040 (12.9%)** [+0.080, +0.364]; excludes zero |
+| **GARCH(1,1)** | No drift, but volatility clusters: recent turbulence predicts the next few days'. | indistinguishable: +0.00075 [−0.00035, +0.00220] | **worse by 0.1873 (12.0%)** [+0.063, +0.362]; excludes zero |
+| **Earnings-scaled random walk** | A random walk whose volatility is widened for earnings windows, by a factor fitted on that company's own past earnings. | indistinguishable: −0.00100 [−0.00222, +0.00111] | indistinguishable: −0.0272 [−0.225, +0.207] |
 
 "Indistinguishable" means the interval spans zero. It is not evidence of no difference.
 
@@ -50,7 +50,7 @@ These baselines are hard to beat because a drift estimated from a short history 
 
 **It does not beat a plain random walk or GARCH on the companies it was developed on** (table above). It called direction right on 87 of 175 items (49.7%), no better than a coin, and its probability of an up move only ranges from 0.369 to 0.631, so it largely declines to have a view. Of the 709 filings in the corpus, 701 produced a forecast and 8 failed, each by an agent generating its whole token budget and emitting no answer. An ablation that removed the analyst ran, but only two of its four arms produced comparable numbers, so it has no primary result; what survives is descriptive ([Phase 5](docs/results.md#phase-5--the-ablation-and-what-remains-designed)).
 
-Four more things were measured. Intervals below are the recorded ones; the bootstrap has since pinned the order it sorts tied days in, and under that order one verdict changes (the development half of finding 4) while every other interval moves by at most 0.006 ([both orders](docs/results.md#which-order-an-interval-was-computed-in)).
+Four more things were measured. Intervals are as recorded; a later fix to how tied days are ordered moves them slightly and changes one development verdict, in finding 4 (both versions in [docs/results.md](docs/results.md#which-order-an-interval-was-computed-in)).
 
 **1. The stated uncertainty was too narrow, and a correction fixed that on unseen data after failing its own development test.** The calibration ratio was 0.733 [0.637, 0.801], where 1.0 is calibrated. A shift-and-widen correction fitted on the 175 development items **missed its pre-registered success condition**, and that condition had named a threshold without naming its estimator, so which reading was right was never written down. Nothing said whether a failed condition still spends the holdout, so it was **spent anyway: a decision Kamil made having seen the failure, recorded in git note record 12**. On the 173 holdout items the correction changed log score by −0.288 [−0.453, −0.111] and CRPS by −0.0009 [−0.0018, −0.0001], both better and both excluding zero. **That is better calibration, not better forecasting.** How the corrected forecast compares with the baselines on the holdout, pre-registered as S5, **survives only as one sentence**: it beats the earnings-scaled random walk on CRPS and still loses to GARCH and the random walk on both rules. No figure or interval for it exists in any artifact, so that is what the sentence claims and it cannot be checked ([Findings #57](notebook/Findings%20&%20Incidents.md)). [Phase 3 and the holdout in full](docs/results.md#phase-3--the-correction-and-the-one-shot-test).
 
@@ -58,7 +58,7 @@ Four more things were measured. Intervals below are the recorded ones; the boots
 
 **3. The tails are heavier than a normal distribution allows, and that replication was only partial.** On the second band the counts replicated, with 8 outcomes past three standard deviations against 0.48 expected. But the pre-registered test also required the tail ratio's interval to exclude 1.0, and it reached down to 0.9945, short by 0.0055. The Student-t successor it would have triggered was not adopted, and the comparison with the baselines' tails is quoted from the record and cannot be re-derived from the export. [Tails in full](docs/results.md#registered-replications).
 
-**4. Volatility compression replicated on a second band.** M.A.P. states too narrow a range of volatilities across companies: on the second band the corrected slope of its volatility on the baselines' is 0.409 against the random walk and 0.327 against GARCH (1.0 would be right), and on the largest 6% of moves its volatility is about half the baseline's. The development half cannot carry the claim by itself, because its widest interval's upper bound against the random walk sits on 1.0 and falls on either side of it depending on how tied days are ordered. [Compression in full](docs/results.md#registered-replications).
+**4. Volatility compression replicated on a second band.** M.A.P. states too narrow a range of volatilities across companies: on the second band the corrected slope of its volatility on the baselines' is 0.409 against the random walk and 0.327 against GARCH (1.0 would be right), and on the largest 6% of moves its volatility is about half the baseline's. The registered test used a wider interval that also allows for error in M.A.P.'s own volatility; computed on 2026-09-29, on the second band it is [0.33, 0.76] against the random walk and [0.25, 0.80] against GARCH, both below 1.0. The development half cannot carry the claim by itself, because its widest interval's upper bound against the random walk sits on 1.0 and falls on either side of it depending on how tied days are ordered. [Compression in full](docs/results.md#registered-replications).
 
 Everything cut from this page is in [docs/results.md](docs/results.md#detail-the-readme-leaves-out), not deleted.
 
@@ -68,8 +68,10 @@ Everything cut from this page is in [docs/results.md](docs/results.md#detail-the
 
 - **The corpus was frozen first, with two stated limits.** 709 filings from 120 companies were committed before any forecast on them was made (`dfd2fa5`, 2026-08-14, *"FREEZE THE CORPUS"*), but not before all inference, since the pipeline was exercised on sample documents from 2026-08-11. Membership was amended once, the same day, from 727 to 709 forecasts, by the pre-registered replacement rule.
 - **22 pre-registrations are stored as git notes**, each written before the result it constrains. GitHub does not show notes and `git clone` does not fetch them, and the ordering is evidence rather than proof, since dates in a repository are writable.
+- **Two replication verdicts were rebuilt from their pre-registrations weeks later** and reproduce the recorded figures: the tails result ([Findings #61](notebook/Findings%20&%20Incidents.md)) and the compression result ([Findings #66](notebook/Findings%20&%20Incidents.md)).
 - **The holdout was spent once**, and the tool refuses a second spend before computing anything. Its per-item scores were printed once and never persisted, so they cannot be recovered.
 - **Every number on screen carries its provenance** (measured, derived or quoted), and an unmarked number fails a test.
+- **CI runs every check on a fresh clone on every push**: ruff, mypy, the architecture contracts, the Python suite and the front-end tests.
 - **The Findings log** ([notebook/Findings & Incidents.md](notebook/Findings%20&%20Incidents.md)) records the incidents and mistakes, including ones that changed a result.
 - **The history was cleaned once**, on 2026-09-30, to remove personal details. Every commit has a new ID, the records still cite the old ones, and [docs/commit-map.tsv](docs/commit-map.tsv) pairs them.
 
