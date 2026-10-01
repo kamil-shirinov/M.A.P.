@@ -312,6 +312,27 @@ class AllMarketDataProvidersFailedError(MarketDataError):
         super().__init__(f"all market-data providers failed -- {detail}")
 
 
+class InsufficientVolatilityHistoryError(MarketDataError):
+    """The window cannot support a trailing volatility, so none is invented.
+
+    Raised rather than answered with whatever a short or flat series yields: the
+    figure goes into a prompt, and a run that quietly went without it would be
+    scored as the arm that had it (ADR 0042).
+    """
+
+    def __init__(self, ticker: str, returns: int, minimum: int, *, flat: bool = False) -> None:
+        self.ticker = ticker
+        self.returns = returns
+        self.minimum = minimum
+        why = (
+            f"the closes do not move ({returns} returns, all identical): a halted or "
+            "stale series, not a volatility"
+            if flat
+            else f"{returns} daily returns, and a volatility needs at least {minimum}"
+        )
+        super().__init__(f"{ticker}: no trailing realised volatility: {why}")
+
+
 class EmptyPriceWindowError(MarketDataError):
     """A provider returned no rows for a range it claimed to serve.
 
@@ -616,6 +637,16 @@ class AnalystOutputError(AgentError):
         self.reason = reason
         self.length = length
         super().__init__(f"analyst output rejected ({reason}); length was {length} characters")
+
+
+class AnalystInputError(AgentError):
+    """The analyst was given a request its template cannot honour.
+
+    Two cases, and both would otherwise run quietly as the wrong arm: a request
+    carrying a realised volatility to a template with no slot for it (the figure
+    dropped, the run scored as if it had been seen), and a template that asks for
+    one with none supplied (ADR 0042).
+    """
 
 
 # N818 wants an `Error` suffix. The name is fixed by the design review and reads
