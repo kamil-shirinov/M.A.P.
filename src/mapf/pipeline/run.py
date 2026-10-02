@@ -168,6 +168,7 @@ def execute(
     freeze_digest: str | None = None,
     document_source: Literal["corpus", "edgar", "news"] | None = None,
     company_name: str | None = None,
+    document_accession: str | None = None,
     arm: str | None = None,
 ) -> RunResult:
     """Run the pipeline once and write every artifact.
@@ -322,6 +323,7 @@ def execute(
         freeze_digest=freeze_digest,
         document_source=document_source,
         company_name=company_name,
+        document_accession=document_accession,
         arm=arm,
         allow_nondeterministic=allow_nondeterministic,
         package_version=PACKAGE_VERSION,

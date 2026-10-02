@@ -112,6 +112,9 @@ def test_the_run_record_says_the_document_came_from_edgar(
     assert result.exit_code == 0, result.output
     manifest = _manifest(tmp_path)
     assert manifest["document_source"] == "edgar"
+    # The filing, so the journal can relate this run to the corpus by accession as the
+    # live page does: a re-fetched document can hash differently from the frozen one.
+    assert manifest["document_accession"] == NEWEST.accession
     # The old signal, kept: it is outside the frozen corpus, so it is unscored and
     # carries no band. The positive field is what makes that unambiguous.
     assert manifest["freeze_version"] is None
@@ -134,7 +137,9 @@ def test_a_news_run_is_distinguishable_from_an_edgar_run(
     result = runner.invoke(app, ["run", "AAPL", "--config", str(_config(tmp_path))])
 
     assert result.exit_code == 0, result.output
-    assert _manifest(tmp_path)["document_source"] == "news"
+    manifest = _manifest(tmp_path)
+    assert manifest["document_source"] == "news"
+    assert manifest["document_accession"] is None  # no filing was read
 
 
 def test_no_filing_in_the_window_fails_and_names_the_window(

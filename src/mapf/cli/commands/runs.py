@@ -11,6 +11,7 @@ import json
 from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -50,8 +51,8 @@ def _ledger_items(path: Path) -> dict[str, LedgerItem] | None:
     }
 
 
-def _frozen_exhibits(path: Path) -> frozenset[str] | None:
-    """The `document_id` of every exhibit the frozen corpus holds.
+def _frozen_by_accession(path: Path) -> dict[str, Any] | None:
+    """The frozen record's exhibits, keyed by accession; `None` if there is no record.
 
     Composed here, at the top of the graph, and handed to the journal — which sits
     below `mapf.corpus` and must keep working in a checkout with no corpus at all.
@@ -69,11 +70,26 @@ def _frozen_exhibits(path: Path) -> frozenset[str] | None:
     by_accession = exhibits.get("by_accession")
     if not isinstance(by_accession, dict):
         raise FrozenRecordError(f"{path} records no exhibits by accession")
+    return by_accession
+
+
+def _frozen_exhibits(path: Path) -> frozenset[str] | None:
+    """The `document_id` of every exhibit the frozen corpus holds."""
+    by_accession = _frozen_by_accession(path)
+    if by_accession is None:
+        return None
     return frozenset(
         str(entry["document_id"])
         for entry in by_accession.values()
         if isinstance(entry, dict) and "document_id" in entry
     )
+
+
+def _frozen_accessions(path: Path) -> frozenset[str] | None:
+    """The accession of every exhibit the frozen corpus holds, for the journal's
+    fallback when a re-fetched document hashes differently from the frozen one."""
+    by_accession = _frozen_by_accession(path)
+    return None if by_accession is None else frozenset(str(a) for a in by_accession)
 
 
 # Never "scored". The ledger says artifacts exist; whether an item was scored
@@ -247,6 +263,7 @@ def runs(
             today=datetime.now(UTC).date(),
             limit=limit or None,
             frozen_exhibits=_frozen_exhibits(frozen),
+            frozen_accessions=_frozen_accessions(frozen),
             ledger_items=_ledger_items(ledger_path),
         )
         shown: tuple[Source, ...] = (source,) if source is not None else journal.populated()

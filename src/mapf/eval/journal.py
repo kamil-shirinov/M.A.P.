@@ -33,7 +33,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -132,6 +132,10 @@ class StoredManifest(BaseModel):
     company_name: str | None = None
     freeze_version: str | None = None
     arm: str | None = None
+    # The filing a live run read, recorded by the writer from manifest 1.10.0. Absent
+    # on every older run, and absent is not "outside the corpus": it is "cannot be
+    # checked by accession", which only the document hash can then decide.
+    document_accession: str | None = None
 
 
 @dataclass(frozen=True)
@@ -492,20 +496,33 @@ def _outcome(
     )
 
 
-def _relation(is_exhibit: bool | None, item: LedgerItem | None) -> CorpusRelation:
-    """One value from two independent lookups, with the impossible pair excluded.
+def relate_to_frozen(
+    *,
+    document_ids: Iterable[str],
+    accession: str | None,
+    frozen_documents: frozenset[str] | None,
+    frozen_accessions: frozenset[str] | None,
+) -> CorpusRelation:
+    """Is this document one the frozen corpus holds? The one rule, used by everyone.
 
-    A ledger entry wins outright: it names the item directly, which is a stronger
-    statement than a document hash matching. If a run were somehow a ledger item
-    whose document is NOT a frozen exhibit, the corpus and the ledger have diverged
-    — reported as `ledger_item` here rather than invented into a fourth state,
-    because scoring already refuses that case loudly and this is a listing.
+    The journal listed a live run as `outside_corpus` while the page that had just
+    made it said `repeat_of_exhibit`: two implementations of one question, one of
+    which knew the filing's accession. So there is one, here, and both call it.
+
+    The document id is the primary test and the accession the fallback: a re-fetch
+    of the same filing can arrive as different bytes and so hash differently, while
+    still naming the same accession. Never `ledger_item` — that names a run the
+    ledger recorded, which is the journal's to say, not a document lookup's.
+
+    `None` for both sets is "nothing was compared", which is not "no match".
     """
-    if item is not None:
-        return "ledger_item"
-    if is_exhibit is None:
+    if frozen_documents is None and frozen_accessions is None:
         return "unchecked"
-    return "repeat_of_exhibit" if is_exhibit else "outside_corpus"
+    if frozen_documents is not None and any(doc in frozen_documents for doc in document_ids):
+        return "repeat_of_exhibit"
+    if accession is not None and frozen_accessions is not None and accession in frozen_accessions:
+        return "repeat_of_exhibit"
+    return "outside_corpus"
 
 
 def _entries(
@@ -515,6 +532,7 @@ def _entries(
     limit: int | None,
     skipped: Counter[str],
     frozen_exhibits: frozenset[str] | None,
+    frozen_accessions: frozenset[str] | None,
     ledger_items: Mapping[str, LedgerItem] | None,
 ) -> Iterator[JournalEntry]:
     directories = sorted((c for c in runs_dir.iterdir() if c.is_dir()), key=lambda c: c.name)
@@ -525,13 +543,20 @@ def _entries(
     for directory, forecast, manifest in read[:limit] if limit is not None else read:
         anchor = manifest.prices.last_trading_date
         run_id = str(forecast.run_id)
-        is_exhibit = (
-            None
-            if frozen_exhibits is None
-            else any(doc in frozen_exhibits for doc in forecast.source_doc_ids)
+        lookup = relate_to_frozen(
+            document_ids=forecast.source_doc_ids,
+            accession=manifest.document_accession,
+            frozen_documents=frozen_exhibits,
+            frozen_accessions=frozen_accessions,
         )
+        is_exhibit = None if lookup == "unchecked" else lookup == "repeat_of_exhibit"
         item = None if ledger_items is None else ledger_items.get(run_id)
-        relation = _relation(is_exhibit, item)
+        # A ledger entry wins outright: it names the item directly, which is a
+        # stronger statement than a document matching. A ledger item whose document
+        # is NOT a frozen exhibit means the corpus and ledger have diverged; that is
+        # reported as `ledger_item` rather than a fourth state, because scoring
+        # already refuses that case loudly and this is a listing.
+        relation: CorpusRelation = "ledger_item" if item is not None else lookup
         kind = price_kind(
             as_of=forecast.as_of, price_bar=anchor, fetched_on=manifest.prices.fetched_on
         )
@@ -572,6 +597,7 @@ def read_journal(
     today: date,
     limit: int | None = None,
     frozen_exhibits: frozenset[str] | None = None,
+    frozen_accessions: frozenset[str] | None = None,
     ledger_items: Mapping[str, LedgerItem] | None = None,
 ) -> Journal:
     """Every readable run under `runs_dir`, grouped by document source.
@@ -581,7 +607,7 @@ def read_journal(
     calendar made from a question nobody asked. `limit` applies before grouping and
     after sorting, so it means "the N most recent runs", not "N of each kind".
 
-    `frozen_exhibits` and `ledger_items` are both passed IN rather than loaded here:
+    `frozen_exhibits`, `frozen_accessions` and `ledger_items` are passed IN rather than loaded here:
     `mapf.corpus` sits above `mapf.eval`, and a journal that reached for a corpus or
     a ledger would break the layer contract and stop working in a checkout that has
     neither. Omit them and the membership field reads `None` and `corpus_relation`
@@ -592,7 +618,9 @@ def read_journal(
         return Journal({})
     grouped: dict[Source, list[JournalEntry]] = {source: [] for source in SOURCES}
     counted: Counter[str] = Counter()
-    for entry in _entries(runs_dir, snapshot, today, limit, counted, frozen_exhibits, ledger_items):
+    for entry in _entries(
+        runs_dir, snapshot, today, limit, counted, frozen_exhibits, frozen_accessions, ledger_items
+    ):
         grouped[entry.document_source].append(entry)
     return Journal(
         {source: tuple(entries) for source, entries in grouped.items()},

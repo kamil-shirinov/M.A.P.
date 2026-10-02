@@ -38,7 +38,7 @@ from mapf.bootstrap import (
 )
 from mapf.cli.base import app, fail, handle
 from mapf.cli.commands.export import HISTORY_LOOKBACK_DAYS, replay_row
-from mapf.cli.commands.runs import _frozen_exhibits, as_dict
+from mapf.cli.commands.runs import _frozen_accessions, _frozen_exhibits, as_dict
 from mapf.core.errors import MapError
 from mapf.core.hashing import new_run_id
 from mapf.core.sessions import (
@@ -275,6 +275,9 @@ def serve(
                             # Recorded now because nothing downstream can look it
                             # up: the journal resolves names from the frozen 120.
                             company_name=company_name(ticker),
+                            # So the journal can relate this run to the corpus by
+                            # the filing, as the result on screen just did.
+                            document_accession=exhibit.accession,
                         )
                     )
                 except BaseException as error:  # noqa: BLE001 - re-raised below
@@ -307,6 +310,7 @@ def serve(
         symbols = build_symbol_index(settings)
         journal_dir = runs_dir if runs_dir is not None else settings.paths.runs_dir
         exhibits = _frozen_exhibits(frozen)
+        accessions = _frozen_accessions(frozen)
 
         def prices(ticker: str) -> dict[str, object]:
             """A company page's closes over exactly the last two years to today.
@@ -379,6 +383,7 @@ def serve(
                 snapshot=None,
                 today=datetime.now(UTC).date(),
                 frozen_exhibits=exhibits,
+                frozen_accessions=accessions,
             )
             rows = [
                 as_dict(entry)
@@ -432,7 +437,9 @@ def serve(
             )
 
         answer: Callable[[str, int], Iterator[dict[str, object]]] = (
-            analyse if replay is None else _replayer(settings, exhibits, replay, replay_speed)
+            analyse
+            if replay is None
+            else _replayer(settings, exhibits, accessions, replay, replay_speed)
         )
 
         server = build(
@@ -481,7 +488,11 @@ def serve(
 
 
 def _replayer(
-    settings: Any, exhibits: frozenset[str] | None, run_id: str, speed: float
+    settings: Any,
+    exhibits: frozenset[str] | None,
+    accessions: frozenset[str] | None,
+    run_id: str,
+    speed: float,
 ) -> Callable[[str, int], Iterator[dict[str, object]]]:
     """`POST /analyse`, answered by a run that already happened.
 
@@ -494,7 +505,11 @@ def _replayer(
     """
     runs = settings.paths.runs_dir
     journal = read_journal(
-        runs, snapshot=None, today=datetime.now(UTC).date(), frozen_exhibits=exhibits
+        runs,
+        snapshot=None,
+        today=datetime.now(UTC).date(),
+        frozen_exhibits=exhibits,
+        frozen_accessions=accessions,
     )
     entry = next(
         (e for source in SOURCES for e in journal.of(source) if str(e.run_id) == run_id), None
