@@ -52,7 +52,7 @@ from mapf.eval.window import (
     realised_bar,
 )
 from mapf.pipeline.run import TRACE_FILE
-from mapf.pipeline.trace import started_at
+from mapf.pipeline.trace import document_accession, started_at
 
 _logger = structlog.get_logger(__name__)
 
@@ -549,6 +549,22 @@ def _entries(
             frozen_documents=frozen_exhibits,
             frozen_accessions=frozen_accessions,
         )
+        if (
+            lookup == "outside_corpus"
+            and manifest.document_accession is None
+            and frozen_accessions is not None
+            and manifest.document_source != "news"
+        ):
+            # A run made before the manifest recorded its filing: read the accession
+            # off its own trace instead. Only when the hash found nothing and the
+            # accession could change the answer, so a band of matching runs reads no
+            # traces; and nothing is written back (ADR 0043).
+            lookup = relate_to_frozen(
+                document_ids=forecast.source_doc_ids,
+                accession=document_accession(directory / TRACE_FILE),
+                frozen_documents=frozen_exhibits,
+                frozen_accessions=frozen_accessions,
+            )
         is_exhibit = None if lookup == "unchecked" else lookup == "repeat_of_exhibit"
         item = None if ledger_items is None else ledger_items.get(run_id)
         # A ledger entry wins outright: it names the item directly, which is a

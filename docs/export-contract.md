@@ -111,7 +111,7 @@ runs shows 701 and misstates the corpus.
 | `document_source` | see §3 | Where the document came from, **as the writer recorded it**. |
 | `freeze_version` | string \| null | Which frozen record governed the run. null = outside a corpus, *or* predates the field. Ambiguous by design — use `corpus_relation`. |
 | `arm` | string \| null | Experimental arm. See §6. |
-| `document_is_frozen_exhibit` | bool \| null | Whether this run's document is an exhibit in `frozen.json`: by hash, or, for a run that recorded the filing's accession (manifest 1.10.0), by accession too. **null = not checked.** |
+| `document_is_frozen_exhibit` | bool \| null | Whether this run's document is an exhibit in `frozen.json`: by hash, or, for a run whose filing is known (recorded in manifest 1.10.0, or read off an older run's trace), by accession too. **null = not checked.** |
 | `corpus_relation` | see §3 | Where the run stands to the pre-registered panel. **Use this, not the two fields above.** |
 | `ledger_item` | object \| null | `{ticker, band, filing_date}` — present only when `corpus_relation` is `ledger_item`. |
 | `price_kind` | `"close"` \| `"intraday"` \| `"unknown"` | Whether `anchor_spot` was a settled close or a quote taken while the session was still trading. Decided from what the run recorded: a `fetched_on` later than the price bar proves the bar had settled; a same-day fetch is judged from the run's own `as_of` against 16:30 New York. **Not from `as_of` alone** — corpus runs carry a synthetic `as_of` at 00:00 UTC on the bar's date, the evening before that session opened. Three runs are `intraday`. Added in 1.3.0. |
@@ -283,9 +283,9 @@ not the panel's run for it. Do not count them in anything describing the panel.
 
 **A live run is judged by the same rule the live page uses** (ADR 0043): its document's
 hash first, then the accession of the filing it read, because a re-fetch of the same
-filing can arrive as different bytes. A live run made before the accession was recorded
-has only its hash to go on, so it can read `outside_corpus` for a filing the corpus does
-hold.
+filing can arrive as different bytes. A run's manifest records the accession from format
+1.10.0; for an older run the journal reads it off the source URL in the run's own trace
+(nothing is edited), and a run for which neither exists has only its hash to go on.
 
 `document_source` is a **separate axis** and the key of the four run files: `corpus`,
 `edgar`, `news`, `unknown`. It is what the writer recorded; `corpus_relation` is derived

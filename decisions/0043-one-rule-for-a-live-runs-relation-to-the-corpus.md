@@ -39,8 +39,8 @@ holds the document's hash and not the filing it came from.
   in the serve layer calls it. A test gives the page's lookup and the journal's row the
   same frozen sets and requires one answer.
 - **The manifest records `document_accession`** (format 1.10.0, optional) for a run that
-  read a filing: `map serve` and `map run --from-edgar` pass it to `execute`. A news run
-  and every older run carry none.
+  read a filing: `map serve` and `map run --from-edgar` pass it to `execute`. A news run carries none, and
+  older runs are handled below.
 - The journal's reader takes it as an optional field, so every older manifest still
   parses. `read_journal` takes `frozen_accessions`; `map runs`, `map export` and
   `map serve` pass the frozen record's accessions beside its hashes.
@@ -50,11 +50,21 @@ holds the document's hash and not the filing it came from.
 
 ## Consequences
 
-- **Runs made before this change are not fixed by it.** They carry no accession, so the
-  journal can judge them by hash alone and a live run of a held filing whose document
-  hashed differently still reads `outside_corpus`. Correcting them means either re-running
-  them or a deliberate backfill that asserts which filing each one read; neither is done
-  here, because the second is a claim about a record.
+- **Runs made before this change are related by their own trace, at read time.** The
+  trace keeps every prompt, and the intake prompt opens its document block with
+  `[document 1 of 1 | source: <url>]`; for an EDGAR exhibit that URL is
+  `…/Archives/edgar/data/{cik}/{accession without dashes}/{file}`. `document_accession`
+  in `mapf.pipeline.trace` reads it back, and the journal uses it only when the manifest
+  has none, the hash found nothing, accessions were supplied, and the run is not a news
+  run. **Nothing is written to any artifact.** It is guarded three ways: only the header at
+  the very start of the block is read (the document's text is untrusted and could hold a
+  line shaped like one); a trace that fails `audit_trace` is not read (a whole band written
+  into one directory would give this run the band's first filing); and anything else is
+  `None`, never a guessed accession.
+- **What is not verified:** this was tested against traces built from the real prompt
+  template and written by the real pipeline, not against the real `runs/`. The
+  four AAPL runs from August whose documents were sample files have a file path for a
+  source, so they stay `outside_corpus`; that is expected, not confirmed.
 - `forecast_digest` moves, as for any change under `src/mapf` (ADR 0026).
 - The export's run rows gain no field. A run with a recorded accession can change its
   `corpus_relation` and `document_is_frozen_exhibit` in the next export; the counts in

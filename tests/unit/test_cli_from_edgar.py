@@ -34,10 +34,10 @@ OLDER = EarningsFiling(accession="0000320193-26-000041", cik=320193, filed=date(
 NEWEST = EarningsFiling(accession="0000320193-26-000078", cik=320193, filed=date(2026, 8, 4))
 
 
-def _exhibit(body: str) -> Document:
+def _exhibit(body: str, source: str = "https://www.sec.gov/Archives/exhibit.htm") -> Document:
     return Document(
         id=document_id(body.encode("utf-8")),
-        source="https://www.sec.gov/Archives/exhibit.htm",
+        source=source,
         text=UntrustedText(body),
         fetched_at=datetime(2026, 9, 8, tzinfo=UTC),
     )
@@ -63,7 +63,10 @@ class _FakeExhibits:
 
     def fetch(self, filing: EarningsFiling) -> Document:
         self.fetched.append(filing)
-        return _exhibit(f"{self._text} [{filing.accession}]")
+        # The shape `EdgarExhibits` gives a real exhibit: the accession, dashes removed,
+        # is the archive directory.
+        url = f"https://www.sec.gov/Archives/edgar/data/{filing.cik}/{filing.path_segment}/ex99.htm"
+        return _exhibit(f"{self._text} [{filing.accession}]", url)
 
 
 def _wire(
@@ -118,6 +121,22 @@ def test_the_run_record_says_the_document_came_from_edgar(
     # The old signal, kept: it is outside the frozen corpus, so it is unscored and
     # carries no band. The positive field is what makes that unambiguous.
     assert manifest["freeze_version"] is None
+
+
+def test_the_runs_own_trace_names_the_filing_it_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What lets the journal relate a run made before the manifest recorded the filing:
+    the trace the real pipeline wrote, read back, names the accession."""
+    from mapf.pipeline.trace import document_accession
+
+    _wire(monkeypatch, _FakeFilings(NEWEST))
+
+    result = runner.invoke(app, ["run", "AAPL", "--from-edgar", "--config", str(_config(tmp_path))])
+
+    assert result.exit_code == 0, result.output
+    (run,) = (tmp_path / "runs").iterdir()
+    assert document_accession(run / "trace.jsonl") == NEWEST.accession
 
 
 def test_a_news_run_is_distinguishable_from_an_edgar_run(

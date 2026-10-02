@@ -10,6 +10,7 @@ through is exactly the run whose trace you want.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -18,6 +19,7 @@ from types import TracebackType
 from typing import Any
 
 from mapf.core.ports import SamplingParams, Trace, TraceEvent
+from mapf.core.quarantine import open_delimiter
 
 
 def _now() -> datetime:
@@ -62,6 +64,63 @@ def started_at(path: Path) -> datetime | None:
         return datetime.fromisoformat(match.group(1).decode("ascii"))
     except ValueError:
         return None
+
+
+# The header `IntakeAgent` writes at the top of its document block. An EDGAR exhibit's
+# `source` is its archive URL, whose directory is the filing's accession with the
+# dashes taken out (`EarningsFiling.path_segment`). Exactly one document: with several
+# there is no single filing to name.
+_EDGAR_HEADER = re.compile(
+    r"^\[document 1 of 1 \| source: https://www\.sec\.gov/Archives/edgar/data/\d+/"
+    r"(\d{10})(\d{2})(\d{6})/[^\s\]]+\]$"
+)
+
+
+def document_accession(path: Path) -> str | None:
+    """The accession of the filing a run read, from the run's own trace, or `None`.
+
+    The trace keeps every prompt (CLAUDE.md §6), and the intake prompt opens its
+    document block with a header naming the document's source. For an EDGAR exhibit
+    that is a URL carrying the accession, so a run made before the manifest recorded
+    it can still say which filing it read, without any artifact being edited.
+
+    Three things keep it from being a guess:
+
+    - **Only the header at the very start of the block is read.** The document's text
+      is untrusted and could contain a line shaped like a header; it comes after the
+      real one, which is never looked past.
+    - **A trace that is not plausibly one run's is not read** (`audit_trace`): the
+      failure that wrote a whole band into one directory would otherwise attribute
+      the band's first filing to this run.
+    - **Anything else is `None`**: a missing or unreadable file, a news run whose
+      source is a file path, a first record that is not intake. Unknown, never a
+      guessed accession.
+    """
+    try:
+        if audit_trace(path) is not None:
+            return None
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(event, dict) or event.get("stage") != "intake":
+            continue
+        # The first intake record is the one; its prompt is what the run was asked.
+        data = event.get("data")
+        messages = data.get("messages") if isinstance(data, dict) else None
+        for message in messages if isinstance(messages, list) else []:
+            content = message.get("content") if isinstance(message, dict) else None
+            marker = open_delimiter("documents") + "\n"
+            if isinstance(content, str) and marker in content:
+                header = content.split(marker, 1)[1].split("\n", 1)[0]
+                found = _EDGAR_HEADER.match(header)
+                return None if found is None else "-".join(found.groups())
+        return None
+    return None
 
 
 def audit_trace(path: Path) -> str | None:
