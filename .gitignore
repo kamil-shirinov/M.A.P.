@@ -19,13 +19,15 @@ build/
 # --- M.A.P. artifacts ---
 # Run outputs are reproducible from the manifest and are per-machine. The trace can
 # also contain the text of whatever news was fed in, which may not be redistributable.
-runs/*
-!runs/.gitkeep
+/runs/
 
 # Derived local state: LLM response cache, parquet price cache, SEC symbol index.
 # All of it is rebuildable and none of it belongs in version control.
-var/*
-!var/.gitkeep
+#
+# Neither directory is tracked, not even for a placeholder: every command that writes
+# to one creates it, and every command that only reads one treats its absence as "nothing
+# here yet". `tests/unit/test_fresh_clone.py` holds both to that.
+/var/
 
 # --- the built site ---
 # ==> checking the tree is committed assembles a servable copy here. Derived from the export,
