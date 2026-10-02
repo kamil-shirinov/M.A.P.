@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.A.P. — moved to the company page</title>
+<!-- RETIRED (ADR 0036, amendment of 2026-09-30). Live analysis happens on the page
+     of the company it is about. Old links keep working: a ticker and a horizon
+     are carried to that company's live section, which the horizon preselects and
+     never starts. With no ticker, this goes to the company whose recorded run the
+     export carries, which is what this screen used to show on a copy with no
+     server; failing that, to search. -->
+<noscript><meta http-equiv="refresh" content="0; url=index.html"></noscript>
+<script>
+  (function () {
+    var params = new URLSearchParams(location.search);
+    var ticker = (params.get("ticker") || "").trim().toUpperCase();
+    var horizon = params.get("horizon");
+    var to = function (t) {
+      return "company.html?ticker=" + encodeURIComponent(t)
+        + (horizon ? "&horizon=" + encodeURIComponent(horizon) : "") + "#live";
+    };
+    if (ticker) { location.replace(to(ticker)); return; }
+    fetch("assets/export/manifest.json")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (m) {
+        var named = m && m.replay && m.replay.exported_as;
+        return named ? fetch("assets/export/" + named).then(function (r) { return r.ok ? r.json() : null; }) : null;
+      })
+      .then(function (row) { location.replace(row && row.ticker ? to(row.ticker) : "index.html"); })
+      .catch(function () { location.replace("index.html"); });
+  })();
+</script>
+</head>
+<body>
+  <p>Live analysis now happens on each company's page. <a href="index.html">Find a company</a>.</p>
+</body>
+</html>

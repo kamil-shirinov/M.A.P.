@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.A.P. — company</title>
+<link rel="stylesheet" href="assets/styles/tokens.css">
+<link rel="stylesheet" href="assets/styles/base.css">
+<link rel="stylesheet" href="assets/styles/components.css">
+<link rel="stylesheet" href="assets/styles/company.css">
+<!-- The runs journal's row component renders here too, so its grid comes with
+     it. Loading the sheet is what keeps ONE row on both screens. -->
+<link rel="stylesheet" href="assets/styles/runs.css">
+<link rel="stylesheet" href="assets/styles/front-door.css">
+<!-- Both screens can offer an analysis, and both state the absence when
+     nothing is behind these files, so both need the rules for it. Before
+     system.css, which keeps the load order these pages already rely on. -->
+<link rel="stylesheet" href="assets/styles/analyse.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  /* Arms the entrance styles BEFORE first paint, and only when motion is
+     welcome. Without this the page renders at its final values, which is the
+     correct fallback rather than a degraded one. See assets/js/lib/motion.js. */
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
+</head>
+<body>
+  <div class="ground" id="ground" data-scope="page"></div>
+
+  <header class="masthead">
+    <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
+    <div id="masthead-nav"></div>
+    <div class="masthead-vintage" id="masthead-vintage"></div>
+  </header>
+
+  <main class="company" id="company">
+    <!-- Filled from the export: the title IS the company name. -->
+    <h2 class="page-title" id="page-title"></h2>
+    <section id="quote"     class="cmp-quote" aria-live="polite"></section>
+    <section id="identity"  class="cmp-section"></section>
+    <section id="series"    class="cmp-section"></section>
+    <section id="filings"   class="cmp-section"></section>
+    <section id="runs"      class="cmp-section"></section>
+    <section id="scoring"   class="cmp-section"></section>
+    <!-- Live runs, outside the record. Always last, and never mixed into the
+         sections above (ADR 0036, amendment of 2026-09-30). With no server
+         behind these files, the page's one stated absence lands here (§4). -->
+    <section id="live"      class="cmp-section"></section>
+    <!-- Inside <main>, which carries the frame: outside it the disclosure
+         had no gutter and its caret sat on the screen edge. -->
+    <section id="why"></section>
+  </main>
+
+  <footer class="cmp-footer" id="footer"></footer>
+
+  <script type="module" src="assets/js/company.js"></script>
+</body>
+</html>

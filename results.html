@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.A.P. — results</title>
+<link rel="stylesheet" href="assets/styles/tokens.css">
+<link rel="stylesheet" href="assets/styles/base.css">
+<link rel="stylesheet" href="assets/styles/components.css">
+<link rel="stylesheet" href="assets/styles/company.css">
+<link rel="stylesheet" href="assets/styles/search.css">
+<link rel="stylesheet" href="assets/styles/front-door.css">
+<link rel="stylesheet" href="assets/styles/results.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  /* Arms the entrance styles BEFORE first paint, and only when motion is
+     welcome. Without this the page renders at its final values, which is the
+     correct fallback rather than a degraded one. See assets/js/lib/motion.js. */
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
+</head>
+<body>
+  <div class="ground" id="ground" data-scope="page"></div>
+
+  <header class="masthead">
+    <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
+    <div id="masthead-nav"></div>
+    <div class="masthead-vintage" id="masthead-vintage"></div>
+  </header>
+
+  <!-- Charts first. The findings are IN the charts: a PIT that is not flat, four
+       lines that do not fan apart between the bands, and a cloud of dots that
+       never leaves the middle. Everything that needs a sentence sits in the one
+       disclosure at the bottom. -->
+  <main class="res-page" id="results-page">
+    <h2 class="page-title" id="page-title">Results</h2>
+    <section id="res-identity"></section>
+
+    <!-- Row 1: the measurement itself. The forest plot is the tall panel — six
+         rows, each with the record's own sentence under it — so the narrow
+         column carries BOTH of the record's own shape panels rather than one.
+         With PIT alone the column ran out around 600px short of the plot beside
+         it and the page had a hole in it. The two are the same subject: where
+         the outcomes fell, and which way. -->
+    <div class="res-row-1">
+      <div class="res-col">
+        <div id="pit"></div>
+        <div id="direction"></div>
+      </div>
+      <div id="baselines"></div>
+    </div>
+
+    <!-- Row 2: the control and the spend. -->
+    <div class="res-row-2">
+      <div id="leakage"></div>
+      <div id="holdout"></div>
+    </div>
+
+    <div id="status"></div>
+    <section id="disclosure"></section>
+    <section id="legend"></section>
+  </main>
+
+  <footer class="cmp-footer" id="footer"></footer>
+
+  <script type="module" src="assets/js/results-page.js"></script>
+</body>
+</html>

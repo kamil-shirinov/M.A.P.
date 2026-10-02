@@ -1,0 +1,269 @@
+/* The runs screen.
+
+   ONE RIGHT EDGE. The header, the four population cells, both side panels and
+   the journal all sit on `--measure`. An earlier cut put the top half on the
+   prose measure, which is the right call for paragraphs and the wrong one for
+   these: they are counts, files and panels, and holding them to a narrower
+   right edge than the table below made the page read as two pages stacked.
+   Prose inside a card caps itself with `.runs-inset`.
+
+   Tokens only, from tokens.css. `--down` appears on this page for one thing —
+   a run whose price series was re-based after the forecast. Amber is not used
+   here at all: nothing on this screen is uncalibrated. */
+
+.runs-page,
+body > .masthead,
+.cmp-footer { max-width: var(--measure); margin-inline: auto; padding-inline: var(--gutter); }
+
+.runs-page { padding-block: var(--sp-6); position: relative; z-index: 1; }
+.runs-section { margin-bottom: var(--sp-5); }
+.runs-side { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
+.runs-side .runs-section { margin-bottom: 0; }
+@media (max-width: 1100px) { .runs-side { grid-template-columns: 1fr; } }
+
+.runs-card {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius); padding: var(--sp-5);
+}
+.runs-card > header { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+.runs-card > header h2 {
+  font-size: var(--step-1); font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-2);
+}
+.runs-note { font-size: var(--step--1); color: var(--ink-3); }
+.runs-note--right { margin-left: auto; text-align: right; }
+.runs-inset {
+  max-width: 88ch; font-size: var(--step--1); line-height: 1.55; color: var(--ink-2);
+  background: var(--sunken); border-left: 2px solid var(--rule-2);
+  border-radius: var(--radius); padding: var(--sp-3) var(--sp-4);
+}
+
+/* The legend promises a dotted rule under anything computed on this page. The
+   shipped mark for `derived` is colour alone, which a legend cannot point at. */
+.runs-page .fig[data-prov="derived"] { border-bottom: 1px dotted var(--rule-2); }
+
+/* ---- identity ------------------------------------------------------ */
+/* Three columns, and the middle one carries the ablation sentence. Two columns
+   put the definition grid on the right edge of a 1600px card and left a hole in
+   the middle of the first thing on the page. */
+.runs-identity { display: grid; grid-template-columns: auto minmax(28ch, 1fr) auto; gap: var(--sp-6); align-items: start; }
+@media (max-width: 1100px) { .runs-identity { grid-template-columns: 1fr; gap: var(--sp-4); } }
+.runs-total { display: flex; align-items: baseline; gap: var(--sp-3); }
+.runs-total .fig { font-size: var(--step-4); font-weight: 600; letter-spacing: -.02em; }
+.runs-total-word { font-size: var(--step-2); color: var(--ink-2); letter-spacing: .06em; text-transform: uppercase; }
+.runs-subline { margin-top: var(--sp-2); font-size: var(--step--1); color: var(--ink-3); line-height: 1.5; max-width: 46ch; }
+.runs-scope { align-self: center; font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; border-left: 2px solid var(--rule-2); padding-left: var(--sp-4); }
+.runs-defs { display: grid; grid-template-columns: auto auto; gap: var(--sp-2) var(--sp-4); font-size: var(--step--1); }
+.runs-defs dt { color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
+.runs-defs dd { margin: 0; color: var(--ink-2); font-family: var(--font-mono); text-align: right; white-space: nowrap; }
+
+/* ---- populations --------------------------------------------------- */
+.runs-pops { display: grid; grid-template-columns: 1fr 1fr 1fr 2.4fr; gap: var(--sp-4); }
+@media (max-width: 1100px) { .runs-pops { grid-template-columns: 1fr 1fr; } }
+.runs-pop {
+  background: var(--sunken); border: 1px solid var(--rule-2);
+  border-radius: var(--radius); padding: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+}
+/* Empty is a fact, not a disabled state: same size, same padding, a quieter
+   count and rule. Dimming it to 40% says "broken" about a file that was read. */
+.runs-pop[data-empty="true"] { border-color: var(--rule); }
+.runs-pop[data-empty="true"] .fig { color: var(--ink-2); }
+.runs-pop-file { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
+.runs-pop .fig { font-size: var(--step-3); }
+.runs-pop-state { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
+.runs-pop-what { font-size: var(--step--1); color: var(--ink-2); line-height: 1.5; }
+.runs-pops-foot { display: grid; grid-template-columns: 3fr 2.4fr; gap: var(--sp-4); margin-top: var(--sp-3); }
+@media (max-width: 1100px) { .runs-pops-foot { grid-template-columns: 1fr; } }
+.runs-check[data-agree="false"] { color: var(--down); }
+
+/* ---- side panels --------------------------------------------------- */
+.runs-cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(36ch, 1fr)); gap: var(--sp-2); margin-top: var(--sp-4); }
+.runs-cell {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3); background: var(--sunken);
+  border: 1px solid var(--rule); border-left: 2px solid var(--rule-2);
+  border-radius: var(--radius); color: inherit; text-decoration: none;
+  font-size: var(--step--1);
+}
+.runs-cell:hover { border-color: var(--accent); }
+.runs-cell .t { font-family: var(--font-mono); font-weight: 600; color: var(--ink-num); min-width: 6ch; }
+.runs-cell .m { margin-left: auto; color: var(--ink-3); white-space: nowrap; font-family: var(--font-mono); }
+
+.runs-drift h2 { color: var(--down); }
+.runs-drift .runs-inset { border-left-color: var(--down); }
+.runs-acts { display: flex; flex-wrap: wrap; gap: var(--sp-2); margin-top: var(--sp-4); }
+.runs-act {
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3); background: var(--sunken);
+  border: 1px solid var(--rule-2); border-radius: var(--radius);
+  font-size: var(--step--1); color: var(--ink-2); cursor: pointer; font: inherit;
+}
+.runs-act[aria-pressed="true"] { border-color: var(--down); }
+.runs-act .t { font-family: var(--font-mono); font-weight: 600; color: var(--ink-num); }
+.runs-act .why { color: var(--ink-3); }
+
+/* ---- filters -------------------------------------------------------- */
+.runs-filters { display: grid; grid-template-columns: 9ch 1fr; gap: var(--sp-3) var(--sp-4); align-items: start; margin-bottom: var(--sp-4); }
+.runs-filters dt { font-size: var(--step--1); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); padding-top: .2rem; }
+.runs-filters dd { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+.runs-opt {
+  font: inherit; font-size: var(--step--1); cursor: pointer;
+  padding: .1rem var(--sp-3); border-radius: var(--radius);
+  background: var(--sunken); border: 1px solid var(--rule-2); color: var(--ink-2);
+}
+.runs-opt[aria-pressed="true"] { border-color: var(--accent); color: var(--ink-num); background: var(--accent-soft); }
+.runs-opt[disabled] { cursor: default; border-style: dashed; border-color: var(--rule); color: var(--ink-3); background: none; }
+.runs-opt .n { font-family: var(--font-mono); color: var(--ink-3); margin-left: .4em; }
+.runs-opt--mono { font-family: var(--font-mono); }
+.runs-tickerbox { display: flex; align-items: center; gap: var(--sp-3); flex: 1; min-width: 22ch; max-width: 40ch;
+  background: var(--sunken); border: 1px solid var(--rule-2); border-radius: var(--radius); padding: .1rem var(--sp-3); }
+.runs-tickerbox:focus-within { border-color: var(--accent); }
+.runs-tickerbox input { flex: 1; min-width: 0; background: none; border: 0; outline: none; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-num); }
+.runs-chip { display: inline-flex; align-items: baseline; gap: var(--sp-2); padding: .1rem var(--sp-3);
+  background: var(--accent-soft); border: 1px solid var(--accent); border-radius: var(--radius); font-size: var(--step--1); }
+.runs-chip .t { font-family: var(--font-mono); font-weight: 600; color: var(--ink-num); }
+.runs-chip a { font-size: var(--step--1); }
+.runs-chip button { font: inherit; background: none; border: 0; color: var(--ink-3); cursor: pointer; }
+.runs-summary { font-size: var(--step--1); color: var(--ink-2); line-height: 1.5; margin: 0 0 var(--sp-4); }
+.runs-summary a { margin-left: var(--sp-3); }
+
+/* ---- month chart ---------------------------------------------------- */
+.runs-chart { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--sp-2); align-items: end; margin-bottom: var(--sp-5); }
+.runs-bar { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-1); background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.runs-bar[disabled] { cursor: default; }
+.runs-bar-n { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); text-align: center; min-height: 1.1em; }
+.runs-bar[data-matched="true"] .runs-bar-n { color: var(--accent); }
+.runs-bar-col { background: var(--sunken); border-top: 1px solid var(--rule-2); display: flex; flex-direction: column; justify-content: flex-end; }
+.runs-bar-fill { background: var(--accent); }
+.runs-bar-lab { font-size: var(--step--1); color: var(--ink-3); text-align: center; border-top: 1px solid transparent; padding-top: var(--sp-1); }
+.runs-bar[data-quarter="true"] .runs-bar-lab { border-top-color: var(--rule-2); color: var(--ink-2); }
+.runs-bar-dot { color: var(--down); }
+
+/* ---- journal -------------------------------------------------------- */
+.runs-rule { font-size: var(--step--1); color: var(--ink-3); line-height: 1.5; margin: 0 0 var(--sp-3); max-width: 96ch; }
+.runs-group { border-top: 1px solid var(--rule); }
+.runs-group-head {
+  width: 100%; display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
+  background: none; border: 0; border-left: 2px solid transparent; font: inherit; text-align: left;
+  padding: var(--sp-3) var(--sp-3); cursor: pointer; color: var(--ink);
+}
+.runs-group-head:hover { background: var(--sunken); }
+.runs-group[data-drift="true"] .runs-group-head { border-left-color: rgba(207, 106, 99, .45); }
+.runs-group-q { font-weight: 600; letter-spacing: .04em; min-width: 9ch; }
+.runs-group-n { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); }
+.runs-group-months { font-size: var(--step--1); color: var(--ink-3); font-family: var(--font-mono); }
+.runs-group-marks { margin-left: auto; display: flex; gap: var(--sp-3); font-size: var(--step--1); }
+.runs-mark { padding: 0 var(--sp-2); border-radius: var(--radius); }
+.runs-mark--open { color: var(--accent); border: 1px dashed var(--accent); }
+.runs-mark--drift { color: var(--down); border: 1px solid var(--down); }
+.runs-mark--dates { color: var(--ink-3); }
+
+/* The slack lives in Company and Relation. Anchor close, outcome close and
+   realised sit adjacent at the right edge: a fr between two numeric columns is
+   what opened a gap between the two closes with nothing to put in it. */
+.runs-row, .runs-colhead {
+  display: grid;
+  grid-template-columns:
+    1.5ch 10.5ch 13.5ch minmax(14ch, 1.5fr) 9ch minmax(20ch, 1.9fr) 7.5ch 9ch 3.5ch 10ch 13ch 9.5ch;
+  gap: var(--sp-3);
+  align-items: baseline;
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--step--1);
+}
+.runs-colhead {
+  position: sticky; top: 0; z-index: 2; background: var(--surface);
+  color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase;
+  border-bottom: 1px solid var(--rule-2);
+}
+.runs-row { width: 100%; background: none; border: 0; border-top: 1px solid var(--rule); font: inherit; font-size: var(--step--1); text-align: left; cursor: pointer; color: var(--ink); }
+.runs-row:hover { background: var(--sunken); }
+.runs-row[data-open="true"] { background: var(--sunken); }
+.runs-row[data-drift="true"] { box-shadow: inset 2px 0 0 var(--down); background: rgba(207, 106, 99, .07); }
+.runs-row[data-drift="true"][data-open="true"] { background: rgba(207, 106, 99, .07); }
+.runs-c-date { font-family: var(--font-mono); color: var(--ink-3); }
+.runs-c-date[data-ditto="true"] { color: var(--rule-2); }
+.runs-c-made { font-family: var(--font-mono); color: var(--ink-3); white-space: nowrap; }
+.runs-c-co { display: flex; gap: var(--sp-2); min-width: 0; }
+.runs-c-co .t { font-family: var(--font-mono); font-weight: 600; color: var(--ink-num); min-width: 6ch; }
+.runs-c-co .n { color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runs-c-id { font-family: var(--font-mono); color: var(--ink-3); }
+.runs-c-rel { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2); }
+.runs-tag { font-size: var(--step--1); padding: 0 var(--sp-2); border-radius: var(--radius); white-space: nowrap; }
+.runs-tag[data-rel="ledger_item"] { background: var(--accent-soft); border: 1px solid var(--accent); color: var(--accent); }
+.runs-tag[data-rel="repeat_of_exhibit"] { background: var(--sunken); border: 1px solid var(--rule-2); color: var(--ink-2); }
+.runs-tag[data-rel="outside_corpus"] { border: 1px dashed var(--rule-2); color: var(--ink-3); }
+.runs-tag[data-rel="unchecked"] { border: 1px dashed var(--rule-2); color: var(--ink-3); }
+.runs-c-rel .d { color: var(--ink-3); }
+.runs-c-split { color: var(--ink-2); }
+.runs-c-freeze { font-family: var(--font-mono); color: var(--ink-2); }
+.runs-c-freeze[data-absent="true"] { font-family: var(--font-sans); font-style: italic; color: var(--ink-3); }
+.runs-c-hzn { font-family: var(--font-mono); color: var(--ink-3); text-align: right; }
+.runs-c-hzn[data-odd="true"] { color: var(--ink-num); }
+.runs-c-num { text-align: right; font-variant-numeric: tabular-nums; }
+.runs-c-num .d { color: var(--ink-3); margin-left: var(--sp-2); font-family: var(--font-mono); }
+.runs-c-open { color: var(--accent); }
+.runs-c-real { text-align: right; }
+.runs-c-real .ratio { color: var(--down); font-family: var(--font-mono); }
+.runs-c-real .pending { color: var(--accent); font-style: italic; }
+
+/* ---- row detail ------------------------------------------------------ */
+.runs-detail { display: grid; grid-template-columns: 1fr 1.15fr; gap: var(--sp-5); padding: var(--sp-4) var(--sp-3) var(--sp-5) 12ch; background: var(--sunken); border-top: 1px solid var(--rule); }
+@media (max-width: 1100px) { .runs-detail { grid-template-columns: 1fr; padding-left: var(--sp-4); } }
+.runs-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-3); }
+.runs-tile { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); padding: var(--sp-3); }
+.runs-tile h4 { font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); margin: 0 0 var(--sp-2); font-weight: 500; }
+.runs-tile .target { display: block; font-size: var(--step-1); margin-bottom: var(--sp-2); }
+.runs-tile dl { display: grid; grid-template-columns: auto auto; gap: var(--sp-1) var(--sp-2); margin: 0; font-size: var(--step--1); }
+.runs-tile dt { color: var(--ink-3); }
+.runs-tile dd { margin: 0; text-align: right; }
+.runs-tile-foot { margin-top: var(--sp-3); font-size: var(--step--1); color: var(--ink-3); font-family: var(--font-mono); }
+.runs-says { display: grid; gap: var(--sp-3); }
+.runs-say { border-left: 2px solid var(--rule-2); padding-left: var(--sp-3); font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; }
+.runs-say b { display: block; color: var(--ink-3); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; font-size: var(--step--1); }
+.runs-say[data-tone="drift"] { border-left-color: var(--down); }
+.runs-say[data-tone="drift"] b { color: var(--down); }
+.runs-say[data-tone="open"] { border-left-color: var(--accent); }
+.runs-say[data-tone="open"] b { color: var(--accent); }
+
+/* ---- legend and states ----------------------------------------------- */
+.runs-legend { display: flex; flex-wrap: wrap; gap: var(--sp-5); margin-top: var(--sp-4); padding-top: var(--sp-3); border-top: 1px solid var(--rule); font-size: var(--step--1); color: var(--ink-3); }
+.runs-legend span { display: inline-flex; align-items: baseline; gap: var(--sp-2); }
+.runs-legend .swatch { display: inline-block; width: 2ch; height: 2px; background: var(--down); }
+.runs-state { border: 1px dashed var(--rule-2); border-radius: var(--radius); padding: var(--sp-4); font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; max-width: 88ch; }
+.runs-state pre { margin: var(--sp-3) 0 0; font-family: var(--font-mono); color: var(--ink-num); white-space: pre-wrap; }
+
+/* The caret turns on open, like every other expandable row in the system. */
+.runs-c-caret { color: var(--ink-3); font-family: var(--font-mono); }
+.runs-row[data-open="true"] .runs-c-caret { transform: rotate(90deg); }
+
+/* ---- 03 · the screen spec ------------------------------------------- */
+/* A stated absence reads as a boundary, not as context: the label, then what is
+   not here. Same shape as the journal's "no score column". */
+.runs-absent-k {
+  font-family: var(--font-mono); font-size: var(--step--1);
+  text-transform: uppercase; letter-spacing: .32em; color: var(--ink-3);
+  margin-right: var(--sp-4);
+}
+.runs-scope { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--sp-2); border-left: 0; padding-left: 0; }
+
+.runs-sum { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); margin-top: var(--sp-4); }
+.runs-sum-why { color: var(--ink-3); margin-left: var(--sp-4); }
+
+.runs-noscore {
+  display: flex; align-items: baseline; gap: var(--sp-3); flex-wrap: wrap;
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3);
+  margin-bottom: var(--sp-4);
+}
+.runs-noscore-go { margin-left: auto; }
+
+.runs-chart-legend { display: flex; align-items: center; gap: var(--sp-5); }
+.runs-chart-legend-dot { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.runs-chart-legend-dot .runs-bar-dot {
+  display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--down);
+}
+
+/* The population cells lose their boxes: four paths and four counts in a strip. */
+.runs-pop { background: none; border: 0; padding: 0 var(--sp-4) 0 0; }
+.runs-pop[data-empty="true"] { border: 0; }

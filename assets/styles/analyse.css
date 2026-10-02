@@ -1,0 +1,292 @@
+/* Live analysis.
+
+   The marking is a stroke and a word, never a colour alone: `--uncal` reinforces
+   a claim the text already makes, so the screen reads correctly in greyscale and
+   to anyone who cannot separate amber from the body colour. */
+
+/* The page frame, as every other screen sets it. Without this the content sits
+   flush against the window edge — the same lost gutter the company and runs
+   screens each had, and it is invisible in a test because nothing about the
+   markup is wrong. */
+.anl-page,
+body > .masthead,
+.cmp-footer { max-width: var(--measure); margin-inline: auto; padding-inline: var(--gutter); }
+
+.anl-page {
+  display: grid;
+  gap: var(--sp-7);
+  padding-block: var(--sp-6);
+  position: relative;
+  z-index: 1;
+}
+.anl-section:empty { display: none; }
+
+/* ---- the ask ---- */
+.anl-ask {
+  display: grid;
+  gap: var(--sp-5);
+  grid-template-columns: minmax(12rem, 20rem) 1fr auto;
+  align-items: end;
+  padding: var(--sp-5);
+  background: var(--sunken);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+}
+.anl-field { display: grid; gap: var(--sp-2); }
+.anl-label { font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); }
+.anl-input {
+  font-family: var(--font-mono); font-size: var(--step-2);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-4);
+  transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.anl-input:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.anl-periods { display: grid; gap: var(--sp-2); border: 0; padding: 0; margin: 0; }
+.anl-periods legend {
+  font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+  padding: 0; margin-bottom: var(--sp-2);
+}
+.anl-period { display: flex; align-items: baseline; gap: var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); }
+.anl-period-note { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); }
+/* The marking on the control, before anything runs. */
+.anl-period-note[data-calibration="uncalibrated"] {
+  color: var(--uncal);
+  border-bottom: 1px dashed var(--uncal);
+}
+
+.anl-go {
+  font-family: var(--font-mono); font-size: var(--step-0);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius);
+  padding: var(--sp-3) var(--sp-6);
+  cursor: pointer;
+  transition: background-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
+}
+.anl-go:hover { background: var(--accent-strong, var(--accent)); }
+/* One run at a time: while one streams the control is busy, not disabled. */
+.anl-go[aria-busy="true"] { opacity: .45; cursor: progress; }
+.anl-go:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+.anl-cost { margin-top: var(--sp-4); max-width: 62ch; color: var(--ink-3); font-family: var(--font-sans); font-size: var(--step-0); }
+.anl-absence-foot { color: var(--ink-3); font-family: var(--font-sans); font-size: var(--step-0); }
+
+/* ---- progress: one ring per agent, calibrating ----
+   Inner first: intake, analyst, structuralist. A ring waits faint, turns while
+   its agent works, and settles into one glowing circle when the run's trace says
+   the agent finished. Neutral throughout: nothing here is a number, settled or
+   otherwise. */
+.anl-progress {
+  display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--sp-6); align-items: center;
+  padding: var(--sp-4) 0;
+  font-family: var(--font-mono); font-size: var(--step-0); color: var(--ink-2);
+}
+.anl-progress-art { width: 200px; height: 200px; }
+.anl-rosette { width: 100%; height: 100%; overflow: visible; }
+/* The rings (calibration-rings.js). Waiting: faint. At work: brighter while
+   its circles turn. Finished: one flat circle in `--ring-glow`, with the glow
+   filter the module sets, for good. The stroke eases over the same 1.2s the
+   circles take to settle, so the glow comes up as the waves go down. */
+.anl-ring-line {
+  fill: none; stroke: var(--ink-2); stroke-width: 1; vector-effect: non-scaling-stroke;
+  stroke-opacity: .16;
+  transition: stroke 1.2s var(--ease), stroke-opacity 1.2s var(--ease), stroke-width 1.2s var(--ease);
+}
+.anl-ring[data-state="running"] .anl-ring-line { stroke: var(--ink); stroke-opacity: .55; }
+.anl-ring[data-state="done"] .anl-ring-line { stroke: var(--ring-glow); stroke-opacity: 1; stroke-width: 1.4; }
+.anl-ring[data-state="stopped"] .anl-ring-line { stroke-opacity: .3; stroke-dasharray: 2 6; }
+
+.anl-progress-side { display: grid; gap: var(--sp-3); }
+.anl-progress-head { margin: 0; color: var(--ink); }
+.anl-stages { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--sp-2); }
+.anl-stage { color: var(--ink-3); }
+.anl-stage[data-state="running"] { color: var(--ink); }
+.anl-stage[data-state="done"] { color: var(--ink-2); }
+.anl-stage-state { color: var(--ink-3); }
+.anl-clock { margin: 0; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.anl-notes { display: grid; gap: var(--sp-2); }
+.anl-note { margin: 0; color: var(--ink-3); font-family: var(--font-sans); max-width: 70ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still alive in the words and the clock; nothing turns, and a finished ring
+     is its glowing circle at once. */
+  .anl-ring-line { transition: none; }
+}
+@media (max-width: 640px) {
+  .anl-progress { grid-template-columns: 1fr; }
+  .anl-progress-art { width: 160px; height: 160px; }
+}
+
+/* ---- the result ---- */
+.anl-result-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: var(--sp-4); margin-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--rule); padding-bottom: var(--sp-3);
+}
+.anl-result-head h3 { margin: 0; font-family: var(--font-serif); font-size: var(--step-3); font-weight: 400; }
+
+.anl-marking {
+  padding: var(--sp-4) var(--sp-5);
+  border-left: 2px solid var(--rule-2);
+  max-width: 68ch;
+}
+.anl-marking[data-calibration="uncalibrated"] {
+  border-left-color: var(--uncal);
+  background: var(--uncal-soft);
+}
+.anl-mark-head { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); letter-spacing: .06em; text-transform: uppercase; }
+.anl-marking[data-calibration="uncalibrated"] .anl-mark-head { color: var(--uncal); }
+.anl-marking p { margin: 0 0 var(--sp-3); font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
+.anl-mark-caveat { color: var(--ink-3); }
+.anl-reasons { margin: 0; padding-left: var(--sp-5); font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
+.anl-reasons li { margin-bottom: var(--sp-2); }
+
+.anl-chart { margin-top: var(--sp-6); }
+
+/* ---- the fan ----------------------------------------------------------
+   Sizes are in the SVG's own units (the viewBox is 1080 wide), so they scale with
+   the chart rather than with the page's type ramp. */
+.anl-fan-wrap { position: relative; }
+.anl-fan { display: block; width: 100%; height: auto; overflow: visible; }
+.anl-grid { stroke: var(--rule); stroke-width: 1; }
+.anl-ytick, .anl-xtick { fill: var(--ink-3); font-family: var(--font-mono); font-size: 11px; }
+.anl-ytick { text-anchor: end; }
+.anl-xtick { text-anchor: middle; }
+.anl-xtick--anchor { fill: var(--ink-2); }
+.anl-history { fill: none; stroke: var(--ink-2); stroke-width: 1.4; stroke-linejoin: round; }
+.anl-anchor { stroke: var(--rule-2); stroke-width: 1; stroke-dasharray: 3 3; }
+/* The broken axis at the anchor, and the caption on each side of it. */
+.anl-baseline { stroke: var(--rule-2); stroke-width: 1; }
+.anl-break-mark { stroke: var(--ink-2); stroke-width: 1.4; stroke-linecap: round; }
+.anl-scale-caption { fill: var(--ink-3); font-family: var(--font-mono); font-size: 11px; letter-spacing: .04em; }
+.anl-spot { fill: var(--ink-num); }
+/* The scenarios are the reasoning, drawn thin over the bands in their own
+   colours: bullish green, base case white, bearish red. Never amber for any of
+   them — amber is the marking's, "not a settled number", and an amber line
+   would vanish inside an uncalibrated fan. The bands are the claim, and carry
+   the marking's colour. */
+.anl-path { fill: none; stroke: var(--ink); stroke-width: 1.25; stroke-linejoin: round; }
+.anl-path[data-scenario="bullish"] { stroke: var(--up); }
+.anl-path[data-scenario="base_case"] { stroke: var(--ink-num); }
+.anl-path[data-scenario="bearish"] { stroke: var(--down); }
+.anl-plabel { fill: var(--ink-2); font-family: var(--font-mono); font-size: 12px; }
+.anl-plabel[data-scenario="bullish"] { fill: var(--up); }
+.anl-plabel[data-scenario="base_case"] { fill: var(--ink-num); }
+.anl-plabel[data-scenario="bearish"] { fill: var(--down); }
+.anl-pweight { fill: var(--ink); }
+/* The dots that travel the chart on load and rest on the three endpoints. The
+   lead, on the closes, is the anchor's white; each of the three takes its
+   scenario's colour. A dark ring keeps them apart from the line they sit on. */
+.anl-dot { stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
+.anl-dot[data-scenario="history"] { fill: var(--ink-num); }
+.anl-dot[data-scenario="bullish"] { fill: var(--up); }
+.anl-dot[data-scenario="base_case"] { fill: var(--ink-num); }
+.anl-dot[data-scenario="bearish"] { fill: var(--down); }
+/* The bands. Nine layers of one colour, each faint, so the middle of the
+   distribution is strongest by accumulation and the edges fade out — graded, not
+   stepped. Neutral when the correction was applied; amber only when the fan is
+   the raw one measured too narrow. */
+.anl-band { fill: var(--ink-2); fill-opacity: .11; stroke: none; }
+.anl-fan[data-calibration="uncalibrated"] .anl-band { fill: var(--uncal); fill-opacity: .12; }
+/* The crosshair, hidden until the pointer is over the plot. */
+.anl-catch { fill: transparent; cursor: crosshair; }
+.anl-cross { opacity: 0; transition: opacity 120ms ease-out; pointer-events: none; }
+.anl-cross-rule { stroke: var(--ink-3); stroke-width: 1; }
+.anl-cross-dot { fill: var(--ink-num); }
+.anl-tip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity 120ms ease-out;
+  min-width: 18ch; padding: var(--sp-3) var(--sp-4);
+  background: var(--surface); border: 1px solid var(--rule-2); border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2);
+}
+.anl-fan-wrap[data-pointing="true"] .anl-cross,
+.anl-fan-wrap[data-pointing="true"] .anl-tip { opacity: 1; }
+.anl-tip-head { color: var(--ink); margin-bottom: var(--sp-2); }
+.anl-tip-row { display: flex; gap: var(--sp-3); }
+.anl-tip-gap { flex: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .anl-cross, .anl-tip { transition: none; }
+}
+.anl-table { width: 100%; border-collapse: collapse; margin-top: var(--sp-5); font-family: var(--font-mono); font-size: var(--step-0); }
+.anl-table th {
+  text-align: right; font-family: var(--font-mono); font-size: var(--step--1); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-3); padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule);
+}
+.anl-table th:first-child, .anl-table .anl-name { text-align: left; }
+.anl-table td { text-align: right; padding: var(--sp-2) var(--sp-3); border-bottom: 1px solid var(--rule); }
+
+@media (max-width: 720px) {
+  .anl-ask { grid-template-columns: 1fr; }
+}
+
+/* ---- offering a run from another screen ---- */
+/* The offer is a link that reads as an action, not a button competing with the
+   row's own information. On a search row it replaces the "no page" verdict, so
+   it sits where the reader's eye already ends. */
+.anl-offer {
+  font-family: var(--font-mono); font-size: var(--step--1);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--accent);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  padding: 2px var(--sp-3);
+  white-space: nowrap;
+  transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease);
+}
+.anl-offer:hover { border-color: var(--accent); background: var(--accent-soft); }
+.anl-offer:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+
+/* The one stated absence, shared by every screen that would otherwise offer a
+   run. Not amber: nothing here is an unsettled measurement — it is a capability
+   that is absent, which the words carry. */
+.anl-absent {
+  padding: var(--sp-5);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--radius);
+  background: var(--sunken);
+  max-width: 68ch;
+}
+.anl-absent-head { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.anl-absent p { margin: 0 0 var(--sp-3); font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
+.anl-absent pre { margin: 0 0 var(--sp-3); font-family: var(--font-mono); font-size: var(--step-0); color: var(--ink); }
+.anl-absent-foot { color: var(--ink-3); }
+
+/* ---- the company page's live section ----
+   Set apart from the record above by the section rule and its own heading, never
+   by colour: the separation is a fact about what the rows are, and it has to read
+   in greyscale (ADR 0036, amendment of 2026-09-30). */
+.cmp-live { display: grid; gap: var(--sp-4); }
+.cmp-live-rule { margin: 0; max-width: 72ch; font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-2); }
+.cmp-live-none { margin: 0; font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-3); font-style: italic; }
+.cmp-live-row { display: flex; align-items: end; gap: var(--sp-5); flex-wrap: wrap; }
+.cmp-live-result:empty, .cmp-live-progress:empty { display: none; }
+.cmp-live-result { display: grid; gap: var(--sp-4); }
+.cmp-live-link { color: inherit; text-decoration: none; }
+.cmp-live-link:hover .fig { color: var(--accent); }
+
+.anl-band-key { margin: var(--sp-3) 0 0; font-family: var(--font-sans); font-size: var(--step-0); color: var(--ink-3); max-width: 90ch; }
+.anl-band-key p { margin: 0 0 var(--sp-2); }
+
+/* The recorded-run banner. Not amber: nothing here is an unsettled measurement —
+   it is a real result, shown after the fact, and the words carry that. */
+.anl-replay-note {
+  padding: var(--sp-4) var(--sp-5);
+  border-left: 2px solid var(--rule-2);
+  background: var(--sunken);
+  font-family: var(--font-sans); font-size: var(--step-0);
+  color: var(--ink-2);
+  max-width: 68ch;
+}
+.anl-replay-note strong { color: var(--ink); }

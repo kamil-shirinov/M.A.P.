@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.A.P. — runs</title>
+<link rel="stylesheet" href="assets/styles/tokens.css">
+<link rel="stylesheet" href="assets/styles/base.css">
+<link rel="stylesheet" href="assets/styles/components.css">
+<link rel="stylesheet" href="assets/styles/company.css">
+<link rel="stylesheet" href="assets/styles/front-door.css">
+<link rel="stylesheet" href="assets/styles/runs.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  /* Arms the entrance styles BEFORE first paint, and only when motion is
+     welcome. Without this the page renders at its final values, which is the
+     correct fallback rather than a degraded one. See assets/js/lib/motion.js. */
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
+</head>
+<body>
+  <div class="ground" id="ground" data-scope="page"></div>
+
+  <header class="masthead">
+    <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
+    <div id="masthead-nav"></div>
+    <div class="masthead-vintage" id="masthead-vintage"></div>
+  </header>
+
+  <!-- Every section sits on the wide measure: these are data, not prose, and a
+       page whose cards stop at different right edges reads as two pages. Prose
+       inside a card caps itself in its own inset instead. -->
+  <main class="runs-page" id="runs-page">
+    <h2 class="page-title" id="page-title">Runs</h2>
+    <section id="runs-identity" class="runs-section"></section>
+    <section id="populations" class="runs-section"></section>
+    <div class="runs-side">
+      <section id="unrun" class="runs-section"></section>
+      <section id="drift" class="runs-section"></section>
+    </div>
+    <section id="journal"     class="runs-section"></section>
+    <!-- Inside <main>, which carries the frame: outside it the disclosure
+         had no gutter and its caret sat on the screen edge. -->
+    <section id="why"></section>
+  </main>
+
+  <footer class="cmp-footer" id="footer"></footer>
+
+  <script type="module" src="assets/js/runs-page.js"></script>
+</body>
+</html>

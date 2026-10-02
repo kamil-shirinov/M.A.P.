@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>M.A.P. — find a company</title>
+<link rel="stylesheet" href="assets/styles/tokens.css">
+<link rel="stylesheet" href="assets/styles/base.css">
+<link rel="stylesheet" href="assets/styles/components.css">
+<link rel="stylesheet" href="assets/styles/company.css">
+<link rel="stylesheet" href="assets/styles/search.css">
+<link rel="stylesheet" href="assets/styles/front-door.css">
+<!-- Both screens can offer an analysis, and both state the absence when
+     nothing is behind these files, so both need the rules for it. Before
+     system.css, which keeps the load order these pages already rely on. -->
+<link rel="stylesheet" href="assets/styles/analyse.css">
+<link rel="stylesheet" href="assets/styles/system.css">
+<script>
+  /* Arms the entrance styles BEFORE first paint, and only when motion is
+     welcome. Without this the page renders at its final values, which is the
+     correct fallback rather than a degraded one. See assets/js/lib/motion.js. */
+  try {
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      document.documentElement.dataset.enter = "";
+    }
+  } catch (e) { /* no matchMedia: leave the page un-animated and visible */ }
+</script>
+</head>
+<body data-mode="door">
+  <div class="ground" id="ground"></div>
+
+  <!-- The crest is markup, not built by front-door.js: a cross-document view
+       transition matches against the first rendered frame, which is painted
+       before any module runs. front-door.js adds the box and the strip. -->
+  <section class="door" id="door">
+    <div class="door-block">
+      <div class="door-crest"><span class="door-rule"></span><h1>M.A.P.</h1><span class="door-rule"></span></div>
+      <div class="door-sub">Market&rsquo;s Agentic Projections</div>
+    </div>
+  </section>
+
+  <header class="masthead">
+    <h1><a href="index.html" title="Back to the front door">M.A.P.</a></h1>
+    <span class="masthead-tagline">Market&rsquo;s Agentic Projections</span>
+    <!-- The masthead is hidden at the door, so this nav appears only once the box
+         has something in it. The door itself stays nav-free. -->
+    <div id="masthead-nav"></div>
+    <div class="masthead-vintage" id="masthead-vintage"></div>
+  </header>
+
+  <!-- Order is box -> status -> results, with nothing between them. The funnel
+       follows the results; everything explanatory is in one closed disclosure
+       below it. An earlier layout put the resolutions and the funnel commentary
+       above the rows and the page read as an essay about search. -->
+  <main class="search-page" id="search-page">
+    <h2 class="page-title" id="page-title">Find a company</h2>
+    <section id="box"       class="srch-section"></section>
+    <section id="results"   class="srch-section" aria-live="polite"></section>
+    <section id="funnel"    class="srch-section"></section>
+    <section id="why"       class="srch-section srch-section--prose"></section>
+  </main>
+
+  <footer class="cmp-footer" id="footer"></footer>
+
+  <script type="module" src="assets/js/search-page.js"></script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+/* The results screen.
+
+   TWO MEASURES, as on the other screens: the frame is `--measure` and prose caps
+   itself at `--measure-prose` inside it. The charts are data and take the wide
+   frame; the identity block, the disclosure and the legend are read and stop at
+   the prose measure.
+
+   THREE MARKS, AND THE LEGEND POINTS AT EACH. Measured is plain bright ink.
+   Derived carries a dotted underline. Quoted carries a dashed one — it is the
+   mark for a number that was stated elsewhere and is repeated here, and it must
+   be distinguishable from derived at a glance, because on this screen the
+   difference between "this page computed it" and "the bootstrap did, and its
+   seed is not in the export" is the whole provenance claim.
+
+   NO AMBER. The log-score block still carries "stored lower-is-better", and
+   that tag is still the guard against inverting the project's headline result —
+   but the guard is the SENTENCE, not the colour. Amber means one thing across
+   this app (a number that is not a settled measurement) and an instruction about
+   how to read an axis is not that. The tag is boxed and bright instead. */
+
+.res-page,
+body > .masthead,
+.cmp-footer { max-width: var(--measure); margin-inline: auto; padding-inline: var(--gutter); }
+
+.res-page { padding-block: var(--sp-6); position: relative; z-index: 1; }
+.res-page > section,
+.res-page > div { margin-bottom: var(--sp-5); }
+
+/* The head holds the same grid the charts do, so it takes the frame. Capped at
+   the prose measure it stopped short of the plots and the page had two right
+   edges. Prose still caps itself, inside. */
+#disclosure, #legend, .res-status { max-width: var(--measure-prose); }
+/* NOT `#identity`. company.css caps that id at the prose measure, and this page
+   loads company.css — the same collision that once made the runs header narrow
+   and was fixed there by renaming to `#runs-identity`. The head holds the same
+   grid the charts do and has to reach the same right edge. */
+
+.res-card {
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius); padding: var(--sp-5);
+}
+.res-card > header { display: flex; align-items: baseline; gap: var(--sp-4); flex-wrap: wrap; margin-bottom: var(--sp-4); }
+.res-card > header h2 {
+  font-size: var(--step-1); font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-2);
+}
+.res-note { font-size: var(--step--1); color: var(--ink-3); }
+.res-k { color: var(--ink-3); }
+
+/* ---- the three marks ------------------------------------------------ */
+.res-page .fig[data-prov="derived"] { border-bottom: 1px dotted var(--rule-2); }
+.res-page .res-quoted,
+.res-page .res-terms-quoted [data-chrome]:first-child { border-bottom: 1px dashed var(--rule-2); }
+
+.res-legend { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-2) var(--sp-5); font-size: var(--step--1); color: var(--ink-3); margin: 0; }
+/* The key is plain text; the SAMPLE beside it carries the mark, drawn by the
+   same [data-prov] rules the figures use. Styling the sample separately would
+   let the legend go out of step with what it describes — which is the one
+   failure a legend must not have. */
+.res-legend dt { color: var(--ink-2); display: inline-flex; align-items: baseline; gap: var(--sp-2); }
+.res-legend dd { margin: 0 var(--sp-5) 0 0; }
+.res-legend-sample { font-family: var(--font-mono); color: var(--ink-num); }
+
+/* ---- identity ------------------------------------------------------- */
+.res-identity { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--sp-6); flex-wrap: wrap; }
+.res-identity-left { min-width: 34ch; }
+.res-identity-right { text-align: right; }
+@media (max-width: 900px) { .res-identity-right { text-align: left; } }
+
+.res-headline { display: flex; align-items: baseline; gap: var(--sp-3); margin: 0; font-size: inherit; }
+.res-headline .fig { font-size: var(--step-4); font-weight: 600; letter-spacing: -.02em; }
+.res-headline-word { font-size: var(--step-2); color: var(--ink-2); letter-spacing: .06em; text-transform: uppercase; }
+.res-scope, .res-arith, .res-record-line, .res-twin {
+  margin: var(--sp-2) 0 0; font-size: var(--step--1); color: var(--ink-2); line-height: 1.55;
+}
+.res-arith, .res-record-line, .res-twin { color: var(--ink-3); }
+.res-record-line { font-family: var(--font-mono); }
+/* Reserved even when empty: a band with no twin must not shift the block. */
+.res-twin { min-height: 1.55em; }
+
+/* The nav's treatment: mono caps, the active option in --ink-num over a 1px
+   rule. A filled pill made the band switch the brightest object on a screen of
+   measurements, and the fill was the only thing marking which was active — so
+   in greyscale the two options read the same. The rule survives greyscale. */
+.res-bands { display: inline-flex; gap: var(--sp-5); }
+.res-band {
+  position: relative;
+  display: flex; align-items: baseline; gap: var(--sp-3);
+  background: none; border: 0; padding: var(--sp-2) 0;
+  cursor: pointer;
+  font: inherit; font-family: var(--font-mono); font-size: var(--step--1);
+  color: var(--ink-3);
+  transition: color var(--dur-1) var(--ease);
+}
+.res-band::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px;
+  background: var(--rule-2); transform: scaleX(0);
+  transition: transform var(--dur-1) var(--ease);
+}
+.res-band:hover { color: var(--ink); }
+.res-band:hover::after { transform: scaleX(1); }
+.res-band[data-on="true"] { color: var(--ink-num); }
+.res-band[data-on="true"]::after { transform: scaleX(1); background: var(--ink-2); }
+.res-band-name { letter-spacing: .08em; text-transform: uppercase; }
+
+/* ---- rows ----------------------------------------------------------- */
+/* Row 1 wraps rather than squeezing: below about 116ch the forest plot's three
+   columns and the histogram's ten bars cannot both hold their widths. */
+.res-row-1 { display: flex; flex-wrap: wrap; gap: var(--sp-5); align-items: start; }
+.res-row-1 > .res-col { flex: 1 1 44ch; display: flex; flex-direction: column; gap: var(--sp-5); }
+.res-row-1 > #baselines { flex: 2 1 72ch; }
+.res-row-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(44ch, 1fr)); gap: var(--sp-5); }
+.res-row-1 > div, .res-row-2 > div, .res-col > div { min-width: 0; }
+
+/* ---- charts --------------------------------------------------------- */
+.res-chart { width: 100%; height: auto; display: block; overflow: visible; }
+.res-tick { font-family: var(--font-mono); font-size: 9px; fill: var(--ink-3); }
+.res-axis { stroke: var(--rule-2); stroke-width: 1; }
+.res-waiting { font-size: var(--step--1); color: var(--ink-3); margin: 0; padding: var(--sp-6) 0; }
+
+/* ---- PIT ------------------------------------------------------------ */
+.res-bar { fill: var(--accent); opacity: .62; }
+/* Over the bars, not behind them: it is the reference they are read against. */
+.res-uniform { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 4 3; }
+
+.res-figs { display: grid; grid-template-columns: 1fr auto; gap: var(--sp-3) var(--sp-4); margin: var(--sp-5) 0 0; align-items: baseline; }
+.res-figs dt { display: flex; flex-direction: column; gap: 1px; }
+.res-figs dd { margin: 0; font-family: var(--font-mono); color: var(--ink-num); text-align: right; white-space: nowrap; }
+.res-fig-label { font-size: var(--step--1); color: var(--ink-2); }
+.res-fig-note { font-size: var(--step--1); color: var(--ink-3); }
+.res-fig-of { color: var(--ink-3); }
+
+/* ---- baselines ------------------------------------------------------ */
+.res-rule + .res-rule { margin-top: var(--sp-6); padding-top: var(--sp-5); border-top: 1px solid var(--rule); }
+.res-rule-head { display: flex; align-items: baseline; gap: var(--sp-4); }
+.res-rule-head h3 { font-size: var(--step-1); font-weight: 600; color: var(--ink); letter-spacing: .02em; }
+.res-rule-tag { font-size: var(--step--1); letter-spacing: .04em; }
+.res-rule-tag--plain { color: var(--ink-3); }
+/* The guard. The log score is stored as a negative log density and reading it
+   the other way up inverts the result, so the tag is amber and boxed. */
+.res-rule-tag--guard {
+  color: var(--ink-num); border: 1px solid var(--rule-2);
+  border-radius: var(--radius); padding: 1px var(--sp-3);
+}
+
+.res-axis-row { display: flex; justify-content: space-between; margin: var(--sp-4) 0 var(--sp-2); font-size: var(--step--1); }
+.res-axis-better { color: var(--up); }
+.res-axis-worse { color: var(--down); }
+
+/* TWO class selectors, not one. system.css loads last and gives every `.row-x >
+   summary` a flex layout; a single-class rule here loses to it, and the six
+   comparison rows rendered ragged instead of on four aligned columns. The
+   columns are the point — the whole panel is read by scanning down them. */
+/* EVERY TRACK FIXED EXCEPT THE PLOT. Each row is its own <details>, so grid
+   tracks do not align between them — a content-sized name column made
+   "earnings scaled random walk" push its plot 26px right of the other two, and
+   with the plot on 1fr that changed its WIDTH as well as its start. The zero
+   rule is drawn at the middle of each plot, so the three zero lines in a block
+   landed at three different places on the page. A forest plot whose zero line
+   moves per row is not a forest plot. */
+.res-row.row-x > summary {
+  display: grid; grid-template-columns: 1.5ch 28ch minmax(180px, 1fr) 30ch;
+  gap: var(--sp-3) var(--sp-4); align-items: center; padding: var(--sp-3) var(--sp-2);
+}
+.res-row + .res-row { border-top: 1px solid var(--rule); }
+.res-row .row-x-body { margin-left: calc(1.5ch + var(--sp-4)); }
+.res-row-name { font-size: var(--step--1); color: var(--ink-2); }
+.res-row-means { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); text-align: right; white-space: nowrap; }
+.res-row-delta { margin-left: var(--sp-4); }
+.res-delta--worse { color: var(--down); }
+.res-delta--better { color: var(--up); }
+.res-delta--neither { color: var(--ink-2); }
+.res-row-said { font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-3); line-height: 1.5; }
+
+.res-forest { width: 100%; height: auto; display: block; overflow: visible; }
+.res-forest-axis { stroke: var(--rule); stroke-width: 1; }
+.res-forest-zero { stroke: var(--rule-2); stroke-width: 1; }
+/* Dashed, because it is quoted: parsed from the record's sentence, never
+   recomputed here. The legend's "quoted" mark is the same dash. */
+.res-forest-ci, .res-forest-cap { stroke-width: 1.5; stroke-dasharray: 3 2; stroke: var(--ink-3); }
+.res-forest-ci--worse, .res-forest-cap--worse { stroke: var(--down); }
+.res-forest-ci--better, .res-forest-cap--better { stroke: var(--up); }
+.res-forest-dot { fill: var(--ink-2); }
+.res-forest-dot--worse { fill: var(--down); }
+.res-forest-dot--better { fill: var(--up); }
+
+/* ---- leakage -------------------------------------------------------- */
+.res-slope-rail { stroke: var(--rule); stroke-width: 1; }
+.res-slope-line { stroke: var(--ink-3); stroke-width: 1.25; }
+.res-slope-line-dot { fill: var(--ink-3); }
+.res-slope-line--lead { stroke: var(--accent); stroke-width: 2.5; }
+.res-slope-line--lead-dot { fill: var(--accent); }
+.res-slope-label { font-family: var(--font-mono); font-size: 9px; fill: var(--ink-3); }
+.res-slope-label--lead { fill: var(--accent); }
+
+.res-leak-verdict { margin-top: var(--sp-4); }
+.res-leak-figure { margin: 0; }
+.res-leak-big { font-size: var(--step-3); font-weight: 600; }
+.res-leak-working, .res-leak-quoted, .res-leak-check { margin: var(--sp-2) 0 0; font-size: var(--step--1); }
+.res-leak-working { font-family: var(--font-mono); color: var(--ink-3); }
+.res-leak-quoted { display: flex; gap: var(--sp-5); flex-wrap: wrap; color: var(--ink-3); font-family: var(--font-mono); }
+.res-leak-check[data-agrees="true"] { color: var(--ink-3); }
+.res-leak-check[data-agrees="false"] { color: var(--down); }
+
+/* ---- direction ------------------------------------------------------ */
+.res-dots-half { stroke: var(--rule-2); stroke-width: 1; stroke-dasharray: 3 3; }
+/* Filled right, hollow wrong: the fill carries the outcome and the position
+   carries the claim, so neither needs a colour the page uses for a verdict. */
+.res-dot--right { fill: var(--accent); }
+.res-dot--wrong { fill: none; stroke: var(--ink-3); stroke-width: 1; }
+.res-range, .res-hits { margin: var(--sp-2) 0 0; font-size: var(--step--1); color: var(--ink-2); font-family: var(--font-mono); }
+.res-hits-big { font-size: var(--step-2); font-weight: 600; }
+
+.res-brier { margin-top: var(--sp-5); padding-top: var(--sp-4); border-top: 1px solid var(--rule); }
+.res-brier-head { display: flex; align-items: baseline; gap: var(--sp-3); }
+.res-brier-head h3 { font-size: var(--step-1); font-weight: 600; color: var(--ink); }
+.res-brier-head [data-chrome] { font-size: var(--step--1); color: var(--ink-3); }
+.res-brier-line { margin: var(--sp-3) 0 0; font-family: var(--font-mono); font-size: var(--step--1); color: var(--ink-2); }
+.res-brier-note { margin: var(--sp-2) 0 0; font-size: var(--step--1); }
+.res-brier-note[data-check="passed"] { color: var(--ink-3); }
+.res-brier-note[data-check="failed"] { color: var(--down); }
+
+/* ---- holdout -------------------------------------------------------- */
+.res-holdout > header [data-chrome] { font-size: var(--step--1); color: var(--ink-3); }
+.res-holdout-head { display: flex; align-items: baseline; gap: var(--sp-3); margin: 0; }
+.res-holdout-big { font-size: var(--step-3); font-weight: 600; }
+/* A hairline, not a fill. Every other panel on the screen lost its surface in
+   the shared pass and this one was the last filled box left. */
+.res-holdout-form {
+  margin: var(--sp-4) 0; background: none; border: 0;
+  border-top: 1px solid var(--rule); padding: var(--sp-4) 0 0;
+}
+.res-kicker { font-size: var(--step--1); text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3); margin-bottom: var(--sp-3); }
+.res-holdout-formula { font-family: var(--font-mono); color: var(--ink-num); }
+.res-holdout-coeffs { margin: var(--sp-2) 0 0; font-family: var(--font-mono); font-size: var(--step--1); }
+.res-holdout-fitted { margin: var(--sp-2) 0 0; font-size: var(--step--1); color: var(--ink-3); }
+
+.res-terms { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-2) var(--sp-4); margin: 0; font-size: var(--step--1); }
+.res-terms dt { color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
+.res-terms dd { margin: 0; font-family: var(--font-mono); color: var(--ink-2); }
+.res-terms-aside { color: var(--ink-3); }
+
+/* Dashed all round: there is nothing behind it and there never will be. */
+/* A SOLID top hairline, not a dashed box. A dashed stroke means quoted
+   everywhere else on this screen — the parsed intervals, the published figure —
+   and it cannot also mean "there is nothing behind this". */
+.res-no-scores {
+  margin-top: var(--sp-4); display: flex; gap: var(--sp-4); align-items: baseline;
+  border: 0; border-top: 1px solid var(--rule);
+  padding: var(--sp-3) 0 0; font-size: var(--step--1); color: var(--ink-3);
+}
+.res-absent { font-size: var(--step--1); color: var(--ink-2); line-height: 1.55; margin: 0; }
+
+/* ---- status and disclosure ------------------------------------------ */
+#status[data-on="false"] { display: none; }
+.res-status { margin: 0; font-size: var(--step--1); color: var(--ink-3); font-family: var(--font-mono); }
+.res-why-body { grid-template-columns: repeat(auto-fit, minmax(38ch, 1fr)); }
+.res-why-card { min-width: 0; }
+
+/* ---- narrow --------------------------------------------------------- */
+/* The forest row's three columns and the means column's nowrap are what push
+   this page past a phone's width. Stacking them costs the side-by-side reading
+   and buys a page that does not scroll sideways. The rest of the app overflows
+   at this width too; this screen does not have to. */
+@media (max-width: 760px) {
+  .res-row { grid-template-columns: 1fr; }
+  .res-row-means { text-align: left; white-space: normal; }
+  .res-row-delta { margin-left: 0; }
+  .res-identity { flex-direction: column; }
+  .res-terms { grid-template-columns: 1fr; gap: 0 0; }
+  .res-terms dd { margin-bottom: var(--sp-3); }
+}
+
+/* A count label sitting inside its bar, used when placing it above would put it
+   on the uniform line. Darker than the bar so it reads against the fill. */
+.res-tick--inside { fill: var(--paper); font-weight: 600; }
