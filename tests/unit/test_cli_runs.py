@@ -494,6 +494,38 @@ def test_a_repeat_is_distinguished_from_the_ledgers_run(
     assert "a frozen exhibit, but not the ledger's run for it" in result.output
 
 
+def test_a_live_run_of_a_frozen_filing_is_a_repeat_by_its_accession(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The listing and the live result must agree. The document here hashes
+    differently from the frozen one; only the accession says it is the same filing."""
+    _wire(monkeypatch)
+    runs = tmp_path / "runs"
+    _write_run(
+        runs,
+        source="edgar",
+        freeze_version=None,
+        doc_id="sha256:" + "c" * 64,
+        document_accession="0000000001-26-000001",
+    )
+    frozen = tmp_path / "frozen.json"
+    frozen.write_text(
+        json.dumps(
+            {
+                "exhibits": {
+                    "by_accession": {"0000000001-26-000001": {"document_id": "sha256:" + "a" * 64}}
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = _invoke(tmp_path, runs, "--frozen", str(frozen))
+
+    assert "a frozen exhibit, but not the ledger's run for it" in result.output
+    assert "document is not in the frozen corpus" not in result.output
+
+
 def test_a_missing_ledger_leaves_the_relation_to_the_document_alone(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

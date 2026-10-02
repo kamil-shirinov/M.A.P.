@@ -442,7 +442,10 @@ def test_map_serve_wires_a_working_analysis(tmp_path: Any, monkeypatch: pytest.M
         runs_dir = runs
         allow_nondeterministic = False
 
+    given: list[dict[str, Any]] = []
+
     def _execute(_request: Any, **_kw: Any) -> Any:
+        given.append(_kw)
         # The run writes its trace as it goes; the watcher reads progress off it.
         directory = runs / str(_request.run_id)
         directory.mkdir(parents=True, exist_ok=True)
@@ -519,6 +522,9 @@ def test_map_serve_wires_a_working_analysis(tmp_path: Any, monkeypatch: pytest.M
     final = events[-1]
     assert final["event"] == "result"
     assert final["ticker"] == "AAPL"
+    # The filing is recorded in the run itself, so the journal's later listing of it
+    # can use the lookup the result below just used.
+    assert given[0]["document_accession"] == final["accession"]
     # The real spend record's coefficients, read from disk by the command.
     assert final["correction"]["a"] == pytest.approx(-0.0757)
     assert "marking" in final

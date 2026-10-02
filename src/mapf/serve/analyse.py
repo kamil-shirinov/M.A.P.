@@ -26,6 +26,7 @@ from mapf.core.models import Document
 from mapf.core.tokens import AgentBudget
 from mapf.core.truncation import truncate
 from mapf.eval.calibration import Applicability, applicability, sessions_between
+from mapf.eval.journal import relate_to_frozen
 from mapf.settings import ModelRegistry
 
 
@@ -64,22 +65,23 @@ class Freeze:
         )
 
     def relate(self, *, document_id: str | None, accession: str) -> str:
-        """The live run's `corpus_relation`, by the journal's own rule.
+        """The live run's `corpus_relation`, by the journal's own rule: `relate_to_frozen`.
 
         Never `ledger_item`: that names a run the ledger recorded, and this run is
         being made now. A live run over a frozen exhibit is a `repeat_of_exhibit`
         — same document, new run — which is exactly what re-running a corpus
         company before its next quarter produces.
         """
-        if not self.document_ids and not self.accessions:
-            return "unchecked"
-        if document_id and document_id in self.document_ids:
-            return "repeat_of_exhibit"
-        # The accession is the fallback, not the primary: a re-fetch can differ by
-        # a byte and change the hash while naming the same filing.
-        if accession in self.accessions:
-            return "repeat_of_exhibit"
-        return "outside_corpus"
+        # The rule lives in the journal and is shared with it: the journal listed a
+        # live run as outside the corpus while this page called the same filing a
+        # repeat, because there were two implementations of one question. An empty
+        # freeze compared nothing, which is `None` to the rule, not "no match".
+        return relate_to_frozen(
+            document_ids=[document_id] if document_id else [],
+            accession=accession,
+            frozen_documents=self.document_ids or None,
+            frozen_accessions=self.accessions or None,
+        )
 
 
 class AnalysisError(MapError):

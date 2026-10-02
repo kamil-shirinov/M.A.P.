@@ -292,6 +292,7 @@ def export(
             snapshot=prices,
             today=datetime.now(UTC).date(),
             frozen_exhibits=frozen_exhibits,
+            frozen_accessions=frozenset(str(a) for a in by_accession),
             ledger_items=ledger_items,
         )
         runs_by_item: dict[tuple[str, str, str], list[str]] = {}

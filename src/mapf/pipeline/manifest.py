@@ -84,7 +84,7 @@ class PriceProvenance(DomainModel):
 class RunManifest(DomainModel):
     # This manifest's own format version. Distinct from, and easily confused with,
     # the forecast's.
-    manifest_version: Literal["1.9.0"] = "1.9.0"
+    manifest_version: Literal["1.10.0"] = "1.10.0"
     # The version of the artifact this manifest describes. ADR 0012 makes Phase 2
     # refuse to score across a schema boundary — and Phase 2 reads the *manifest*
     # to decide. With only `schema_version` here it read the manifest's own version
@@ -152,6 +152,13 @@ class RunManifest(DomainModel):
     # row read "name not exported". Optional: runs made before this field carry
     # none, and that is a real state rather than a blank.
     company_name: str | None = None
+    # THE FILING A LIVE RUN READ, by accession. The forecast records only the
+    # document's hash, and a re-fetch of the same filing can hash differently, so
+    # the hash cannot always say "this is a frozen exhibit"; the accession can.
+    # The journal reads it to relate a live run to the corpus by the same rule the
+    # page that made the run used. `None` for every run that predates it and for any
+    # run with no filing (news), which is not a claim about either.
+    document_accession: str | None = None
 
     # WHICH EXPERIMENTAL ARM PRODUCED THIS RUN, if any.
     #

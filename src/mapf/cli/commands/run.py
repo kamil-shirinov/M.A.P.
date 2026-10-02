@@ -75,6 +75,7 @@ def run(
             raise fail(f"--edgar-days must be at least 1, got {edgar_days}", 2)
 
         source: Literal["edgar", "news"] = "edgar" if from_edgar else "news"
+        accession: str | None = None
         if from_edgar:
             end = datetime.now(UTC).date()
             start = end - timedelta(days=edgar_days)
@@ -94,6 +95,7 @@ def run(
                         ),
                     )
                 latest = filings[-1]
+                accession = latest.accession
                 document = build_exhibits(settings, client).fetch(latest)
             # The same intake budget the corpus path cuts to, so an EDGAR run and a
             # corpus run of the same exhibit see the same document.
@@ -164,6 +166,7 @@ def run(
             # this run is outside the frozen corpus and must never be pooled with
             # corpus items.
             document_source=source,
+            document_accession=accession,
         )
 
         typer.secho(f"run {run_id}", fg=typer.colors.GREEN)

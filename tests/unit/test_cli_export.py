@@ -177,6 +177,31 @@ def test_runs_are_written_per_population_with_no_combined_file(
     assert not (tmp_path / "export" / "runs" / "all.json").exists()
 
 
+def test_an_exported_live_run_is_related_to_the_corpus_by_its_accession(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The export and the app's live page read the same lookup: a live run of a
+    frozen filing is a repeat even when its document hashed differently."""
+    _ready(tmp_path)
+    runs = tmp_path / "runs"
+    # 0000000001-26-000002 is in the fixture's frozen corpus; its hash is not this one.
+    _write_run(
+        runs,
+        source="edgar",
+        freeze_version=None,
+        doc_id="sha256:" + "c" * 64,
+        document_accession="0000000001-26-000002",
+    )
+    _write_run(runs, source="edgar", freeze_version=None, doc_id="sha256:" + "d" * 64)
+
+    result = _export(tmp_path, "--ledger-path", str(tmp_path / "absent.jsonl"), "--allow-partial")
+
+    assert result.exit_code == 0, result.output
+    rows = _read(tmp_path, "runs/by_source/edgar.json")
+    assert isinstance(rows, list)
+    assert sorted(row["corpus_relation"] for row in rows) == ["outside_corpus", "repeat_of_exhibit"]
+
+
 def test_the_manifest_counts_each_population_as_written_and_never_a_total(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

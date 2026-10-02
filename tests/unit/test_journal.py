@@ -32,6 +32,7 @@ from mapf.eval.journal import (
     LedgerItem,
     Outcome,
     read_journal,
+    relate_to_frozen,
 )
 from mapf.pipeline.manifest import (
     AgentRecord,
@@ -75,6 +76,8 @@ def _write_run(
     horizon: int = 5,
     freeze_version: str | None = "2.4.0",
     manifest: bool = True,
+    document_accession: str | None = None,
+    doc_id: str = "sha256:" + "a" * 64,
 ) -> str:
     run_id = uuid4()
     directory = runs_dir / str(run_id)
@@ -85,7 +88,7 @@ def _write_run(
         as_of=datetime.combine(anchor, datetime.min.time(), tzinfo=UTC) + timedelta(days=1),
         horizon_days=horizon,
         spot_price=201.0,
-        source_doc_ids=("sha256:" + "a" * 64,),
+        source_doc_ids=(doc_id,),
         model_versions=ModelVersions(intake="fp-i", analyst="fp-a", structuralist="fp-s"),
         scenarios=_scenarios(),
     )
@@ -122,6 +125,7 @@ def _write_run(
             ),
             dividends=DividendWindow(start=anchor, end=anchor, known=False, source="none"),
             document_source=source,  # type: ignore[arg-type]
+            document_accession=document_accession,
             arm=arm,
             freeze_version=freeze_version,
             package_version="0.1.0",
@@ -864,3 +868,248 @@ def test_noise_below_the_scoring_tolerance_is_not_drift(tmp_path: Path) -> None:
     entry = read_journal(runs, snapshot=_Rebased(1 + 1e-6), today=date(2026, 9, 8)).corpus[0]
 
     assert entry.anchor_drift is None
+
+
+# ---------------------------------------------------------------------------
+# One rule for "is this document in the corpus", shared with the live page
+# ---------------------------------------------------------------------------
+HELD = "sha256:" + "a" * 64
+RE_FETCHED = "sha256:" + "c" * 64  # the same filing, arriving as different bytes
+ACCESSION = "0000320193-26-000018"
+
+
+@pytest.mark.parametrize(
+    ("documents", "accession", "frozen_documents", "frozen_accessions", "expected"),
+    [
+        # Nothing was compared: not "no match".
+        ([HELD], ACCESSION, None, None, "unchecked"),
+        # The document id is the primary test.
+        ([HELD], None, frozenset({HELD}), frozenset(), "repeat_of_exhibit"),
+        ([HELD], "other", frozenset({HELD}), frozenset({ACCESSION}), "repeat_of_exhibit"),
+        # The accession is the fallback: same filing, different bytes.
+        ([RE_FETCHED], ACCESSION, frozenset({HELD}), frozenset({ACCESSION}), "repeat_of_exhibit"),
+        # Neither matches.
+        ([RE_FETCHED], "other", frozenset({HELD}), frozenset({ACCESSION}), "outside_corpus"),
+        # A run that never recorded its accession can only be judged by its hash, and
+        # a different hash then reads outside: the limit of what it knows.
+        ([RE_FETCHED], None, frozenset({HELD}), frozenset({ACCESSION}), "outside_corpus"),
+        # Only one side of the freeze was supplied.
+        ([RE_FETCHED], ACCESSION, None, frozenset({ACCESSION}), "repeat_of_exhibit"),
+        ([RE_FETCHED], "other", None, frozenset({ACCESSION}), "outside_corpus"),
+        ([RE_FETCHED], ACCESSION, frozenset({HELD}), None, "outside_corpus"),
+        ([], ACCESSION, frozenset({HELD}), frozenset({ACCESSION}), "repeat_of_exhibit"),
+    ],
+)
+def test_the_one_rule_for_relating_a_document_to_the_frozen_corpus(
+    documents: list[str],
+    accession: str | None,
+    frozen_documents: frozenset[str] | None,
+    frozen_accessions: frozenset[str] | None,
+    expected: str,
+) -> None:
+    assert (
+        relate_to_frozen(
+            document_ids=documents,
+            accession=accession,
+            frozen_documents=frozen_documents,
+            frozen_accessions=frozen_accessions,
+        )
+        == expected
+    )
+
+
+def _live_entry(
+    tmp_path: Path, *, accession: str | None, frozen_accessions: frozenset[str] | None
+) -> JournalEntry:
+    runs = tmp_path / "runs"
+    _write_run(
+        runs,
+        source="edgar",
+        freeze_version=None,
+        doc_id=RE_FETCHED,
+        document_accession=accession,
+    )
+    return read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        frozen_exhibits=frozenset({HELD}),
+        frozen_accessions=frozen_accessions,
+    ).edgar[0]
+
+
+def test_a_live_run_of_a_frozen_filing_reads_repeat_by_its_accession(tmp_path: Path) -> None:
+    """The defect. The journal listed this run as outside the corpus while the page
+    that made it called the same filing a repeat: the hash differed and only the
+    accession said which filing it was."""
+    entry = _live_entry(tmp_path, accession=ACCESSION, frozen_accessions=frozenset({ACCESSION}))
+
+    assert entry.corpus_relation == "repeat_of_exhibit"
+    assert entry.document_is_frozen_exhibit is True
+    # What the writer recorded is untouched: it is still not a corpus run.
+    assert entry.document_source == "edgar"
+    assert entry.freeze_version is None
+
+
+def test_a_live_run_with_no_recorded_accession_is_judged_by_its_hash_alone(
+    tmp_path: Path,
+) -> None:
+    """Every run made before the accession was recorded. It stays outside, because
+    that is all the hash can say, and the limit is named in the code rather than
+    papered over."""
+    entry = _live_entry(tmp_path, accession=None, frozen_accessions=frozenset({ACCESSION}))
+
+    assert entry.corpus_relation == "outside_corpus"
+
+
+def test_without_the_accessions_the_journal_behaves_as_it_always_did(tmp_path: Path) -> None:
+    entry = _live_entry(tmp_path, accession=ACCESSION, frozen_accessions=None)
+
+    assert entry.corpus_relation == "outside_corpus"
+
+
+def test_a_ledger_entry_still_wins_over_a_document_lookup(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    run_id = _write_run(
+        runs, source="edgar", freeze_version=None, doc_id=RE_FETCHED, document_accession=ACCESSION
+    )
+
+    entry = read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        frozen_exhibits=frozenset({HELD}),
+        frozen_accessions=frozenset({ACCESSION}),
+        ledger_items={run_id: LedgerItem("AAPL", "clean", date(2026, 7, 30))},
+    ).edgar[0]
+
+    assert entry.corpus_relation == "ledger_item"
+
+
+@pytest.mark.parametrize(
+    ("document", "accession", "documents", "accessions"),
+    [
+        (HELD, ACCESSION, {HELD}, {ACCESSION}),  # held by hash
+        (RE_FETCHED, ACCESSION, {HELD}, {ACCESSION}),  # held only by accession
+        (RE_FETCHED, "other", {HELD}, {ACCESSION}),  # not held
+        (RE_FETCHED, ACCESSION, set(), set()),  # no freeze loaded: nothing compared
+    ],
+)
+def test_the_journal_and_the_live_result_say_the_same_thing(
+    tmp_path: Path, document: str, accession: str, documents: set[str], accessions: set[str]
+) -> None:
+    """The requirement, as a test: the page's lookup (`Freeze`) and the journal's
+    row for the same run, over the same frozen sets, give one answer."""
+    from mapf.serve.analyse import Freeze
+
+    runs = tmp_path / "runs"
+    _write_run(
+        runs, source="edgar", freeze_version=None, doc_id=document, document_accession=accession
+    )
+    shown = Freeze(document_ids=frozenset(documents), accessions=frozenset(accessions)).relate(
+        document_id=document, accession=accession
+    )
+
+    listed = read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        frozen_exhibits=frozenset(documents) or None,
+        frozen_accessions=frozenset(accessions) or None,
+    ).edgar[0]
+
+    assert listed.corpus_relation == shown
+
+
+# ---------------------------------------------------------------------------
+# Runs made before the manifest recorded the filing: read it off the run's trace
+# ---------------------------------------------------------------------------
+def _older_live_run(
+    runs: Path, trace_accession: str | None, *, source: str = "edgar", doc_id: str = RE_FETCHED
+) -> str:
+    """A live run whose manifest has no `document_accession`, with a real-shaped trace."""
+    from tests.unit.test_trace_document_accession import (
+        _document,
+        a_run,
+        edgar_url,
+        intake_event,
+    )
+
+    run_id = _write_run(runs, source=source, freeze_version=None, doc_id=doc_id)
+    if trace_accession is not None:
+        a_run(
+            runs / run_id / "trace.jsonl",
+            intake_event(_document(edgar_url(trace_accession))),
+        )
+    return run_id
+
+
+def _read_old(runs: Path, *, accessions: frozenset[str] | None = frozenset({ACCESSION})):  # type: ignore[no-untyped-def]
+    return read_journal(
+        runs,
+        today=date(2026, 9, 8),
+        frozen_exhibits=frozenset({HELD}),
+        frozen_accessions=accessions,
+    )
+
+
+def test_an_older_live_run_is_related_by_the_accession_in_its_own_trace(tmp_path: Path) -> None:
+    """The runs already made. Their manifests name no filing, but the intake prompt in
+    each trace opens with the exhibit's archive URL, which does."""
+    runs = tmp_path / "runs"
+    _older_live_run(runs, ACCESSION)
+
+    entry = _read_old(runs).edgar[0]
+
+    assert entry.corpus_relation == "repeat_of_exhibit"
+    assert entry.document_is_frozen_exhibit is True
+    assert entry.document_source == "edgar"
+    assert entry.freeze_version is None
+
+
+def test_a_trace_naming_a_filing_the_corpus_does_not_hold_stays_outside(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _older_live_run(runs, "0000320193-26-000099")
+
+    assert _read_old(runs).edgar[0].corpus_relation == "outside_corpus"
+
+
+def test_an_older_run_with_no_trace_is_judged_by_its_hash_alone(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    _older_live_run(runs, None)
+
+    assert _read_old(runs).edgar[0].corpus_relation == "outside_corpus"
+
+
+def test_reading_the_journal_edits_nothing_on_disk(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    run_id = _older_live_run(runs, ACCESSION)
+    before = {p.name: p.read_bytes() for p in (runs / run_id).iterdir()}
+
+    _read_old(runs)
+
+    assert {p.name: p.read_bytes() for p in (runs / run_id).iterdir()} == before
+
+
+def test_the_trace_is_read_only_when_the_accession_could_change_the_answer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A band of runs whose hashes already match reads no traces, and neither does a
+    run that recorded its own accession, a news run, or a journal handed no accessions."""
+    import mapf.eval.journal as journal_module
+
+    def _must_not_read(_path: Path) -> str | None:
+        raise AssertionError("a trace was read that could not change the answer")
+
+    monkeypatch.setattr(journal_module, "document_accession", _must_not_read)
+    runs = tmp_path / "runs"
+    _older_live_run(runs, ACCESSION, doc_id=HELD)  # the hash matches
+    _write_run(
+        runs, source="edgar", freeze_version=None, doc_id=RE_FETCHED, document_accession=ACCESSION
+    )  # the manifest names the filing
+    _older_live_run(runs, ACCESSION, source="news")  # no filing to name
+    unchecked = tmp_path / "other"
+    _older_live_run(unchecked, ACCESSION)
+
+    journal = _read_old(runs)
+    assert sorted(e.corpus_relation for e in journal.edgar) == ["repeat_of_exhibit"] * 2
+    assert journal.news[0].corpus_relation == "outside_corpus"
+    # No accessions handed in: the journal behaves as it always did.
+    assert _read_old(unchecked, accessions=None).edgar[0].corpus_relation == "outside_corpus"
