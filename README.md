@@ -36,7 +36,7 @@ Real stills from the app running on the real export.
 
 ![The front page: the M.A.P. title above a single search box, with a link to a recorded run and a strip of counts along the foot of the page](docs/images/the%20door.png)
 
-*The front page: a search box, a link to a recorded live run (KO, 2026-09-28), and a footer strip of 120 companies, 782 runs recorded and 3 live runs, ending with the headline that it does not beat a plain random walk or GARCH on the companies it was developed on.*
+*The front page: a search box, a link to a recorded live run (KO, 2026-09-28), and a footer strip of counts, ending with the headline that it does not beat a plain random walk or GARCH on the companies it was developed on.*
 
 ![Search results for "Apple": one match in the frozen corpus, two companies that file earnings and have not been read, three with no earnings 8-K in the recent block, and the start of a funnel from 10,398 listed symbols](docs/images/the%20search.png)
 
@@ -49,10 +49,6 @@ Real stills from the app running on the real export.
 ![An AAPL analysis in progress: concentric rings beside a list of the three agents, with Intake reading the filing](docs/images/analysis%20running.png)
 
 *An AAPL analysis 14 seconds in: Intake is reading the 8-K filed 2026-07-30 while the rings turn, and the page says to expect six to twelve minutes.*
-
-![The forecast fan for KO with a hover readout at three sessions ahead, showing the median and the 50%, 80% and 90% ranges](notebook/design/screens/screen-18-fan-crosshair.png)
-
-*The fan from a replayed KO run, with the hover readout three sessions out. The bands run from the middle 10% to the middle 90%, and amber marks the raw, uncorrected width.*
 
 ![The results page: M.A.P. against three baselines on CRPS and log score with intervals, the calibration figures, the leakage comparison and the holdout record](notebook/design/screens/screen-5-results.png)
 
