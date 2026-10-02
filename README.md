@@ -2,11 +2,11 @@
 
 M.A.P. runs three open-weight models on a local machine to read a company's earnings filing and forecast its share price five trading days ahead, as a probability distribution rather than a single number. The forecasts are the demo and the evaluation is the point: each one was scored against what the price actually did and against three baselines, and the tests that decide anything were written down before their results existed. The headline is negative: **it does not beat a plain random walk or GARCH on the companies it was developed on.**
 
-![A five-session forecast fan for KO: the last 63 closes, then a shaded band widening from the anchor with three labelled scenario lines](notebook/design/screens/screen-17-fan.png)
+![A five-session forecast fan for AAPL: the last 63 closes, then a shaded band widening from the anchor with three scenario lines and a hover readout, under an amber "raw fan, uncalibrated" notice](docs/images/results.png)
 
-*A recorded five-session forecast for KO. The shading is its range; amber marks it as uncorrected, a width measured too narrow. This run's starting price was taken during the session ([Findings #64](notebook/Findings%20&%20Incidents.md)).*
+*A real live run, not part of the record: AAPL, five sessions ahead, made on 2 October 2026 from the 1 October close. The app marks it REPEAT, a repeat of a frozen exhibit, and draws it raw and uncalibrated, because it was made 44 trading days after the filing and the correction was only tested within one trading day of one. The shaded range is that raw width, which was measured too narrow.*
 
-**[→ Open the app](PLACEHOLDER_URL)** — the run journal and the scored results, every figure marked with where it came from. *A research and engineering exercise, not financial advice. Published for review; no licence is granted for reuse — see [Licence](#licence).*
+**[→ Open the app](https://kamil-shirinov.github.io/M.A.P./)** — the run journal and the scored results, every figure marked with where it came from. *A research and engineering exercise, not financial advice. Published for review; no licence is granted for reuse — see [Licence](#licence).*
 
 ---
 
@@ -32,31 +32,31 @@ Each agent is a contract rather than a model, so swapping the model behind one i
 
 ## A quick tour
 
-Real stills from the app running on the real export, shot on 29 and 30 September 2026. The app has changed since, so some details differ from today's screens.
+Real stills from the app running on the real export.
 
-![The front door: the M.A.P. title above a single search box, a link to a recorded run, and a strip of counts along the foot of the page](notebook/design/screens/screen-12-door-ground-recorded-run.png)
+![The front page: the M.A.P. title above a single search box, with a link to a recorded run and a strip of counts along the foot of the page](docs/images/the%20door.png)
 
-*The door: one search box, a link to one recorded run, and a footer strip of counts that ends with the headline (its wording has since changed to match this page).*
+*The front page: a search box, a link to a recorded live run (KO, 2026-09-28), and a footer strip of 120 companies, 782 runs recorded and 3 live runs, ending with the headline that it does not beat a plain random walk or GARCH on the companies it was developed on.*
 
-![Search results for "coca": two companies that file earnings and have not been read, three with no earnings 8-K in the recent block, and a funnel from 10,398 listed symbols to the 120 in the frozen corpus](notebook/design/screens/screen-13-search-readable-filers-link.png)
+![Search results for "Apple": one match in the frozen corpus, two companies that file earnings and have not been read, three with no earnings 8-K in the recent block, and the start of a funnel from 10,398 listed symbols](docs/images/the%20search.png)
 
-*Search: typing "coca" groups the matches by whether the company is in the corpus, files earnings, or has nothing to read, above a funnel from 10,398 listed symbols down to the 120 in the frozen corpus.*
+*Search for "Apple": AAPL is in the frozen corpus (holdout, 6 filings, 6 panel runs), two more companies file earnings but have not been read, and three have no earnings 8-K in the recent block, above a funnel from 10,398 listed symbols down to the 120 in the corpus.*
 
-![A company page for Apple: its price series with each run's anchor and outcome marked, then its filings, its runs, and a block for live runs outside the record](notebook/design/screens/screen-16-company-record-then-live-runs.png)
+![AAPL's company page: a live quote of 330.48 with the market closed, and a two-year price series with run markers and a shaded stretch newer than the 5 September snapshot](docs/images/company%20page.png)
 
-*A company page (AAPL, which is in the frozen corpus): the price series with each run marked, its filings and runs, and a separate block for live runs, which stay outside the record.*
+*AAPL's page with the live quote and the two-year chart: 330.48 at the last trade before Thursday's close (15:59, possibly delayed, from Yahoo Finance), and a series from 2 Oct 2024 to 2 Oct 2026 with the recorded runs marked and the part newer than the 5 September snapshot set apart.*
 
-![An analysis in progress for KO: concentric rings beside a list of the three agents, with the analyst still working](notebook/design/screens/screen-19-loading-rosette.png)
+![An AAPL analysis in progress: concentric rings beside a list of the three agents, with Intake reading the filing](docs/images/analysis%20running.png)
 
-*An analysis running for KO. This is the replayed KO run, not a live computation, and the page says so: "Nothing is being computed."*
+*An AAPL analysis 14 seconds in: Intake is reading the 8-K filed 2026-07-30 while the rings turn, and the page says to expect six to twelve minutes.*
 
 ![The forecast fan for KO with a hover readout at three sessions ahead, showing the median and the 50%, 80% and 90% ranges](notebook/design/screens/screen-18-fan-crosshair.png)
 
-*The fan from the same replayed KO run, with the hover readout three sessions out. The bands run from the middle 10% to the middle 90%, and amber marks the raw, uncorrected width.*
+*The fan from a replayed KO run, with the hover readout three sessions out. The bands run from the middle 10% to the middle 90%, and amber marks the raw, uncorrected width.*
 
 ![The results page: M.A.P. against three baselines on CRPS and log score with intervals, the calibration figures, the leakage comparison and the holdout record](notebook/design/screens/screen-5-results.png)
 
-*Results: M.A.P. against the three baselines on CRPS and log score for the 175 clean-band development items, with the calibration figures, the leakage comparison and the one-shot holdout record.*
+*Results, shot on 29 September 2026: M.A.P. against the three baselines on CRPS and log score for the 175 clean-band development items, with the calibration figures, the leakage comparison and the one-shot holdout record.*
 
 ---
 
